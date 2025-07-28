@@ -67,15 +67,6 @@ See [README_QUICK_DEPLOY.md](README_QUICK_DEPLOY.md) for deployment instructions
 - Upload new map images
 - View map statistics
 
-## Security Notice
-
-⚠️ **Important**: This app uses client-side authentication for admin features. This is **not secure** for public production use. It's intended for:
-- Personal projects
-- Internal tools
-- Temporary use until proper authentication is implemented
-
-For production use, implement server-side authentication or Google OAuth.
-
 ## Development
 
 ### Tech Stack
