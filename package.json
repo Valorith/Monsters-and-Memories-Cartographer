@@ -8,10 +8,13 @@
     "serve": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "node server.js"
+    "start": "node server.js",
+    "migrate": "node src/db/migrate.js"
   },
   "dependencies": {
+    "dotenv": "^17.2.1",
     "express": "^4.21.2",
+    "pg": "^8.16.3",
     "vue": "^3.4.21"
   },
   "devDependencies": {
