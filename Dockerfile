@@ -6,7 +6,7 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
+# Install all dependencies for building
 RUN npm ci
 
 # Copy source files
@@ -16,16 +16,25 @@ COPY . .
 RUN npm run build
 
 # Production stage
-FROM nginx:alpine
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install only production dependencies
+RUN npm ci --only=production
 
 # Copy built assets from builder stage
-COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --from=builder /app/dist ./dist
 
-# Copy nginx configuration if needed
-# COPY nginx.conf /etc/nginx/nginx.conf
+# Copy server file
+COPY server.js ./
 
-# Expose port 80
-EXPOSE 80
+# Use PORT environment variable
+ENV PORT=8080
+EXPOSE 8080
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Start the Express server
+CMD ["node", "server.js"]

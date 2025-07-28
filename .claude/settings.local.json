@@ -11,7 +11,8 @@
       "Bash(npm install)",
       "Bash(npm install:*)",
       "Bash(npm run start:*)",
-      "Bash(PORT=8080 node server.js)"
+      "Bash(PORT=8080 node server.js)",
+      "Bash(docker build:*)"
     ],
     "deny": []
   }
