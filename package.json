@@ -1,0 +1,19 @@
+{
+  "name": "monsters-and-memories-cartographer",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "powershell -Command \"$env:PATH = '.\\node_modules\\.bin;' + $env:PATH; vite\"",
+    "serve": "powershell -Command \"$env:PATH = '.\\node_modules\\.bin;' + $env:PATH; vite\"",
+    "build": "powershell -Command \"$env:PATH = '.\\node_modules\\.bin;' + $env:PATH; vite build\"",
+    "preview": "powershell -Command \"$env:PATH = '.\\node_modules\\.bin;' + $env:PATH; vite preview\""
+  },
+  "dependencies": {
+    "vue": "^3.4.21"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.4",
+    "vite": "^5.2.0"
+  }
+}
