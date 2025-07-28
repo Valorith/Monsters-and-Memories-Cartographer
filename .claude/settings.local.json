@@ -5,7 +5,12 @@
       "Bash(mv:*)",
       "Bash(true)",
       "Bash(grep:*)",
-      "Bash(rg:*)"
+      "Bash(rg:*)",
+      "Bash(npm run build:*)",
+      "Bash(rm:*)",
+      "Bash(npm install)",
+      "Bash(npm install:*)",
+      "Bash(npm run start:*)"
     ],
     "deny": []
   }

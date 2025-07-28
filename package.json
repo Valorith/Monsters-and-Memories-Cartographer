@@ -4,10 +4,11 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "powershell -Command \"$env:PATH = '.\\node_modules\\.bin;' + $env:PATH; vite\"",
-    "serve": "powershell -Command \"$env:PATH = '.\\node_modules\\.bin;' + $env:PATH; vite\"",
-    "build": "powershell -Command \"$env:PATH = '.\\node_modules\\.bin;' + $env:PATH; vite build\"",
-    "preview": "powershell -Command \"$env:PATH = '.\\node_modules\\.bin;' + $env:PATH; vite preview\""
+    "dev": "vite",
+    "serve": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
     "vue": "^3.4.21"
