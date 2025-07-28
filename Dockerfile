@@ -29,8 +29,9 @@ RUN npm ci --only=production
 # Copy built assets from builder stage
 COPY --from=builder /app/dist ./dist
 
-# Copy server file
+# Copy server file and src directory
 COPY server.js ./
+COPY src ./src
 
 # Use PORT environment variable
 ENV PORT=8080
