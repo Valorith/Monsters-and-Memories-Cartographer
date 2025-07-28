@@ -10,7 +10,8 @@
       "Bash(rm:*)",
       "Bash(npm install)",
       "Bash(npm install:*)",
-      "Bash(npm run start:*)"
+      "Bash(npm run start:*)",
+      "Bash(PORT=8080 node server.js)"
     ],
     "deny": []
   }

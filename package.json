@@ -8,9 +8,10 @@
     "serve": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "vite preview --host 0.0.0.0"
+    "start": "node server.js"
   },
   "dependencies": {
+    "express": "^4.21.2",
     "vue": "^3.4.21"
   },
   "devDependencies": {
