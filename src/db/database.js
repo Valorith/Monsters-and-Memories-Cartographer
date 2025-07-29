@@ -6,21 +6,21 @@ dotenv.config();
 const { Pool } = pg;
 
 // Determine which database URL to use
-// In production (Railway), DATABASE_URL is the local connection
-// In development, use DATABASE_PUBLIC_URL for remote access
+// Railway provides DATABASE_URL automatically when services are linked
 const getDatabaseUrl = () => {
-  if (process.env.NODE_ENV === 'production' && process.env.DATABASE_URL) {
-    console.log('Using production database (local Railway connection)');
-    return process.env.DATABASE_URL;
-  } else if (process.env.DATABASE_PUBLIC_URL) {
-    console.log('Using development database (public URL)');
-    return process.env.DATABASE_PUBLIC_URL;
-  } else if (process.env.DATABASE_URL) {
-    console.log('Using DATABASE_URL (fallback)');
+  // First check for DATABASE_URL (Railway provides this)
+  if (process.env.DATABASE_URL) {
+    console.log('Using DATABASE_URL');
     return process.env.DATABASE_URL;
   }
   
-  throw new Error('No database URL configured. Please set DATABASE_PUBLIC_URL in .env for development.');
+  // Fall back to PUBLIC URL for local development
+  if (process.env.DATABASE_PUBLIC_URL) {
+    console.log('Using DATABASE_PUBLIC_URL (development)');
+    return process.env.DATABASE_PUBLIC_URL;
+  }
+  
+  throw new Error('No database URL configured. Please set DATABASE_URL in Railway or DATABASE_PUBLIC_URL in .env for development.');
 };
 
 const connectionString = getDatabaseUrl();
