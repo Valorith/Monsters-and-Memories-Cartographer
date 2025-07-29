@@ -324,6 +324,22 @@ app.delete('/api/zone-connectors/:id', async (req, res) => {
   }
 });
 
+// Admin authentication endpoint
+app.post('/api/admin/verify', (req, res) => {
+  const { password } = req.body;
+  const adminPassword = process.env.ADMIN_PASSWORD || process.env.VITE_ADMIN_PASSWORD;
+  
+  if (!adminPassword) {
+    return res.status(500).json({ error: 'Admin password not configured on server' });
+  }
+  
+  if (password === adminPassword) {
+    res.json({ valid: true });
+  } else {
+    res.status(401).json({ valid: false });
+  }
+});
+
 // Handle all other routes by serving index.html (for Vue Router)
 app.get('*', (req, res) => {
   res.sendFile(join(__dirname, 'dist', 'index.html'));

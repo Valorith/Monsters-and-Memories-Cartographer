@@ -1789,26 +1789,45 @@ export default {
       animate()
     }
     
-    const toggleAdmin = () => {
+    const toggleAdmin = async () => {
       if (!isAdmin.value) {
         const password = prompt('Enter admin password:')
         if (!password) return
         
-        // Get password from environment variable
-        // IMPORTANT: Set VITE_ADMIN_PASSWORD in your .env file!
+        // First try client-side password (for development)
         const expectedPassword = import.meta.env.VITE_ADMIN_PASSWORD
         
-        if (!expectedPassword) {
-          error('Admin password not configured. Please set VITE_ADMIN_PASSWORD environment variable.')
-          return
-        }
-        
-        if (password === expectedPassword) {
-          isAdmin.value = true
-          localStorage.setItem('isAdmin', 'true')
-          success('Admin mode activated')
+        if (expectedPassword) {
+          // Development mode - check password client-side
+          if (password === expectedPassword) {
+            isAdmin.value = true
+            localStorage.setItem('isAdmin', 'true')
+            success('Admin mode activated')
+          } else {
+            error('Incorrect password')
+          }
         } else {
-          error('Incorrect password')
+          // Production mode - verify with server
+          try {
+            const response = await fetch('/api/admin/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ password })
+            })
+            
+            const result = await response.json()
+            
+            if (response.ok && result.valid) {
+              isAdmin.value = true
+              localStorage.setItem('isAdmin', 'true')
+              success('Admin mode activated')
+            } else {
+              error('Incorrect password')
+            }
+          } catch (err) {
+            error('Failed to verify admin password')
+            console.error('Admin verification error:', err)
+          }
         }
       } else {
         isAdmin.value = false
