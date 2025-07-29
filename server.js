@@ -218,7 +218,7 @@ app.post('/api/point-connectors', async (req, res) => {
       id, map_id, name, from_x, from_y, to_x, to_y, to_poi_id,
       from_icon, to_icon, from_icon_size, to_icon_size,
       from_label_visible, to_label_visible, from_label_position, to_label_position,
-      from_icon_visible, to_icon_visible
+      from_icon_visible, to_icon_visible, from_label_size, to_label_size
     } = req.body;
     
     if (id) {
@@ -229,11 +229,12 @@ app.post('/api/point-connectors', async (req, res) => {
          from_icon = $7, to_icon = $8, from_icon_size = $9, to_icon_size = $10,
          from_label_visible = $11, to_label_visible = $12, 
          from_label_position = $13, to_label_position = $14,
-         from_icon_visible = $15, to_icon_visible = $16
-         WHERE id = $17 RETURNING *`,
+         from_icon_visible = $15, to_icon_visible = $16,
+         from_label_size = $17, to_label_size = $18
+         WHERE id = $19 RETURNING *`,
         [name, from_x, from_y, to_x, to_y, to_poi_id, from_icon, to_icon, from_icon_size, to_icon_size,
          from_label_visible, to_label_visible, from_label_position, to_label_position,
-         from_icon_visible, to_icon_visible, id]
+         from_icon_visible, to_icon_visible, from_label_size || 1, to_label_size || 1, id]
       );
       res.json(result.rows[0]);
     } else {
@@ -242,12 +243,14 @@ app.post('/api/point-connectors', async (req, res) => {
         `INSERT INTO point_connectors 
          (map_id, name, from_x, from_y, to_x, to_y, to_poi_id, from_icon, to_icon, 
           from_icon_size, to_icon_size, from_label_visible, to_label_visible,
-          from_label_position, to_label_position, from_icon_visible, to_icon_visible) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) 
+          from_label_position, to_label_position, from_icon_visible, to_icon_visible,
+          from_label_size, to_label_size) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) 
          RETURNING *`,
         [map_id, name, from_x, from_y, to_x, to_y, to_poi_id, from_icon, to_icon,
          from_icon_size, to_icon_size, from_label_visible, to_label_visible,
-         from_label_position, to_label_position, from_icon_visible, to_icon_visible]
+         from_label_position, to_label_position, from_icon_visible, to_icon_visible,
+         from_label_size || 1, to_label_size || 1]
       );
       res.json(result.rows[0]);
     }
@@ -275,7 +278,8 @@ app.post('/api/zone-connectors', async (req, res) => {
       id, from_map_id, to_map_id, from_x, from_y, to_x, to_y,
       from_icon, to_icon, from_icon_size, to_icon_size,
       from_label, to_label, from_label_visible, to_label_visible,
-      from_label_position, to_label_position, from_icon_visible, to_icon_visible
+      from_label_position, to_label_position, from_icon_visible, to_icon_visible,
+      from_label_size, to_label_size
     } = req.body;
     
     if (id) {
@@ -285,11 +289,13 @@ app.post('/api/zone-connectors', async (req, res) => {
          from_map_id = $1, to_map_id = $2, from_x = $3, from_y = $4, to_x = $5, to_y = $6,
          from_icon = $7, to_icon = $8, from_icon_size = $9, to_icon_size = $10,
          from_label = $11, to_label = $12, from_label_visible = $13, to_label_visible = $14,
-         from_label_position = $15, to_label_position = $16, from_icon_visible = $17, to_icon_visible = $18
-         WHERE id = $19 RETURNING *`,
+         from_label_position = $15, to_label_position = $16, from_icon_visible = $17, to_icon_visible = $18,
+         from_label_size = $19, to_label_size = $20
+         WHERE id = $21 RETURNING *`,
         [from_map_id, to_map_id, from_x, from_y, to_x, to_y, from_icon, to_icon,
          from_icon_size, to_icon_size, from_label, to_label, from_label_visible, to_label_visible,
-         from_label_position, to_label_position, from_icon_visible, to_icon_visible, id]
+         from_label_position, to_label_position, from_icon_visible, to_icon_visible, 
+         from_label_size || 1, to_label_size || 1, id]
       );
       res.json(result.rows[0]);
     } else {
@@ -298,12 +304,14 @@ app.post('/api/zone-connectors', async (req, res) => {
         `INSERT INTO zone_connectors 
          (from_map_id, to_map_id, from_x, from_y, to_x, to_y, from_icon, to_icon,
           from_icon_size, to_icon_size, from_label, to_label, from_label_visible, to_label_visible,
-          from_label_position, to_label_position, from_icon_visible, to_icon_visible) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) 
+          from_label_position, to_label_position, from_icon_visible, to_icon_visible,
+          from_label_size, to_label_size) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20) 
          RETURNING *`,
         [from_map_id, to_map_id, from_x, from_y, to_x, to_y, from_icon, to_icon,
          from_icon_size, to_icon_size, from_label, to_label, from_label_visible, to_label_visible,
-         from_label_position, to_label_position, from_icon_visible, to_icon_visible]
+         from_label_position, to_label_position, from_icon_visible, to_icon_visible,
+         from_label_size || 1, to_label_size || 1]
       );
       res.json(result.rows[0]);
     }

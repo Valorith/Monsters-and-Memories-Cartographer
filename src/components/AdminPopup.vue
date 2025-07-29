@@ -49,7 +49,7 @@
             max="2" 
             step="0.1" 
             v-model="iconSize"
-            @input="updateIconSize"
+            @change="updateIconSize"
           />
           <span class="size-value">{{ Math.round(iconSize * 100) }}%</span>
         </div>
@@ -61,11 +61,11 @@
         <div class="size-controls">
           <input 
             type="range" 
-            min="0.5" 
+            min="0.2" 
             max="2" 
-            step="0.1" 
+            step="0.05" 
             v-model="labelSize"
-            @input="updateLabelSize"
+            @change="updateLabelSize"
           />
           <span class="size-value">{{ Math.round(labelSize * 100) }}%</span>
         </div>

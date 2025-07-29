@@ -407,7 +407,7 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     if (connection.label) {
       // Label background
       const labelScale = connection.labelScale || 1
-      const fontSize = Math.max(12, Math.min(16, 14 * scaleFactor * labelScale))
+      const fontSize = Math.max(8, Math.min(24, 14 * scaleFactor * labelScale))
       ctx.font = `bold ${fontSize}px sans-serif`
       const textWidth = ctx.measureText(connection.label).width
       const padding = 6
@@ -517,7 +517,7 @@ export function useMapInteractions(scale, offsetX, offsetY) {
       if (connector.label && !connector.invisible && !connector.snapToPOI) {
         const scaleFactor = Math.sqrt(scale.value)
         const labelScale = connector.labelScale || 1
-        const fontSize = Math.max(26, Math.min(36, 31 * scaleFactor * labelScale))
+        const fontSize = Math.max(10, Math.min(50, 31 * scaleFactor * labelScale))
         ctx.font = `900 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif`
         
         // Calculate label position based on labelPosition property
@@ -662,7 +662,7 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     // Draw label with connector's color (unless it's invisible or snapped to POI)
     if (connector.label && !connector.invisible && !connector.snapToPOI) {
       const labelScale = connector.labelScale || 1
-      const fontSize = Math.max(26, Math.min(36, 31 * scaleFactor * labelScale))
+      const fontSize = Math.max(10, Math.min(50, 31 * scaleFactor * labelScale))
       ctx.font = `900 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif`
       
       // Calculate label position based on labelPosition property

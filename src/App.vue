@@ -1,7 +1,44 @@
 <template>
   <div class="app-container">
     <header class="app-header">
-      <h1>MMC</h1>
+      <div class="logo-container">
+        <svg class="mmc-logo" width="50" height="50" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <!-- Fantasy map-inspired logo -->
+          <defs>
+            <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" style="stop-color:#FFD700;stop-opacity:1" />
+              <stop offset="50%" style="stop-color:#FFA500;stop-opacity:1" />
+              <stop offset="100%" style="stop-color:#FF8C00;stop-opacity:1" />
+            </linearGradient>
+            <filter id="shadow">
+              <feDropShadow dx="2" dy="2" stdDeviation="2" flood-opacity="0.3"/>
+            </filter>
+          </defs>
+          
+          <!-- Compass rose background -->
+          <circle cx="50" cy="50" r="45" fill="url(#goldGradient)" filter="url(#shadow)"/>
+          <circle cx="50" cy="50" r="40" fill="#2C1810" />
+          
+          <!-- M letters forming mountains -->
+          <path d="M 20 65 L 30 35 L 40 55 L 50 35 L 60 55 L 70 35 L 80 65" 
+                stroke="url(#goldGradient)" 
+                stroke-width="4" 
+                fill="none" 
+                stroke-linejoin="round" 
+                stroke-linecap="round"/>
+          
+          <!-- C as a crescent moon -->
+          <path d="M 65 70 A 15 15 0 1 1 35 70 A 12 12 0 1 0 65 70" 
+                fill="url(#goldGradient)" />
+          
+          <!-- Compass points -->
+          <path d="M 50 10 L 55 20 L 50 15 L 45 20 Z" fill="#FFD700" opacity="0.8"/>
+          <path d="M 90 50 L 80 55 L 85 50 L 80 45 Z" fill="#FFD700" opacity="0.8"/>
+          <path d="M 50 90 L 45 80 L 50 85 L 55 80 Z" fill="#FFD700" opacity="0.8"/>
+          <path d="M 10 50 L 20 45 L 15 50 L 20 55 Z" fill="#FFD700" opacity="0.8"/>
+        </svg>
+      </div>
+      <h1 class="app-title">Monsters & Memories Cartographer</h1>
       <div class="header-controls">
         <div class="map-selector">
           <label for="mapSelect">Select Map:</label>
@@ -559,6 +596,7 @@ export default {
               iconSize: pc.from_icon_size,
               labelVisible: pc.from_label_visible,
               labelPosition: pc.from_label_position,
+              labelScale: pc.from_label_size || 1,
               iconVisible: pc.from_icon_visible,
               showIcon: pc.from_icon_visible, // drawConnector checks showIcon
               invisible: !pc.from_label_visible, // for label visibility
@@ -580,6 +618,7 @@ export default {
                 iconSize: pc.to_icon_size,
                 labelVisible: pc.to_label_visible,
                 labelPosition: pc.to_label_position,
+                labelScale: pc.to_label_size || 1,
                 iconVisible: pc.to_icon_visible,
                 showIcon: pc.to_icon_visible, // drawConnector checks showIcon
                 invisible: !pc.to_label_visible, // for label visibility
@@ -2008,7 +2047,8 @@ export default {
             invisibleIcon: connectorData.invisibleIcon || false,
             icon: connectorData.icon || '🔗',
             iconSize: connectorData.iconSize || 14,
-            labelPosition: connectorData.labelPosition || 'bottom'
+            labelPosition: connectorData.labelPosition || 'bottom',
+            labelScale: connectorData.labelScale || 1
           }
           
           pendingConnectorPair.value.first = firstConnectorData
@@ -2056,7 +2096,9 @@ export default {
             from_label_position: firstData.labelPosition || 'bottom',
             to_label_position: connectorData.labelPosition || 'bottom',
             from_icon_visible: !firstData.invisibleIcon,
-            to_icon_visible: !(connectorData.invisibleIcon || false)
+            to_icon_visible: !(connectorData.invisibleIcon || false),
+            from_label_size: firstData.labelScale || 1,
+            to_label_size: connectorData.labelScale || 1
           }
           
           const newConnector = await pointConnectorsAPI.save(newConnectorData)
@@ -2076,6 +2118,7 @@ export default {
             iconSize: newConnector.from_icon_size,
             labelVisible: newConnector.from_label_visible,
             labelPosition: newConnector.from_label_position,
+            labelScale: newConnector.from_label_size || 1,
             iconVisible: newConnector.from_icon_visible,
             showIcon: newConnector.from_icon_visible,
             invisible: !newConnector.from_label_visible,
@@ -2097,6 +2140,7 @@ export default {
               iconSize: newConnector.to_icon_size,
               labelVisible: newConnector.to_label_visible,
               labelPosition: newConnector.to_label_position,
+              labelScale: newConnector.to_label_size || 1,
               iconVisible: newConnector.to_icon_visible,
               showIcon: newConnector.to_icon_visible,
               invisible: !newConnector.to_label_visible,
@@ -2282,6 +2326,14 @@ export default {
             }
           }
           
+          if (updatedItem.labelScale !== undefined) {
+            if (isFromSide) {
+              connectorToUpdate.from_label_size = updatedItem.labelScale
+            } else {
+              connectorToUpdate.to_label_size = updatedItem.labelScale
+            }
+          }
+          
           const updatedConnector = await pointConnectorsAPI.save(connectorToUpdate)
           
           // Update local cache - need to transform the saved connector back to UI format
@@ -2297,11 +2349,13 @@ export default {
               uiConnector.customIcon = updatedConnector.from_icon
               uiConnector.iconSize = updatedConnector.from_icon_size
               uiConnector.labelPosition = updatedConnector.from_label_position
+              uiConnector.labelScale = updatedConnector.from_label_size || 1
             } else {
               uiConnector.icon = updatedConnector.to_icon
               uiConnector.customIcon = updatedConnector.to_icon
               uiConnector.iconSize = updatedConnector.to_icon_size
               uiConnector.labelPosition = updatedConnector.to_label_position
+              uiConnector.labelScale = updatedConnector.to_label_size || 1
             }
             
             // Update the array to trigger reactivity
@@ -2565,7 +2619,9 @@ export default {
                 from_label_position: dbConnector.from_label_position,
                 to_label_position: dbConnector.to_label_position,
                 from_icon_visible: dbConnector.from_icon_visible,
-                to_icon_visible: dbConnector.to_icon_visible
+                to_icon_visible: dbConnector.to_icon_visible,
+                from_label_size: dbConnector.from_label_size,
+                to_label_size: dbConnector.to_label_size
               }
               
               // Update the appropriate position
@@ -2593,6 +2649,7 @@ export default {
                   iconSize: pc.from_icon_size,
                   labelVisible: pc.from_label_visible,
                   labelPosition: pc.from_label_position,
+                  labelScale: pc.from_label_size || 1,
                   iconVisible: pc.from_icon_visible,
                   showIcon: pc.from_icon_visible,
                   invisible: !pc.from_label_visible,
@@ -2613,6 +2670,7 @@ export default {
                     iconSize: pc.to_icon_size,
                     labelVisible: pc.to_label_visible,
                     labelPosition: pc.to_label_position,
+                    labelScale: pc.to_label_size || 1,
                     iconVisible: pc.to_icon_visible,
                     showIcon: pc.to_icon_visible,
                     invisible: !pc.to_label_visible,
