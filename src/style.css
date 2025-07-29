@@ -30,6 +30,7 @@ body {
 .logo-container {
     display: flex;
     align-items: center;
+    cursor: pointer;
 }
 
 .mmc-logo {

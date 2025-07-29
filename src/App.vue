@@ -1,7 +1,7 @@
 <template>
   <div class="app-container">
     <header class="app-header">
-      <div class="logo-container">
+      <div class="logo-container" @click="reloadApp" title="Return to home">
         <svg class="mmc-logo" width="50" height="50" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
           <!-- Fantasy map-inspired logo -->
           <defs>
@@ -1495,6 +1495,26 @@ export default {
       render()
     }
     
+    const reloadApp = () => {
+      // Reset to first map and clear any admin mode
+      selectedMapIndex.value = 0
+      isAdmin.value = false
+      pendingPOI.value = null
+      pendingConnection.value = null
+      pendingConnector.value = null
+      pendingConnectorPair.value = { first: null, second: null }
+      adminPopupItem.value = null
+      selectedPOI.value = null
+      
+      // Reset view
+      reset(mapCanvas.value)
+      
+      // Reload the first map
+      if (maps.value.length > 0) {
+        loadSelectedMap()
+      }
+    }
+    
     const drawPendingPOI = (ctx, pendingPos) => {
       const canvasPos = imageToCanvas(pendingPos.x, pendingPos.y)
       
@@ -2977,6 +2997,7 @@ export default {
       zoomIn,
       zoomOut,
       resetView: resetViewHandler,
+      reloadApp,
       toggleAdmin,
       savePOI,
       saveConnection,
