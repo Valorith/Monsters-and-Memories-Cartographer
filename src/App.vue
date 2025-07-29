@@ -525,6 +525,17 @@ export default {
       
       isLoading.value = true
       selectedPOI.value = null
+      
+      // Clear any active arrows and hover states when switching maps
+      activeConnectorArrow.value = null
+      hoveredConnector.value = null
+      hoveredConnection.value = null
+      hoveredPOI.value = null
+      if (arrowTimeoutId.value) {
+        clearTimeout(arrowTimeoutId.value)
+        arrowTimeoutId.value = null
+      }
+      
       try {
         // Load map image
         await loadImage(map.file)
