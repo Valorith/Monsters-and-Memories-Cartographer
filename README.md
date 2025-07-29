@@ -1,4 +1,4 @@
-# M&M Cartographer
+# MMC
 
 An interactive map viewer and editor for Monsters & Memories game maps. This tool allows players to view game maps with points of interest (POIs), connections between zones, and custom markers.
 
@@ -10,7 +10,7 @@ An interactive map viewer and editor for Monsters & Memories game maps. This too
 - 🎯 **Point Connectors**: Link related locations across the map
 - 🛠️ **Admin Mode**: Edit maps, add/move/delete POIs and connections
 - 📱 **Responsive Design**: Works on desktop and mobile devices
-- 💾 **Local Storage**: All data saved locally in your browser
+- 💾 **Database Storage**: All data saved securely in PostgreSQL database
 
 ## Quick Start
 
@@ -18,8 +18,8 @@ An interactive map viewer and editor for Monsters & Memories game maps. This too
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/mm-cartographer.git
-   cd mm-cartographer
+   git clone https://github.com/yourusername/mmc.git
+   cd mmc
    ```
 
 2. Install dependencies:
@@ -27,9 +27,10 @@ An interactive map viewer and editor for Monsters & Memories game maps. This too
    npm install
    ```
 
-3. Set up admin password (optional):
+3. Set up environment:
    - Copy `.env.example` to `.env`
    - Set your admin password in the `.env` file
+   - Set your database URL (see [Database Setup](docs/DATABASE_SETUP.md))
    - ⚠️ **Never commit the `.env` file!**
 
 4. Run the development server:
@@ -73,7 +74,9 @@ See [README_QUICK_DEPLOY.md](README_QUICK_DEPLOY.md) for deployment instructions
 - Vue 3 (Composition API)
 - Vite
 - Canvas API for rendering
-- Local Storage for data persistence
+- PostgreSQL for data persistence
+- Express.js for API server
+- Railway for deployment
 
 ### Project Structure
 ```

@@ -1,6 +1,8 @@
 <template>
-  <div v-if="visible" class="admin-popup" :style="popupStyle" @click.stop>
-    <div class="admin-popup-header">
+  <transition name="popup-fade">
+    <div v-if="item" class="admin-popup" :style="`left: ${position?.x || 0}px; top: ${position?.y || 0}px;`" @click.stop @mousedown="logPosition">
+      <div class="popup-arrow" :class="arrowPosition"></div>
+      <div class="admin-popup-header">
       <h3>{{ getItemTypeLabel() }} Settings</h3>
       <button class="close-btn" @click="$emit('close')">×</button>
     </div>
@@ -89,11 +91,12 @@
         </button>
       </div>
     </div>
-  </div>
+    </div>
+  </transition>
 </template>
 
 <script>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 
 export default {
   name: 'AdminPopup',
@@ -104,7 +107,7 @@ export default {
     },
     itemType: {
       type: String,
-      required: true // 'poi', 'connection', 'connector'
+      required: true // 'poi', 'connection', 'connector', 'zoneConnector'
     },
     visible: {
       type: Boolean,
@@ -115,7 +118,7 @@ export default {
       default: () => ({ x: 0, y: 0 })
     }
   },
-  emits: ['close', 'update', 'activate', 'delete'],
+  emits: ['close', 'update', 'activate', 'delete', 'reposition'],
   setup(props, { emit }) {
     const iconSize = ref(1)
     const labelSize = ref(1)
@@ -161,10 +164,10 @@ export default {
         if (props.itemType === 'poi') {
           const iconData = availableIcons.find(icon => icon.type === newItem.type)
           currentIcon.value = iconData ? iconData.emoji : '📍'
-        } else if (props.itemType === 'connection') {
+        } else if (props.itemType === 'connection' || props.itemType === 'zoneConnector') {
           // For connections, we can store a custom icon type
           const iconData = availableIcons.find(icon => icon.type === (newItem.iconType || 'portal'))
-          currentIcon.value = iconData ? iconData.emoji : '🌀'
+          currentIcon.value = iconData ? iconData.emoji : (props.itemType === 'zoneConnector' ? '🟩' : '🌀')
         } else if (props.itemType === 'connector') {
           // For connectors, we can store a custom icon type
           const iconData = availableIcons.find(icon => icon.type === (newItem.iconType || 'other'))
@@ -173,14 +176,47 @@ export default {
       }
     }, { immediate: true })
     
-    const popupStyle = computed(() => ({
-      left: `${props.position.x}px`,
-      top: `${props.position.y}px`
-    }))
+    // Debug position prop specifically
+    watch(() => props.position, (newVal, oldVal) => {
+    }, { immediate: true, deep: true })
+    
+    const popupStyle = computed(() => {
+      const x = props.position?.x || 0
+      const y = props.position?.y || 0
+      return {
+        left: `${x}px`,
+        top: `${y}px`
+      }
+    })
+    
+    const arrowPosition = computed(() => {
+      if (!props.item || !props.position) return 'arrow-left'
+      
+      // Use the side information if provided
+      if (props.position.side) {
+        switch (props.position.side) {
+          case 'left': return 'arrow-right'
+          case 'right': return 'arrow-left'
+          case 'bottom': return 'arrow-top'
+          case 'top': return 'arrow-bottom'
+          case 'corner': return 'arrow-none' // No arrow when in corner
+          default: return 'arrow-left'
+        }
+      }
+      
+      // Fallback to heuristic if side not provided
+      const x = props.position.x
+      const viewportCenter = window.innerWidth / 2
+      
+      if (x > viewportCenter) {
+        return 'arrow-left' // Arrow points left to the icon
+      }
+      return 'arrow-right' // Arrow points right to the icon
+    })
     
     const hasLabel = computed(() => {
       if (props.itemType === 'poi') return false
-      if (props.itemType === 'connection') return true
+      if (props.itemType === 'connection' || props.itemType === 'zoneConnector') return true
       if (props.itemType === 'connector') return !props.item.invisible
       return false
     })
@@ -188,7 +224,7 @@ export default {
     const hasIcon = computed(() => {
       // All types can have icons now
       if (props.itemType === 'poi') return true
-      if (props.itemType === 'connection') return true
+      if (props.itemType === 'connection' || props.itemType === 'zoneConnector') return true
       if (props.itemType === 'connector') return props.item.showIcon !== false
       return false
     })
@@ -197,6 +233,7 @@ export default {
       switch (props.itemType) {
         case 'poi': return 'POI'
         case 'connection': return 'Zone Connection'
+        case 'zoneConnector': return 'Zone Connector'
         case 'connector': return 'Point Connector'
         default: return 'Item'
       }
@@ -206,6 +243,7 @@ export default {
       switch (props.itemType) {
         case 'poi': return currentIcon.value || '📍'
         case 'connection': return '🌀'
+        case 'zoneConnector': return '🟩'
         case 'connector': return '🔗'
         default: return '▶️'
       }
@@ -225,7 +263,9 @@ export default {
         emit('update', {
           ...props.item,
           iconType: icon.type,
-          customIcon: icon.emoji
+          customIcon: icon.emoji,
+          icon: icon.emoji, // Also update the icon field directly
+          from_icon: icon.emoji // For zone connectors
         })
       }
     }
@@ -262,6 +302,44 @@ export default {
       emit('close')
     }
     
+    const logPosition = () => {
+    }
+    
+    const checkAndAdjustPosition = () => {
+      nextTick(() => {
+        const popup = document.querySelector('.admin-popup')
+        if (popup && props.position) {
+          const rect = popup.getBoundingClientRect()
+          const actualHeight = rect.height
+          const actualWidth = rect.width
+          
+          
+          // Check if popup goes off screen
+          const bottomOverflow = rect.bottom > window.innerHeight - 20
+          const rightOverflow = rect.right > window.innerWidth - 20
+          
+          if (bottomOverflow || rightOverflow) {
+            
+            // Emit event to parent to reposition
+            emit('reposition', {
+              actualWidth,
+              actualHeight,
+              currentPosition: props.position
+            })
+          }
+        }
+      })
+    }
+    
+    onMounted(() => {
+      checkAndAdjustPosition()
+    })
+    
+    // Re-check position when content changes
+    watch(() => props.item, () => {
+      checkAndAdjustPosition()
+    })
+    
     return {
       iconSize,
       labelSize,
@@ -269,6 +347,7 @@ export default {
       currentIcon,
       availableIcons,
       popupStyle,
+      arrowPosition,
       hasLabel,
       hasIcon,
       getItemTypeLabel,
@@ -278,7 +357,8 @@ export default {
       updateIconSize,
       updateLabelSize,
       handleActivate,
-      handleDelete
+      handleDelete,
+      logPosition
     }
   }
 }
@@ -286,15 +366,18 @@ export default {
 
 <style scoped>
 .admin-popup {
-  position: absolute;
+  position: fixed;
   background: rgba(30, 30, 30, 0.98);
   border: 2px solid #4a7c59;
   border-radius: 12px;
   padding: 0;
   width: 320px;
+  min-height: 200px;
+  max-height: calc(100vh - 60px); /* Ensure it doesn't exceed viewport */
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
   z-index: 1100;
   overflow: hidden;
+  backdrop-filter: blur(5px);
 }
 
 .admin-popup-header {
@@ -334,6 +417,8 @@ export default {
 
 .admin-popup-content {
   padding: 1rem;
+  max-height: calc(100vh - 160px); /* Account for header and margins */
+  overflow-y: auto;
 }
 
 .setting-group {
@@ -555,5 +640,61 @@ export default {
 
 .icon {
   font-size: 1.1rem;
+}
+
+/* Popup arrow */
+.popup-arrow {
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-style: solid;
+}
+
+.popup-arrow.arrow-left {
+  left: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-width: 10px 10px 10px 0;
+  border-color: transparent #4a7c59 transparent transparent;
+}
+
+.popup-arrow.arrow-right {
+  right: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-width: 10px 0 10px 10px;
+  border-color: transparent transparent transparent #4a7c59;
+}
+
+.popup-arrow.arrow-top {
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 0 10px 10px 10px;
+  border-color: transparent transparent #4a7c59 transparent;
+}
+
+.popup-arrow.arrow-bottom {
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 10px 10px 0 10px;
+  border-color: #4a7c59 transparent transparent transparent;
+}
+
+.popup-arrow.arrow-none {
+  display: none;
+}
+
+/* Popup transition */
+.popup-fade-enter-active,
+.popup-fade-leave-active {
+  transition: all 0.2s ease;
+}
+
+.popup-fade-enter-from,
+.popup-fade-leave-to {
+  opacity: 0;
+  transform: scale(0.95);
 }
 </style>

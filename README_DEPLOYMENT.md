@@ -1,6 +1,6 @@
 # Deployment Guide
 
-This guide explains how to deploy the M&M Cartographer app securely.
+This guide explains how to deploy the MMC app securely.
 
 ## Security Configuration
 

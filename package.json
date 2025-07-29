@@ -1,14 +1,17 @@
 {
-  "name": "monsters-and-memories-cartographer",
+  "name": "mmc",
   "private": true,
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "serve": "vite",
+    "dev": "cross-env NODE_ENV=development vite",
+    "dev:server": "cross-env NODE_ENV=development nodemon server.js",
+    "dev:full": "concurrently \"npm run dev\" \"npm run dev:server\"",
+    "serve": "cross-env NODE_ENV=development vite",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "node server.js",
+    "start": "cross-env NODE_ENV=production node server.js",
+    "start:dev": "cross-env NODE_ENV=development node server.js",
     "migrate": "node src/db/migrate.js"
   },
   "dependencies": {
@@ -19,6 +22,9 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.4",
-    "vite": "^5.2.0"
+    "cross-env": "^10.0.0",
+    "vite": "^5.2.0",
+    "nodemon": "^3.0.2",
+    "concurrently": "^8.2.2"
   }
 }

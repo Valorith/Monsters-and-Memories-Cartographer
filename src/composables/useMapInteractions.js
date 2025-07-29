@@ -21,11 +21,23 @@ export function useMapInteractions(scale, offsetX, offsetY) {
   
   // Check if a point is within a POI
   const isPOIHit = (poi, imageX, imageY) => {
-    // Increase hit radius when zoomed out
-    const baseRadius = 15
-    const minRadius = 20
-    const scaleFactor = Math.max(1, 1 / scale.value)
-    const radius = Math.max(minRadius, baseRadius * scaleFactor)
+    // Calculate the same icon size as in drawPOI (in pixels)
+    const baseSize = 24
+    const minSize = 20
+    const maxSize = 36
+    const inverseScale = Math.max(0.8, Math.min(1.5, 1 / Math.sqrt(scale.value)))
+    const iconScale = poi.iconScale || 1
+    const iconSize = Math.max(minSize, Math.min(maxSize, baseSize * inverseScale * iconScale))
+    
+    // Convert pixel radius to image space radius
+    // Since the icon is drawn in pixels but we're checking in image space,
+    // we need to divide by the current scale
+    let radius = (iconSize / 2) / scale.value
+    
+    // Make grouped POIs more forgiving for hover
+    if (poi.isGrouped && poi.groupSize > 1) {
+      radius = radius * 1.5 // 50% larger hit area for grouped POIs
+    }
     
     const dx = imageX - poi.x
     const dy = imageY - poi.y
@@ -35,8 +47,8 @@ export function useMapInteractions(scale, offsetX, offsetY) {
   // Check if a point is within a connection
   const isConnectionHit = (connection, imageX, imageY) => {
     // Make hit radius much more forgiving, especially when zoomed out
-    const baseRadius = 30
-    const minRadius = 40
+    const baseRadius = 21
+    const minRadius = 28
     const scaleFactor = Math.max(1, 2 / scale.value) // More aggressive scaling for connections
     const radius = Math.max(minRadius, baseRadius * scaleFactor)
     
@@ -47,8 +59,8 @@ export function useMapInteractions(scale, offsetX, offsetY) {
   
   // Check if a point is within a connector
   const isConnectorHit = (connector, imageX, imageY) => {
-    const baseRadius = 20
-    const minRadius = 25
+    const baseRadius = 14
+    const minRadius = 18
     const scaleFactor = Math.max(1, 1.5 / scale.value)
     const radius = Math.max(minRadius, baseRadius * scaleFactor)
     
@@ -80,17 +92,18 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     const canvasPos = imageToCanvas(poi.x, poi.y)
     const isHovered = hoveredPOI.value?.id === poi.id
     
-    // Calculate icon size - larger when zoomed out (but 20% smaller than before)
-    const baseSize = 22
-    const minSize = 19
-    const maxSize = 38
-    // Inverse relationship with zoom - smaller scale = larger icon
-    const inverseScale = Math.max(0.5, Math.min(2, 1 / Math.sqrt(scale.value)))
+    // Calculate icon size - moderate scaling when zoomed out
+    const baseSize = 24
+    const minSize = 20
+    const maxSize = 36
+    // More subtle inverse relationship with zoom
+    const inverseScale = Math.max(0.8, Math.min(1.5, 1 / Math.sqrt(scale.value)))
     const iconScale = poi.iconScale || 1
     const iconSize = Math.max(minSize, Math.min(maxSize, baseSize * inverseScale * iconScale))
-    const glowSize = iconSize * 1.8
     
     const colors = getPOIColors(poi.type)
+    // Use custom icon if available, otherwise use the type-based icon
+    const displayIcon = poi.custom_icon || poi.icon || colors.icon
     
     ctx.save()
     ctx.translate(canvasPos.x, canvasPos.y)
@@ -101,18 +114,7 @@ export function useMapInteractions(scale, offsetX, offsetY) {
       ctx.scale(1.1, 1.1)
     }
     
-    // Always show subtle glow effect
-    const glowIntensity = isHovered ? 0.5 : 0.3
-    const glowGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, glowSize)
-    glowGradient.addColorStop(0, `${colors.primary}${Math.round(glowIntensity * 255).toString(16).padStart(2, '0')}`)
-    glowGradient.addColorStop(0.4, `${colors.primary}${Math.round(glowIntensity * 0.5 * 255).toString(16).padStart(2, '0')}`)
-    glowGradient.addColorStop(0.7, `${colors.primary}${Math.round(glowIntensity * 0.2 * 255).toString(16).padStart(2, '0')}`)
-    glowGradient.addColorStop(1, 'transparent')
-    
-    ctx.beginPath()
-    ctx.arc(0, 0, glowSize, 0, Math.PI * 2)
-    ctx.fillStyle = glowGradient
-    ctx.fill()
+    // Glow effect removed per user request
     
     // Draw icon with outline for visibility
     ctx.font = `bold ${iconSize}px sans-serif`
@@ -128,7 +130,7 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     // Black outline for better visibility
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)'
     ctx.lineWidth = 5
-    ctx.strokeText(colors.icon, 0, 0)
+    ctx.strokeText(displayIcon, 0, 0)
     
     // Reset shadow for next strokes
     ctx.shadowColor = 'transparent'
@@ -139,11 +141,45 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     // White outline
     ctx.strokeStyle = 'rgba(255, 255, 255, 1)'
     ctx.lineWidth = 2.5
-    ctx.strokeText(colors.icon, 0, 0)
+    ctx.strokeText(displayIcon, 0, 0)
     
     // Icon itself
     ctx.fillStyle = isHovered ? colors.secondary : colors.primary
-    ctx.fillText(colors.icon, 0, 0)
+    ctx.fillText(displayIcon, 0, 0)
+    
+    // Draw group indicator if this is a grouped POI
+    if (poi.isGrouped && poi.groupSize > 1) {
+      // Optional: Show hover area for debugging (uncomment to see the expanded hit area)
+      // if (isHovered) {
+      //   const hitRadius = iconSize / 2 * 1.5 // Same calculation as isPOIHit
+      //   ctx.beginPath()
+      //   ctx.arc(0, 0, hitRadius, 0, Math.PI * 2)
+      //   ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'
+      //   ctx.lineWidth = 1
+      //   ctx.stroke()
+      // }
+      
+      // Draw a small badge indicating the group
+      const badgeSize = Math.max(14, Math.min(20, iconSize * 0.4))
+      const badgeX = iconSize * 0.5
+      const badgeY = -iconSize * 0.5
+      
+      // Badge background
+      ctx.beginPath()
+      ctx.arc(badgeX, badgeY, badgeSize, 0, Math.PI * 2)
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
+      ctx.fill()
+      ctx.strokeStyle = '#fff'
+      ctx.lineWidth = 2
+      ctx.stroke()
+      
+      // Badge text (number of POIs in group)
+      ctx.font = `bold ${badgeSize * 1.2}px sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillStyle = '#fff'
+      ctx.fillText(poi.groupSize.toString(), badgeX, badgeY)
+    }
     
     // Draw connector mode indicator on POI hover
     if (isHovered && scale.value && offsetX.value !== undefined) {
@@ -152,17 +188,36 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     }
     
     // Draw name tooltip on hover
-    if (isHovered && poi.name) {
+    if (isHovered && (poi.name || poi.groupedPOIs)) {
       const fontSize = Math.max(14, Math.min(18, 16 * Math.sqrt(scale.value)))
       ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif`
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'bottom'
       
-      const textMetrics = ctx.measureText(poi.name)
+      let tooltipContent = []
+      let maxWidth = 0
+      
+      if (poi.groupedPOIs && poi.groupedPOIs.length > 1) {
+        // For grouped POIs, show all POI names with their icons
+        poi.groupedPOIs.forEach(p => {
+          const pColors = getPOIColors(p.type)
+          const pIcon = p.custom_icon || p.icon || pColors.icon
+          const text = `${pIcon} ${p.name}`
+          const metrics = ctx.measureText(text)
+          maxWidth = Math.max(maxWidth, metrics.width)
+          tooltipContent.push({ text, icon: pIcon, name: p.name })
+        })
+      } else {
+        // Single POI tooltip
+        const text = poi.name
+        const metrics = ctx.measureText(text)
+        maxWidth = metrics.width
+        tooltipContent.push({ text, icon: null, name: text })
+      }
+      
       const padding = 8
+      const lineHeight = fontSize * 1.4
       const tooltipY = -(iconSize + 10)
-      const tooltipHeight = fontSize + padding * 2
-      const tooltipWidth = textMetrics.width + padding * 2
+      const tooltipHeight = (tooltipContent.length * lineHeight) + padding * 2
+      const tooltipWidth = maxWidth + padding * 2
       
       // Draw tooltip background
       ctx.fillStyle = 'rgba(0, 0, 0, 0.9)'
@@ -195,10 +250,15 @@ export function useMapInteractions(scale, offsetX, offsetY) {
       ctx.lineWidth = 1
       ctx.stroke()
       
-      // Draw text
+      // Draw text content
       ctx.fillStyle = '#fff'
+      ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
-      ctx.fillText(poi.name, 0, tooltipY - tooltipHeight/2)
+      
+      tooltipContent.forEach((item, index) => {
+        const y = tooltipY - tooltipHeight + padding + (index + 0.5) * lineHeight
+        ctx.fillText(item.text, 0, y)
+      })
     }
     
     ctx.restore()
@@ -210,9 +270,9 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     const isHovered = hoveredConnection.value?.id === connection.id
     
     // Calculate size with minimum visibility threshold
-    const baseSize = 30
-    const minSize = 20
-    const maxSize = 40
+    const baseSize = 21
+    const minSize = 14
+    const maxSize = 28
     // Use square root of scale for more gradual scaling
     const scaleFactor = Math.sqrt(scale.value)
     const size = Math.max(minSize, Math.min(maxSize, baseSize * scaleFactor))
@@ -365,10 +425,10 @@ export function useMapInteractions(scale, offsetX, offsetY) {
           labelY = size + 20
           break
         case 'left':
-          labelX = -(size + 20)
+          labelX = -(size + 10)
           break
         case 'right':
-          labelX = size + 20
+          labelX = size + 10
           break
       }
       
@@ -457,11 +517,12 @@ export function useMapInteractions(scale, offsetX, offsetY) {
       if (connector.label && !connector.invisible && !connector.snapToPOI) {
         const scaleFactor = Math.sqrt(scale.value)
         const labelScale = connector.labelScale || 1
-        const fontSize = Math.max(22, Math.min(30, 26 * scaleFactor * labelScale))
+        const fontSize = Math.max(26, Math.min(36, 31 * scaleFactor * labelScale))
         ctx.font = `900 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif`
         
         // Calculate label position based on labelPosition property
-        const position = connector.labelPosition || 'center'
+        // Force center position when icon is invisible
+        const position = 'center'
         let labelX = 0
         let labelY = 0
         const offset = 30 // Distance from center for positioned labels
@@ -488,20 +549,20 @@ export function useMapInteractions(scale, offsetX, offsetY) {
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
         
-        // Draw black shadow/outline for contrast
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)'
-        ctx.lineWidth = 6
+        // Draw thick black shadow for strong contrast
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.95)'
+        ctx.lineWidth = 8
         ctx.lineJoin = 'round'
         ctx.lineCap = 'round'
         ctx.strokeText(connector.label, labelX, labelY)
         
-        // Draw white outline for maximum contrast
-        ctx.strokeStyle = '#fff'
-        ctx.lineWidth = 4
+        // Draw dark gray outline instead of white
+        ctx.strokeStyle = 'rgba(40, 40, 40, 0.8)'
+        ctx.lineWidth = 5
         ctx.strokeText(connector.label, labelX, labelY)
         
-        // Draw the label with color
-        ctx.fillStyle = connector.color || '#4ecdc4'
+        // Draw the label in bright white for maximum contrast
+        ctx.fillStyle = '#ffffff'
         ctx.fillText(connector.label, labelX, labelY)
       }
       
@@ -510,9 +571,9 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     }
     
     // Calculate size for visible connectors
-    const baseSize = 20
-    const minSize = 16
-    const maxSize = 28
+    const baseSize = 14
+    const minSize = 11
+    const maxSize = 20
     const scaleFactor = Math.sqrt(scale.value)
     const iconScale = connector.iconScale || 1
     const size = Math.max(minSize, Math.min(maxSize, baseSize * scaleFactor * iconScale))
@@ -528,23 +589,23 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     
     // Check if connector has a custom icon
     if (connector.customIcon) {
-      // Draw custom icon
-      const iconSize = size * 1.8
+      // Draw custom icon without background
+      const iconSize = size * 2.2
       
-      // Draw icon with outline for visibility
-      ctx.font = `bold ${iconSize}px sans-serif`
+      // Draw icon with subtle outline for visibility
+      ctx.font = `${iconSize}px sans-serif`
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       
-      // Drop shadow for depth
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.6)'
-      ctx.shadowBlur = 8
-      ctx.shadowOffsetX = 2
-      ctx.shadowOffsetY = 2
+      // Very subtle shadow for depth
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.3)'
+      ctx.shadowBlur = 4
+      ctx.shadowOffsetX = 1
+      ctx.shadowOffsetY = 1
       
-      // Black outline for better visibility
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)'
-      ctx.lineWidth = 5
+      // Thin black outline for contrast
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)'
+      ctx.lineWidth = 2
       ctx.strokeText(connector.customIcon, 0, 0)
       
       // Reset shadow
@@ -553,14 +614,8 @@ export function useMapInteractions(scale, offsetX, offsetY) {
       ctx.shadowOffsetX = 0
       ctx.shadowOffsetY = 0
       
-      // White outline
-      ctx.strokeStyle = 'rgba(255, 255, 255, 1)'
-      ctx.lineWidth = 2.5
-      ctx.strokeText(connector.customIcon, 0, 0)
-      
-      // Icon itself with connector color
-      const color = connector.color || '#4ecdc4'
-      ctx.fillStyle = isHovered ? color : color + 'dd'
+      // Draw the icon
+      ctx.fillStyle = isHovered ? '#666' : '#888'
       ctx.fillText(connector.customIcon, 0, 0)
     } else {
       // Default link icon drawing
@@ -607,11 +662,14 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     // Draw label with connector's color (unless it's invisible or snapped to POI)
     if (connector.label && !connector.invisible && !connector.snapToPOI) {
       const labelScale = connector.labelScale || 1
-      const fontSize = Math.max(22, Math.min(30, 26 * scaleFactor * labelScale))
+      const fontSize = Math.max(26, Math.min(36, 31 * scaleFactor * labelScale))
       ctx.font = `900 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif`
       
       // Calculate label position based on labelPosition property
-      const position = connector.labelPosition || 'bottom'
+      // If icon is invisible, center the label regardless of labelPosition setting
+      const position = (connector.showIcon === false || !connector.iconVisible) 
+        ? 'center' 
+        : (connector.labelPosition || 'bottom')
       let labelX = 0
       let labelY = 0
       
@@ -623,30 +681,33 @@ export function useMapInteractions(scale, offsetX, offsetY) {
           labelY = size + 10
           break
         case 'left':
-          labelX = -(size + 15)
+          labelX = -(size + 8)
           break
         case 'right':
-          labelX = size + 15
+          labelX = size + 8
+          break
+        case 'center':
+          // Label stays at 0,0
           break
       }
       
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       
-      // Draw black shadow/outline for contrast
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)'
-      ctx.lineWidth = 6
+      // Draw thick black shadow for strong contrast
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.95)'
+      ctx.lineWidth = 8
       ctx.lineJoin = 'round'
       ctx.lineCap = 'round'
       ctx.strokeText(connector.label, labelX, labelY)
       
-      // Draw white outline for maximum contrast
-      ctx.strokeStyle = '#fff'
-      ctx.lineWidth = 4
+      // Draw dark gray outline instead of white
+      ctx.strokeStyle = 'rgba(40, 40, 40, 0.8)'
+      ctx.lineWidth = 5
       ctx.strokeText(connector.label, labelX, labelY)
       
-      // Draw the label with color
-      ctx.fillStyle = connector.color || '#4ecdc4'
+      // Draw the label in bright white for maximum contrast
+      ctx.fillStyle = '#ffffff'
       ctx.fillText(connector.label, labelX, labelY)
     }
     

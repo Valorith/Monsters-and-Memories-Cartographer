@@ -1,7 +1,7 @@
 <template>
   <div class="app-container">
     <header class="app-header">
-      <h1>Monsters and Memories Cartographer</h1>
+      <h1>MMC</h1>
       <div class="header-controls">
         <div class="map-selector">
           <label for="mapSelect">Select Map:</label>
@@ -56,6 +56,7 @@
         :pendingConnection="pendingConnection"
         :pendingConnector="pendingConnector"
         :pendingConnectorPair="pendingConnectorPair"
+        :maps="maps"
         @close="isAdmin = false"
         @savePOI="savePOI"
         @saveConnection="saveConnection"
@@ -100,6 +101,7 @@
     <MapManager
       :visible="showMapManager"
       :maps="maps"
+      :dbMapData="dbMapData"
       @close="showMapManager = false"
       @updateMaps="handleUpdateMaps"
       @showConfirm="handleMapManagerConfirm"
@@ -130,11 +132,10 @@
 </template>
 
 <script>
-import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
 import { useMapViewer } from './composables/useMapViewer'
 import { useMapInteractions } from './composables/useMapInteractions'
-import { mapList } from './data/maps'
-import { mapData, getMapFilename, saveMapData } from './data/mapData'
+import { mapsAPI, poisAPI, connectionsAPI, pointConnectorsAPI, zoneConnectorsAPI } from './services/api'
 import POIPopup from './components/POIPopup.vue'
 import AdminPanel from './components/AdminPanel.vue'
 import AdminPopup from './components/AdminPopup.vue'
@@ -142,6 +143,11 @@ import MapManager from './components/MapManager.vue'
 import ToastContainer from './components/ToastContainer.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import { useToast } from './composables/useToast'
+
+// Helper function to get map filename from path
+function getMapFilename(path) {
+  return path.split('/').pop()
+}
 
 export default {
   name: 'App',
@@ -228,21 +234,41 @@ export default {
       drawConnector
     } = useMapInteractions(scale, offsetX, offsetY)
     
-    // Load maps from localStorage or use default
-    const loadMaps = () => {
-      const customMaps = localStorage.getItem('customMaps')
-      if (customMaps) {
-        try {
-          return JSON.parse(customMaps)
-        } catch (e) {
-          console.error('Failed to parse custom maps:', e)
-          return mapList
+    // Database state
+    const dbMaps = ref([])
+    const dbMapData = ref({})
+    const isLoadingFromDB = ref(true)
+    
+    // Load maps from database only
+    const loadMapsFromDatabase = async () => {
+      try {
+        isLoadingFromDB.value = true
+        const mapsFromDB = await mapsAPI.getAll()
+        
+        if (!mapsFromDB || mapsFromDB.length === 0) {
+          warning('No maps found in database. Please add a map using the Map Manager.')
+          return []
         }
+        
+        dbMaps.value = mapsFromDB
+        return mapsFromDB.map(map => ({
+          name: map.name,
+          file: map.image_url,
+          id: map.id,
+          width: map.width,
+          height: map.height
+        }))
+      } catch (err) {
+        console.error('Failed to load maps from database:', err)
+        error(`Failed to load maps from database: ${err.message || 'Database connection error'}`)
+        warning('Please check your internet connection and refresh the page')
+        return []
+      } finally {
+        isLoadingFromDB.value = false
       }
-      return mapList
     }
     
-    const maps = reactive(loadMaps())
+    const maps = ref([])
     const zoomPercent = computed(() => Math.round(scale.value * 100))
     
     // Helper function to show confirm dialog
@@ -267,11 +293,114 @@ export default {
     }
     
     const currentMapData = computed(() => {
-      const map = maps[selectedMapIndex.value]
-      if (!map) return { pois: [], connections: [], connectors: [] }
-      const filename = getMapFilename(map.file)
-      return mapData[filename] || { pois: [], connections: [], connectors: [] }
+      const map = maps.value[selectedMapIndex.value]
+      if (!map) return { pois: [], connections: [], connectors: [], zoneConnectors: [] }
+      
+      // Must have a database connection
+      if (!map.id) {
+        return { pois: [], connections: [], connectors: [], zoneConnectors: [] }
+      }
+      
+      // Return data from database
+      return dbMapData.value[map.id] || { pois: [], connections: [], connectors: [], zoneConnectors: [] }
     })
+    
+    // Track expanded groups
+    const expandedGroups = ref(new Set())
+    
+    const groupPOIsWhenZoomedOut = (pois) => {
+      // Only group when significantly zoomed out
+      if (scale.value > 0.5) {
+        expandedGroups.value.clear() // Clear expanded groups when zoomed in
+        return pois
+      }
+      
+      // Calculate grouping distance based on zoom level
+      const groupingDistance = 50 / scale.value // Larger distance when more zoomed out
+      
+      const groups = []
+      const processedPOIs = new Set()
+      
+      pois.forEach(poi => {
+        if (processedPOIs.has(poi.id)) return
+        
+        // Find all POIs within grouping distance
+        const nearbyPOIs = pois.filter(otherPOI => {
+          if (otherPOI.id === poi.id || processedPOIs.has(otherPOI.id)) return false
+          
+          const dx = poi.x - otherPOI.x
+          const dy = poi.y - otherPOI.y
+          const distance = Math.sqrt(dx * dx + dy * dy)
+          
+          return distance <= groupingDistance
+        })
+        
+        if (nearbyPOIs.length > 0) {
+          // Create a group
+          const group = [poi, ...nearbyPOIs]
+          processedPOIs.add(poi.id)
+          nearbyPOIs.forEach(p => processedPOIs.add(p.id))
+          
+          // Get unique types in the group
+          const typeMap = new Map()
+          group.forEach(p => {
+            const type = p.type || 'other'
+            if (!typeMap.has(type) || p.id === poi.id) {
+              typeMap.set(type, p)
+            }
+          })
+          
+          // Calculate center position for the group
+          const centerX = group.reduce((sum, p) => sum + p.x, 0) / group.length
+          const centerY = group.reduce((sum, p) => sum + p.y, 0) / group.length
+          
+          // Create a group ID based on center position
+          const groupId = `${Math.round(centerX)}_${Math.round(centerY)}`
+          
+          // Check if this group is expanded
+          if (expandedGroups.value.has(groupId)) {
+            // Show all POIs in the group in a circle around the center
+            let angle = 0
+            const radius = 30
+            group.forEach(p => {
+              groups.push({
+                ...p,
+                x: centerX + Math.cos(angle) * radius,
+                y: centerY + Math.sin(angle) * radius,
+                isInExpandedGroup: true,
+                groupId: groupId
+              })
+              angle += (2 * Math.PI) / group.length
+            })
+          } else {
+            // Add one POI of each type at the center position
+            let offset = 0
+            typeMap.forEach((representativePOI, type) => {
+              const offsetAngle = (offset * 2 * Math.PI) / typeMap.size
+              const offsetDistance = typeMap.size > 1 ? 15 : 0
+              
+              groups.push({
+                ...representativePOI,
+                x: centerX + Math.cos(offsetAngle) * offsetDistance,
+                y: centerY + Math.sin(offsetAngle) * offsetDistance,
+                isGrouped: true,
+                groupSize: group.length,
+                groupTypes: typeMap.size,
+                groupId: groupId,
+                groupedPOIs: group // Include all POIs in the group for tooltip
+              })
+              offset++
+            })
+          }
+        } else {
+          // Single POI, not grouped
+          processedPOIs.add(poi.id)
+          groups.push(poi)
+        }
+      })
+      
+      return groups
+    }
     
     const render = () => {
       baseRender()
@@ -285,6 +414,32 @@ export default {
         drawConnection(ctx.value, connection, isDragging || isPending)
       })
       
+      // Draw zone connectors
+      if (currentMapData.value.zoneConnectors) {
+        currentMapData.value.zoneConnectors.forEach(zoneConnector => {
+          // Only draw the "from" side on current map
+          if (zoneConnector.from_map_id === maps.value[selectedMapIndex.value]?.id) {
+            const connection = {
+              id: zoneConnector.id,
+              x: zoneConnector.from_x,
+              y: zoneConnector.from_y,
+              label: zoneConnector.from_label,
+              icon: zoneConnector.from_icon,
+              customIcon: zoneConnector.from_icon, // drawConnection looks for customIcon
+              iconSize: zoneConnector.from_icon_size,
+              labelVisible: zoneConnector.from_label_visible,
+              labelPosition: zoneConnector.from_label_position,
+              iconVisible: zoneConnector.from_icon_visible,
+              targetMapId: zoneConnector.to_map_id,
+              isZoneConnector: true
+            }
+            const isDragging = draggedItem.value && draggedItem.value.id === connection.id
+            const isPending = pendingChange.value && pendingChange.value.item.id === connection.id
+            drawConnection(ctx.value, connection, isDragging || isPending)
+          }
+        })
+      }
+      
       // Draw connectors
       if (currentMapData.value.connectors) {
         currentMapData.value.connectors.forEach(connector => {
@@ -294,8 +449,11 @@ export default {
         })
       }
       
+      // Group POIs when zoomed out
+      const poisToDraw = groupPOIsWhenZoomedOut(currentMapData.value.pois)
+      
       // Draw POIs
-      currentMapData.value.pois.forEach(poi => {
+      poisToDraw.forEach(poi => {
         const isDragging = draggedItem.value && draggedItem.value.id === poi.id
         const isPending = pendingChange.value && pendingChange.value.item.id === poi.id
         drawPOI(ctx.value, poi, isDragging || isPending)
@@ -362,13 +520,75 @@ export default {
     }
     
     const loadSelectedMap = async () => {
-      const map = maps[selectedMapIndex.value]
+      const map = maps.value[selectedMapIndex.value]
       if (!map) return
       
       isLoading.value = true
       selectedPOI.value = null
       try {
+        // Load map image
         await loadImage(map.file)
+        
+        // If it's a database map, load its data
+        if (map.id && !dbMapData.value[map.id]) {
+          const mapData = await mapsAPI.getById(map.id)
+          // Transform database connectors to the format expected by the UI
+          const connectors = (mapData.pointConnectors || []).flatMap(pc => {
+            // Create connector objects from each point_connector record
+            const result = []
+            
+            // Always add the "from" connector
+            result.push({
+              id: `${pc.id}-from`,
+              x: pc.from_x,
+              y: pc.from_y,
+              label: pc.from_label || (pc.name ? pc.name.split(' ↔ ')[0] : ''),
+              icon: pc.from_icon,
+              customIcon: pc.from_icon, // drawConnector looks for customIcon
+              iconSize: pc.from_icon_size,
+              labelVisible: pc.from_label_visible,
+              labelPosition: pc.from_label_position,
+              iconVisible: pc.from_icon_visible,
+              showIcon: pc.from_icon_visible, // drawConnector checks showIcon
+              invisible: !pc.from_label_visible, // for label visibility
+              pairId: pc.id,
+              dbId: pc.id,
+              isFrom: true,
+              connectsToPoi: pc.to_poi_id ? pc.to_poi_id : null
+            })
+            
+            // Only add "to" connector if it's not connected to a POI
+            if (!pc.to_poi_id) {
+              result.push({
+                id: `${pc.id}-to`,
+                x: pc.to_x,
+                y: pc.to_y,
+                label: pc.to_label || (pc.name ? pc.name.split(' ↔ ')[1] : ''),
+                icon: pc.to_icon,
+                customIcon: pc.to_icon, // drawConnector looks for customIcon
+                iconSize: pc.to_icon_size,
+                labelVisible: pc.to_label_visible,
+                labelPosition: pc.to_label_position,
+                iconVisible: pc.to_icon_visible,
+                showIcon: pc.to_icon_visible, // drawConnector checks showIcon
+                invisible: !pc.to_label_visible, // for label visibility
+                pairId: pc.id,
+                dbId: pc.id,
+                isFrom: false
+              })
+            }
+            
+            return result
+          })
+          
+          dbMapData.value[map.id] = {
+            pois: mapData.pois || [],
+            connections: mapData.connections || [],
+            connectors: connectors,
+            zoneConnectors: mapData.zoneConnectors || []
+          }
+        }
+        
         reset(mapCanvas.value)
         render()
       } catch (err) {
@@ -402,9 +622,33 @@ export default {
         }
         
         // Check for connection clicks
-        const clickedConnection = currentMapData.value.connections.find(conn =>
+        let clickedConnection = currentMapData.value.connections.find(conn =>
           isConnectionHit(conn, imagePos.x, imagePos.y)
         )
+        
+        // Also check zone connectors
+        if (!clickedConnection && currentMapData.value.zoneConnectors) {
+          const clickedZone = currentMapData.value.zoneConnectors.find(zone => {
+            if (zone.from_map_id === maps.value[selectedMapIndex.value]?.id) {
+              const conn = {
+                x: zone.from_x,
+                y: zone.from_y,
+                icon: zone.from_icon,
+                iconSize: zone.from_icon_size
+              }
+              return isConnectionHit(conn, imagePos.x, imagePos.y)
+            }
+            return false
+          })
+          
+          if (clickedZone) {
+            clickedConnection = {
+              id: clickedZone.id,
+              label: clickedZone.from_label,
+              isZoneConnector: true
+            }
+          }
+        }
         
         if (clickedConnection) {
           showConfirm('Delete Connection', `Delete connection "${clickedConnection.label}"?`, 'Delete', 'Cancel').then(confirmed => {
@@ -448,9 +692,52 @@ export default {
       )
       
       // Check for connection clicks
-      const clickedConnection = currentMapData.value.connections.find(conn =>
+      let clickedConnection = currentMapData.value.connections.find(conn =>
         isConnectionHit(conn, imagePos.x, imagePos.y)
       )
+      
+      // Check for zone connector
+      let clickedZoneConnector = null
+      
+      // Also check zone connectors
+      if (!clickedConnection && currentMapData.value.zoneConnectors) {
+        const clickedZone = currentMapData.value.zoneConnectors.find(zone => {
+          if (zone.from_map_id === maps.value[selectedMapIndex.value]?.id) {
+            const conn = {
+              x: zone.from_x,
+              y: zone.from_y,
+              icon: zone.from_icon,
+              iconSize: zone.from_icon_size
+            }
+            return isConnectionHit(conn, imagePos.x, imagePos.y)
+          }
+          return false
+        })
+        
+        if (clickedZone) {
+          // Set clickedZoneConnector directly instead of clickedConnection
+          clickedZoneConnector = {
+            ...clickedZone,
+            x: clickedZone.from_x,
+            y: clickedZone.from_y,
+            label: clickedZone.from_label,
+            icon: clickedZone.from_icon,
+            iconSize: clickedZone.from_icon_size,
+            labelVisible: clickedZone.from_label_visible,
+            labelPosition: clickedZone.from_label_position,
+            iconVisible: clickedZone.from_icon_visible,
+            isZoneConnector: true,
+            targetMapId: clickedZone.to_map_id
+          }
+          // Also set clickedConnection for navigation
+          clickedConnection = {
+            targetMapId: clickedZone.to_map_id,
+            label: clickedZone.from_label,
+            x: clickedZone.from_x,
+            y: clickedZone.from_y
+          }
+        }
+      }
       
       // Check if this POI is also a connector point
       let isConnectorPOI = false
@@ -462,50 +749,118 @@ export default {
         isConnectorPOI = !!connectorAtPOI
       }
       
+      // clickedZoneConnector is already set above when checking zone connectors
+      
       // In admin mode with Ctrl/Cmd held, show admin popup for settings
-      if (isAdmin.value && (e.ctrlKey || e.metaKey) && (clickedPOI || clickedConnector || clickedConnection)) {
-        const item = clickedPOI || clickedConnector || clickedConnection
-        const itemType = clickedPOI ? 'poi' : (clickedConnector ? 'connector' : 'connection')
+      if (isAdmin.value && (e.ctrlKey || e.metaKey) && (clickedPOI || clickedConnector || clickedConnection || clickedZoneConnector)) {
+        const item = clickedPOI || clickedConnector || clickedZoneConnector || clickedConnection
+        const itemType = clickedPOI ? 'poi' : (clickedConnector ? 'connector' : (clickedZoneConnector ? 'zoneConnector' : 'connection'))
+        
         
         // Position admin popup near the clicked item
         const canvasPos = imageToCanvas(item.x, item.y)
+        
+        // Get icon size for better positioning
+        const iconSize = item.iconSize || item.icon_size || 17
+        const iconOffset = iconSize / 2
+        
+        // Popup dimensions - using conservative estimates
+        const popupWidth = 340 // 320px + some padding/border
+        const popupHeight = 650 // Very conservative to account for all content
+        const margin = 30 // Larger margin from screen edges
+        const spacing = 15 // Space between icon and popup
+        
+        // Get icon position on screen
+        const iconScreenX = canvasPos.x + rect.left
+        const iconScreenY = canvasPos.y + rect.top
+        
+        // Calculate available space in each direction
+        const spaceRight = window.innerWidth - iconScreenX - iconOffset - spacing - margin
+        const spaceLeft = iconScreenX - iconOffset - spacing - margin
+        const spaceBelow = window.innerHeight - iconScreenY - iconOffset - spacing - margin
+        const spaceAbove = iconScreenY - iconOffset - spacing - margin
+        
+        let popupX, popupY
+        let side = 'right' // default
+        
+        // Try right first
+        if (spaceRight >= popupWidth) {
+          popupX = iconScreenX + iconOffset + spacing
+          popupY = iconScreenY - popupHeight / 2 // Center vertically on icon
+          side = 'right'
+        }
+        // Try left
+        else if (spaceLeft >= popupWidth) {
+          popupX = iconScreenX - iconOffset - popupWidth - spacing
+          popupY = iconScreenY - popupHeight / 2 // Center vertically on icon
+          side = 'left'
+        }
+        // Try below
+        else if (spaceBelow >= popupHeight) {
+          popupX = iconScreenX - popupWidth / 2 // Center horizontally on icon
+          popupY = iconScreenY + iconOffset + spacing
+          side = 'bottom'
+        }
+        // Try above
+        else if (spaceAbove >= popupHeight) {
+          popupX = iconScreenX - popupWidth / 2 // Center horizontally on icon
+          popupY = iconScreenY - iconOffset - popupHeight - spacing
+          side = 'top'
+        }
+        // If no perfect fit, position in the corner with most space
+        else {
+          // Find corner with most space
+          if (spaceRight > spaceLeft) {
+            popupX = window.innerWidth - popupWidth - margin
+          } else {
+            popupX = margin
+          }
+          
+          if (spaceBelow > spaceAbove) {
+            popupY = window.innerHeight - popupHeight - margin
+          } else {
+            popupY = margin
+          }
+          side = 'corner'
+        }
+        
+        // Final bounds check to ensure popup is fully on screen
+        popupX = Math.max(margin, Math.min(popupX, window.innerWidth - popupWidth - margin))
+        popupY = Math.max(margin, Math.min(popupY, window.innerHeight - popupHeight - margin))
+        
+        // If centered vertically, ensure it doesn't go off top or bottom
+        if (side === 'left' || side === 'right') {
+          if (popupY < margin) {
+            popupY = margin
+          } else if (popupY + popupHeight > window.innerHeight - margin) {
+            popupY = window.innerHeight - popupHeight - margin
+          }
+        }
+        
+        // If centered horizontally, ensure it doesn't go off left or right
+        if (side === 'top' || side === 'bottom') {
+          if (popupX < margin) {
+            popupX = margin
+          } else if (popupX + popupWidth > window.innerWidth - margin) {
+            popupX = window.innerWidth - popupWidth - margin
+          }
+        }
+        
+        
+        // Set the entire state at once
+        
+        // Set position first before showing popup
+        adminPopupPosition.value = {
+          x: popupX,
+          y: popupY,
+          side: side
+        }
+        
+        // Then set item and type to show the popup
+        
         adminPopupItem.value = item
         adminPopupType.value = itemType
         
-        // Initial position (to the right and slightly above the item)
-        let popupX = canvasPos.x + rect.left + 40
-        let popupY = canvasPos.y + rect.top - 20
-        
-        // Popup dimensions
-        const popupWidth = 320
-        const popupHeight = 400 // Approximate height
-        const margin = 20 // Margin from screen edges
-        
-        // Check right edge
-        if (popupX + popupWidth > window.innerWidth - margin) {
-          // Try positioning to the left of the item
-          popupX = canvasPos.x + rect.left - popupWidth - 40
-        }
-        
-        // Check left edge
-        if (popupX < margin) {
-          popupX = margin
-        }
-        
-        // Check bottom edge
-        if (popupY + popupHeight > window.innerHeight - margin) {
-          popupY = window.innerHeight - popupHeight - margin
-        }
-        
-        // Check top edge
-        if (popupY < margin) {
-          popupY = margin
-        }
-        
-        adminPopupPosition.value = {
-          x: popupX,
-          y: popupY
-        }
         
         return
       }
@@ -562,25 +917,35 @@ export default {
       
       // Handle regular connector clicks (not on POIs)
       if (clickedConnector && !clickedConnector.snapToPOI) {
-        // Find the paired connector
-        const pairedConnector = currentMapData.value.connectors.find(conn =>
-          conn.pairId === clickedConnector.pairId && conn.id !== clickedConnector.id
-        )
-        
-        if (pairedConnector) {
-          // Clear any existing arrow timeout
-          if (arrowTimeoutId.value) {
-            clearTimeout(arrowTimeoutId.value)
-            arrowTimeoutId.value = null
-          }
+        // Check if this connector connects to a POI
+        if (clickedConnector.connectsToPoi) {
+          // Find the POI it connects to
+          const targetPoi = currentMapData.value.pois.find(poi => 
+            poi.id === clickedConnector.connectsToPoi
+          )
           
-          // Show arrow pointing to paired connector
-          activeConnectorArrow.value = {
-            from: clickedConnector,
-            to: pairedConnector
+          if (targetPoi) {
+            // Clear any existing arrow timeout
+            if (arrowTimeoutId.value) {
+              clearTimeout(arrowTimeoutId.value)
+              arrowTimeoutId.value = null
+            }
+            
+            // Show arrow pointing to POI
+            activeConnectorArrow.value = {
+              from: clickedConnector,
+              to: targetPoi
+            }
+            // Navigate to the POI
+            navigateToPOI(targetPoi)
           }
-          // Navigate to the paired connector
-          navigateToConnector(pairedConnector)
+        } else {
+          // Find the paired connector
+          const pairedConnector = currentMapData.value.connectors.find(conn =>
+            conn.pairId === clickedConnector.pairId && conn.id !== clickedConnector.id
+          )
+          
+          // Arrow is now shown on hover, no need for click behavior
         }
         return
       }
@@ -588,9 +953,18 @@ export default {
       // Handle connection clicks
       if (clickedConnection) {
         // Navigate to connected map
-        const targetMapIndex = maps.findIndex(map => 
-          getMapFilename(map.file) === clickedConnection.targetMap
-        )
+        let targetMapIndex = -1
+        
+        if (clickedConnection.targetMapId) {
+          // Zone connector - uses map ID
+          targetMapIndex = maps.value.findIndex(map => map.id === clickedConnection.targetMapId)
+        } else if (clickedConnection.targetMap) {
+          // Old-style connection - uses filename
+          targetMapIndex = maps.value.findIndex(map => 
+            getMapFilename(map.file) === clickedConnection.targetMap
+          )
+        }
+        
         if (targetMapIndex !== -1) {
           selectedMapIndex.value = targetMapIndex
           loadSelectedMap()
@@ -689,7 +1063,8 @@ export default {
           x: clickedPOI.x,
           y: clickedPOI.y,
           snapToPOI: true,
-          poiId: clickedPOI.id
+          poiId: clickedPOI.id,
+          poiName: clickedPOI.name
         }
         return
       }
@@ -765,13 +1140,21 @@ export default {
         // Update the item's label position
         item.labelPosition = newPosition
         
-        // Save the changes
-        const map = maps[selectedMapIndex.value]
-        const filename = getMapFilename(map.file)
-        saveMapData()
-        render()
-        
-        success(`Label position changed to ${newPosition}`)
+        // Update in database
+        try {
+          if (pendingItem.type === 'poi') {
+            await poisAPI.save({ ...item, label_position: newPosition })
+          } else if (pendingItem.type === 'pointConnector') {
+            await pointConnectorsAPI.save({ ...item })
+          } else if (pendingItem.type === 'zoneConnector') {
+            await zoneConnectorsAPI.save({ ...item })
+          }
+          render()
+          success(`Label position changed to ${newPosition}`)
+        } catch (err) {
+          error(`Failed to update label position: ${err.message || 'Database error'}`)
+          warning('Please check your internet connection and try again')
+        }
       }
     }
     
@@ -897,9 +1280,62 @@ export default {
         isConnectionHit(conn, imagePos.x, imagePos.y)
       )
       
+      // Check for zone connector hover
+      let hoveredZoneConnector = null
+      if (currentMapData.value.zoneConnectors) {
+        hoveredZoneConnector = currentMapData.value.zoneConnectors.find(zone => {
+          if (zone.from_map_id === maps.value[selectedMapIndex.value]?.id) {
+            const conn = {
+              x: zone.from_x,
+              y: zone.from_y,
+              icon: zone.from_icon,
+              iconSize: zone.from_icon_size
+            }
+            return isConnectionHit(conn, imagePos.x, imagePos.y)
+          }
+          return false
+        })
+      }
+      
+      // Set zone connector as hovered connection for highlighting
+      if (hoveredZoneConnector && !hoveredConnection.value) {
+        // Create a temporary connection object for rendering
+        hoveredConnection.value = {
+          id: hoveredZoneConnector.id,
+          x: hoveredZoneConnector.from_x,
+          y: hoveredZoneConnector.from_y,
+          label: hoveredZoneConnector.from_label,
+          icon: hoveredZoneConnector.from_icon,
+          customIcon: hoveredZoneConnector.from_icon,
+          iconSize: hoveredZoneConnector.from_icon_size,
+          targetMapId: hoveredZoneConnector.to_map_id,
+          isZoneConnector: true
+        }
+      }
+      
       hoveredConnector.value = currentMapData.value.connectors?.find(conn =>
         isConnectorHit(conn, imagePos.x, imagePos.y)
       )
+      
+      // Show arrow when hovering over point connector
+      if (hoveredConnector.value) {
+        // Find the paired connector
+        const pairedConnector = currentMapData.value.connectors.find(conn =>
+          conn.pairId === hoveredConnector.value.pairId && conn.id !== hoveredConnector.value.id
+        )
+        
+        if (pairedConnector) {
+          activeConnectorArrow.value = {
+            from: hoveredConnector.value,
+            to: pairedConnector
+          }
+        }
+      } else if (!hoveredConnector.value && activeConnectorArrow.value) {
+        // Clear arrow when no longer hovering, but only if we're not in a timeout period
+        if (!arrowTimeoutId.value) {
+          activeConnectorArrow.value = null
+        }
+      }
       
       // Update cursor
       if (isAdmin.value && e.shiftKey && (hoveredPOI.value || hoveredConnection.value || hoveredConnector.value)) {
@@ -1265,6 +1701,50 @@ export default {
       ctx.restore()
     }
     
+    const navigateToPOI = (poi) => {
+      if (!mapCanvas.value || !poi) return
+      
+      const targetCanvasPos = imageToCanvas(poi.x, poi.y)
+      const centerX = mapCanvas.value.width / 2
+      const centerY = mapCanvas.value.height / 2
+      
+      // Calculate the offset needed to center the POI
+      const targetOffsetX = centerX - poi.x * scale.value
+      const targetOffsetY = centerY - poi.y * scale.value
+      
+      // Animate the pan
+      const startOffsetX = offsetX.value
+      const startOffsetY = offsetY.value
+      const duration = 800 // milliseconds
+      const startTime = Date.now()
+      
+      const animate = () => {
+        const elapsed = Date.now() - startTime
+        const progress = Math.min(elapsed / duration, 1)
+        
+        // Ease-in-out cubic
+        const easeProgress = progress < 0.5
+          ? 4 * progress * progress * progress
+          : 1 - Math.pow(-2 * progress + 2, 3) / 2
+        
+        offsetX.value = startOffsetX + (targetOffsetX - startOffsetX) * easeProgress
+        offsetY.value = startOffsetY + (targetOffsetY - startOffsetY) * easeProgress
+        
+        render()
+        
+        if (progress < 1) {
+          requestAnimationFrame(animate)
+        } else {
+          // Auto-hide arrow after navigation
+          arrowTimeoutId.value = setTimeout(() => {
+            activeConnectorArrow.value = null
+          }, 2000)
+        }
+      }
+      
+      requestAnimationFrame(animate)
+    }
+    
     const navigateToConnector = (connector) => {
       if (!mapCanvas.value || !connector) return
       
@@ -1375,52 +1855,96 @@ export default {
       }
     }
     
-    const savePOI = (poiData) => {
+    const savePOI = async (poiData) => {
       if (!pendingPOI.value) return
       
-      const map = maps[selectedMapIndex.value]
-      const filename = getMapFilename(map.file)
+      const map = maps.value[selectedMapIndex.value]
       
-      const newPOI = {
-        id: `poi-${Date.now()}`,
-        x: pendingPOI.value.x,
-        y: pendingPOI.value.y,
-        ...poiData
+      if (!map.id) {
+        error('Cannot save POI: Map is not connected to database')
+        return
       }
       
-      if (!mapData[filename]) {
-        mapData[filename] = { pois: [], connections: [] }
+      try {
+        const newPOI = await poisAPI.save({
+          map_id: map.id,
+          x: Math.round(pendingPOI.value.x),
+          y: Math.round(pendingPOI.value.y),
+          name: poiData.name,
+          description: poiData.description || '',
+          type: poiData.type || 'landmark',
+          icon: null, // Let the type determine the icon
+          icon_size: 48,
+          label_visible: true,
+          label_position: 'bottom'
+        })
+        
+        // Update local cache
+        if (!dbMapData.value[map.id]) {
+          dbMapData.value[map.id] = { pois: [], connections: [], connectors: [] }
+        }
+        dbMapData.value[map.id].pois.push(newPOI)
+        
+        pendingPOI.value = null
+        render()
+        success(`POI "${poiData.name}" created successfully`)
+      } catch (err) {
+        console.error('Failed to save POI:', err)
+        error(`Failed to save POI: ${err.message || 'Database error'}`)
+        warning('Please check your internet connection and try again')
       }
-      
-      mapData[filename].pois.push(newPOI)
-      saveMapData()
-      pendingPOI.value = null
-      render()
-      success(`POI "${poiData.name}" created successfully`)
     }
     
-    const saveConnection = (connectionData) => {
+    const saveConnection = async (connectionData) => {
       if (!pendingConnection.value) return
       
-      const map = maps[selectedMapIndex.value]
-      const filename = getMapFilename(map.file)
+      const map = maps.value[selectedMapIndex.value]
       
-      const newConnection = {
-        id: `conn-${Date.now()}`,
-        x: pendingConnection.value.x,
-        y: pendingConnection.value.y,
-        ...connectionData
+      if (!map.id) {
+        error('Cannot save connection: Map is not connected to database')
+        return
       }
       
-      if (!mapData[filename]) {
-        mapData[filename] = { pois: [], connections: [] }
+      try {
+        // This is a zone connector (connection to another map)
+        const newConnection = await zoneConnectorsAPI.save({
+          from_map_id: map.id,
+          to_map_id: connectionData.targetMapId,
+          from_x: Math.round(pendingConnection.value.x),
+          from_y: Math.round(pendingConnection.value.y),
+          to_x: Math.round(pendingConnection.value.x), // Default to same position, will be updated on target map
+          to_y: Math.round(pendingConnection.value.y),
+          from_icon: '🌀',
+          to_icon: '🌀',
+          from_icon_size: 30,
+          to_icon_size: 30,
+          from_label: connectionData.label,
+          to_label: connectionData.label,
+          from_label_visible: true,
+          to_label_visible: true,
+          from_label_position: 'bottom',
+          to_label_position: 'bottom',
+          from_icon_visible: true,
+          to_icon_visible: true
+        })
+        
+        // Update local cache
+        if (!dbMapData.value[map.id]) {
+          dbMapData.value[map.id] = { pois: [], connections: [], connectors: [], zoneConnectors: [] }
+        }
+        if (!dbMapData.value[map.id].zoneConnectors) {
+          dbMapData.value[map.id].zoneConnectors = []
+        }
+        dbMapData.value[map.id].zoneConnectors.push(newConnection)
+        
+        pendingConnection.value = null
+        render()
+        success(`Connection "${connectionData.label}" created successfully`)
+      } catch (err) {
+        console.error('Failed to save connection:', err)
+        error(`Failed to save connection: ${err.message || 'Database error'}`)
+        warning('Please check your internet connection and try again')
       }
-      
-      mapData[filename].connections.push(newConnection)
-      saveMapData()
-      pendingConnection.value = null
-      render()
-      success(`Connection "${connectionData.label}" created successfully`)
     }
     
     const cancelPOI = () => {
@@ -1431,70 +1955,145 @@ export default {
       pendingConnection.value = null
     }
     
-    const saveConnector = (connectorData) => {
+    const saveConnector = async (connectorData) => {
       if (!pendingConnector.value) return
       
-      const map = maps[selectedMapIndex.value]
-      const filename = getMapFilename(map.file)
+      const map = maps.value[selectedMapIndex.value]
       
-      // Generate a color for this pair if it's the first connector
-      let pairColor = null
-      if (!pendingConnectorPair.value.first) {
-        // Generate a random color for this pair
-        const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f39c12', '#9b59b6', '#3498db', '#2ecc71', '#e74c3c', '#1abc9c', '#f1c40f']
-        const usedColors = new Set()
-        if (mapData[filename] && mapData[filename].connectors) {
-          mapData[filename].connectors.forEach(conn => usedColors.add(conn.color))
-        }
-        const availableColors = colors.filter(c => !usedColors.has(c))
-        pairColor = availableColors.length > 0 ? availableColors[0] : colors[Math.floor(Math.random() * colors.length)]
-      } else {
-        pairColor = pendingConnectorPair.value.first.color
-      }
-      
-      // Check if connector is being placed on a POI
-      const isOnPOI = pendingConnector.value.snapToPOI || false
-      
-      const newConnector = {
-        id: `connector-${Date.now()}`,
-        x: pendingConnector.value.x,
-        y: pendingConnector.value.y,
-        label: connectorData.label,
-        color: pairColor,
-        pairId: pendingConnectorPair.value.first ? pendingConnectorPair.value.first.pairId : `pair-${Date.now()}`,
-        invisible: connectorData.invisible || false,
-        showIcon: isOnPOI ? false : (connectorData.showIcon !== undefined ? connectorData.showIcon : true),
-        snapToPOI: isOnPOI,
-        poiId: pendingConnector.value.poiId || null
-      }
-      
-      if (!mapData[filename]) {
-        mapData[filename] = { pois: [], connections: [], connectors: [] }
-      }
-      
-      if (!mapData[filename].connectors) {
-        mapData[filename].connectors = []
-      }
-      
-      if (!pendingConnectorPair.value.first) {
-        // This is the first connector of the pair
-        pendingConnectorPair.value.first = newConnector
+      if (!map.id) {
+        error('Cannot save connector: Map is not connected to database')
         pendingConnector.value = null
-        
-        // Reset view to show full map
-        reset(mapCanvas.value)
-        render()
-      } else {
-        // This is the second connector, complete the pair
-        mapData[filename].connectors.push(pendingConnectorPair.value.first)
-        mapData[filename].connectors.push(newConnector)
-        saveMapData()
-        const firstLabel = pendingConnectorPair.value.first.label
-        const secondLabel = newConnector.label
         pendingConnectorPair.value = { first: null, second: null }
+        return
+      }
+      
+      try {
+        if (!pendingConnectorPair.value.first) {
+          // This is the first connector of the pair
+          const firstConnectorData = {
+            x: pendingConnector.value.x,
+            y: pendingConnector.value.y,
+            label: connectorData.label,
+            invisibleLabel: connectorData.invisibleLabel || false,
+            invisibleIcon: connectorData.invisibleIcon || false,
+            icon: connectorData.icon || '🔗',
+            iconSize: connectorData.iconSize || 14,
+            labelPosition: connectorData.labelPosition || 'bottom'
+          }
+          
+          pendingConnectorPair.value.first = firstConnectorData
+          pendingConnector.value = null
+          
+          // Reset view to show full map
+          reset(mapCanvas.value)
+          render()
+        } else {
+          // This is the second connector, complete the pair
+          const firstData = pendingConnectorPair.value.first
+          
+          // Check if second point is a POI
+          let toPoiId = null
+          let toX = pendingConnector.value.x
+          let toY = pendingConnector.value.y
+          let secondLabel = connectorData.label
+          
+          if (pendingConnector.value.poiId) {
+            // Connecting to a POI
+            toPoiId = pendingConnector.value.poiId
+            toX = null
+            toY = null
+            // Get POI name for the label
+            const poi = currentMapData.value.pois.find(p => p.id === pendingConnector.value.poiId)
+            if (poi) {
+              secondLabel = poi.name
+            }
+          }
+          
+          const newConnectorData = {
+            map_id: map.id,
+            name: `${firstData.label} ↔ ${secondLabel}`,
+            from_x: Math.round(firstData.x),
+            from_y: Math.round(firstData.y),
+            to_x: toX !== null ? Math.round(toX) : null,
+            to_y: toY !== null ? Math.round(toY) : null,
+            to_poi_id: toPoiId,
+            from_icon: firstData.icon || '🔗',
+            to_icon: connectorData.icon || '🔗',
+            from_icon_size: firstData.iconSize || 14,
+            to_icon_size: connectorData.iconSize || 14,
+            from_label_visible: !firstData.invisibleLabel,
+            to_label_visible: !(connectorData.invisibleLabel || false),
+            from_label_position: firstData.labelPosition || 'bottom',
+            to_label_position: connectorData.labelPosition || 'bottom',
+            from_icon_visible: !firstData.invisibleIcon,
+            to_icon_visible: !(connectorData.invisibleIcon || false)
+          }
+          
+          const newConnector = await pointConnectorsAPI.save(newConnectorData)
+          
+          
+          // Transform the saved connector to UI format before adding to cache
+          const uiConnectors = []
+          
+          // Add "from" connector
+          uiConnectors.push({
+            id: `${newConnector.id}-from`,
+            x: newConnector.from_x,
+            y: newConnector.from_y,
+            label: newConnector.name ? newConnector.name.split(' ↔ ')[0] : '',
+            icon: newConnector.from_icon,
+            customIcon: newConnector.from_icon,
+            iconSize: newConnector.from_icon_size,
+            labelVisible: newConnector.from_label_visible,
+            labelPosition: newConnector.from_label_position,
+            iconVisible: newConnector.from_icon_visible,
+            showIcon: newConnector.from_icon_visible,
+            invisible: !newConnector.from_label_visible,
+            pairId: newConnector.id,
+            dbId: newConnector.id,
+            isFrom: true,
+            connectsToPoi: newConnector.to_poi_id ? newConnector.to_poi_id : null
+          })
+          
+          // Only add "to" connector if it's not connected to a POI
+          if (!newConnector.to_poi_id) {
+            uiConnectors.push({
+              id: `${newConnector.id}-to`,
+              x: newConnector.to_x,
+              y: newConnector.to_y,
+              label: newConnector.name ? newConnector.name.split(' ↔ ')[1] : '',
+              icon: newConnector.to_icon,
+              customIcon: newConnector.to_icon,
+              iconSize: newConnector.to_icon_size,
+              labelVisible: newConnector.to_label_visible,
+              labelPosition: newConnector.to_label_position,
+              iconVisible: newConnector.to_icon_visible,
+              showIcon: newConnector.to_icon_visible,
+              invisible: !newConnector.to_label_visible,
+              pairId: newConnector.id,
+              dbId: newConnector.id,
+              isFrom: false
+            })
+          }
+          
+          // Update local cache
+          if (!dbMapData.value[map.id]) {
+            dbMapData.value[map.id] = { pois: [], connections: [], connectors: [] }
+          }
+          dbMapData.value[map.id].connectors.push(...uiConnectors)
+          
+          pendingConnectorPair.value = { first: null, second: null }
+          pendingConnector.value = null
+          render()
+          success(`Connector pair "${firstData.label}" ↔ "${secondLabel}" created successfully`)
+        }
+      } catch (err) {
+        console.error('Failed to save connector:', err)
+        error(`Failed to save connector: ${err.message || 'Database error'}`)
+        warning('Please check your internet connection and try again')
+        // Reset the connector state on error
         pendingConnector.value = null
-        render()
-        success(`Connector pair "${firstLabel}" ↔ "${secondLabel}" created successfully`)
+        pendingConnectorPair.value = { first: null, second: null }
       }
     }
     
@@ -1505,14 +2104,22 @@ export default {
       }
     }
     
-    const deletePOI = (poiId) => {
-      const map = maps[selectedMapIndex.value]
-      const filename = getMapFilename(map.file)
+    const deletePOI = async (poiId) => {
+      const map = maps.value[selectedMapIndex.value]
       
-      if (mapData[filename] && mapData[filename].pois) {
-        const poi = mapData[filename].pois.find(p => p.id === poiId)
-        mapData[filename].pois = mapData[filename].pois.filter(poi => poi.id !== poiId)
-        saveMapData()
+      if (!map.id || !dbMapData.value[map.id]) {
+        error('Cannot delete POI: Map is not connected to database')
+        return
+      }
+      
+      try {
+        const poi = dbMapData.value[map.id].pois.find(p => p.id === poiId)
+        
+        await poisAPI.delete(poiId)
+        
+        // Update local cache
+        dbMapData.value[map.id].pois = dbMapData.value[map.id].pois.filter(p => p.id !== poiId)
+        
         // Clear selected POI if it's the one being deleted
         if (selectedPOI.value && selectedPOI.value.id === poiId) {
           selectedPOI.value = null
@@ -1521,33 +2128,164 @@ export default {
         if (poi) {
           success(`POI "${poi.name}" deleted successfully`)
         }
+      } catch (err) {
+        console.error('Failed to delete POI:', err)
+        error(`Failed to delete POI: ${err.message || 'Database error'}`)
+        warning('Please check your internet connection and try again')
       }
     }
     
-    const handleAdminPopupUpdate = (updatedItem) => {
-      const map = maps[selectedMapIndex.value]
-      const filename = getMapFilename(map.file)
+    const handleAdminPopupUpdate = async (updatedItem) => {
+      const map = maps.value[selectedMapIndex.value]
       
-      if (adminPopupType.value === 'poi') {
-        const poiIndex = mapData[filename].pois.findIndex(p => p.id === updatedItem.id)
-        if (poiIndex !== -1) {
-          mapData[filename].pois[poiIndex] = { ...mapData[filename].pois[poiIndex], ...updatedItem }
-        }
-      } else if (adminPopupType.value === 'connection') {
-        const connIndex = mapData[filename].connections.findIndex(c => c.id === updatedItem.id)
-        if (connIndex !== -1) {
-          mapData[filename].connections[connIndex] = { ...mapData[filename].connections[connIndex], ...updatedItem }
-        }
-      } else if (adminPopupType.value === 'connector') {
-        const connIndex = mapData[filename].connectors.findIndex(c => c.id === updatedItem.id)
-        if (connIndex !== -1) {
-          mapData[filename].connectors[connIndex] = { ...mapData[filename].connectors[connIndex], ...updatedItem }
-        }
+      if (!map.id || !dbMapData.value[map.id]) {
+        error('Cannot update: Map is not connected to database')
+        return
       }
       
-      saveMapData()
-      render()
-      success('Settings updated successfully')
+      try {
+        if (adminPopupType.value === 'poi') {
+          // Update POI in database with all custom fields
+          const updatedPOI = await poisAPI.save(updatedItem)
+          
+          // Update local cache
+          const poiIndex = dbMapData.value[map.id].pois.findIndex(p => p.id === updatedItem.id)
+          if (poiIndex !== -1) {
+            dbMapData.value[map.id].pois[poiIndex] = updatedPOI
+          }
+        } else if (adminPopupType.value === 'connection' || adminPopupType.value === 'zoneConnector') {
+          // Update zone connector in database
+          // Transform the data to match zone connector API format
+          
+          const zoneData = {
+            id: updatedItem.id,
+            from_map_id: updatedItem.from_map_id || map.id,
+            to_map_id: updatedItem.to_map_id || updatedItem.targetMapId,
+            from_x: Math.round(updatedItem.from_x || updatedItem.x || 0),
+            from_y: Math.round(updatedItem.from_y || updatedItem.y || 0),
+            to_x: Math.round(updatedItem.to_x || updatedItem.x || 0),
+            to_y: Math.round(updatedItem.to_y || updatedItem.y || 0),
+            from_icon: updatedItem.customIcon || updatedItem.from_icon || updatedItem.icon || '🌀',
+            to_icon: updatedItem.to_icon || '🌀',
+            from_icon_size: updatedItem.iconScale ? Math.round(updatedItem.iconScale * 30) : (updatedItem.from_icon_size || 30),
+            to_icon_size: updatedItem.to_icon_size || 30,
+            from_label: updatedItem.from_label || updatedItem.label || '',
+            to_label: updatedItem.to_label || '',
+            from_label_visible: updatedItem.from_label_visible !== false,
+            to_label_visible: updatedItem.to_label_visible !== false,
+            from_label_position: updatedItem.labelPosition || updatedItem.from_label_position || 'bottom',
+            to_label_position: updatedItem.to_label_position || 'bottom',
+            from_icon_visible: updatedItem.from_icon_visible !== false,
+            to_icon_visible: updatedItem.to_icon_visible !== false
+          }
+          
+          // Validate required fields
+          if (!zoneData.id || !zoneData.from_map_id || !zoneData.to_map_id) {
+            console.error('Missing required fields:', { 
+              id: zoneData.id, 
+              from_map_id: zoneData.from_map_id, 
+              to_map_id: zoneData.to_map_id 
+            })
+            throw new Error('Missing required fields for zone connector update')
+          }
+          
+          
+          const updatedConnection = await zoneConnectorsAPI.save(zoneData)
+          
+          // Update local cache
+          const connIndex = dbMapData.value[map.id].zoneConnectors?.findIndex(c => c.id === updatedItem.id)
+          
+          if (connIndex !== -1 && dbMapData.value[map.id].zoneConnectors) {
+            // Use Vue's reactivity system to ensure the update is detected
+            const zoneConnectors = [...dbMapData.value[map.id].zoneConnectors]
+            zoneConnectors[connIndex] = updatedConnection
+            dbMapData.value[map.id].zoneConnectors = zoneConnectors
+          } else {
+            console.error('Failed to update zone connector in cache - not found')
+          }
+        } else if (adminPopupType.value === 'connector') {
+          // Update point connector in database
+          const dbId = updatedItem.dbId || updatedItem.pairId
+          if (!dbId) {
+            throw new Error('No database ID found for connector')
+          }
+          
+          // Fetch the complete connector data from the database
+          const mapData = await mapsAPI.getById(map.id)
+          const pointConnectors = mapData.pointConnectors || []
+          const dbConnector = pointConnectors.find(pc => pc.id === dbId)
+          
+          if (!dbConnector) {
+            throw new Error('Connector not found in database')
+          }
+          
+          // Determine which side of the connector we're updating
+          const isFromSide = updatedItem.isFrom
+          
+          // Update the appropriate fields based on which side was edited
+          const connectorToUpdate = {
+            ...dbConnector,
+            id: dbId
+          }
+          
+          if (updatedItem.customIcon !== undefined) {
+            if (isFromSide) {
+              connectorToUpdate.from_icon = updatedItem.customIcon || updatedItem.icon
+            } else {
+              connectorToUpdate.to_icon = updatedItem.customIcon || updatedItem.icon
+            }
+          }
+          
+          if (updatedItem.labelPosition !== undefined) {
+            if (isFromSide) {
+              connectorToUpdate.from_label_position = updatedItem.labelPosition
+            } else {
+              connectorToUpdate.to_label_position = updatedItem.labelPosition
+            }
+          }
+          
+          if (updatedItem.iconSize !== undefined) {
+            if (isFromSide) {
+              connectorToUpdate.from_icon_size = updatedItem.iconSize
+            } else {
+              connectorToUpdate.to_icon_size = updatedItem.iconSize
+            }
+          }
+          
+          const updatedConnector = await pointConnectorsAPI.save(connectorToUpdate)
+          
+          // Update local cache - need to transform the saved connector back to UI format
+          const connectors = dbMapData.value[map.id].connectors
+          const connIndex = connectors.findIndex(c => c.id === updatedItem.id)
+          
+          if (connIndex !== -1) {
+            // Update the specific connector that was edited
+            const uiConnector = connectors[connIndex]
+            
+            if (isFromSide) {
+              uiConnector.icon = updatedConnector.from_icon
+              uiConnector.customIcon = updatedConnector.from_icon
+              uiConnector.iconSize = updatedConnector.from_icon_size
+              uiConnector.labelPosition = updatedConnector.from_label_position
+            } else {
+              uiConnector.icon = updatedConnector.to_icon
+              uiConnector.customIcon = updatedConnector.to_icon
+              uiConnector.iconSize = updatedConnector.to_icon_size
+              uiConnector.labelPosition = updatedConnector.to_label_position
+            }
+            
+            // Update the array to trigger reactivity
+            dbMapData.value[map.id].connectors = [...connectors]
+          }
+        }
+        
+        render()
+        success('Settings updated successfully')
+      } catch (err) {
+        console.error('Failed to update settings:', err)
+        error(`Failed to update settings: ${err.message || 'Database error'}`)
+        warning('Please check your internet connection and try again')
+      }
     }
     
     const handleAdminPopupActivate = (item, itemType) => {
@@ -1585,17 +2323,7 @@ export default {
           loadSelectedMap()
         }
       } else if (itemType === 'connector') {
-        // Find and navigate to paired connector
-        const pairedConnector = currentMapData.value.connectors.find(conn =>
-          conn.pairId === item.pairId && conn.id !== item.id
-        )
-        if (pairedConnector) {
-          activeConnectorArrow.value = {
-            from: item,
-            to: pairedConnector
-          }
-          navigateToConnector(pairedConnector)
-        }
+        // Arrow is now shown on hover, no need for activate behavior
       }
     }
     
@@ -1651,14 +2379,27 @@ export default {
       )
       
       if (confirmed) {
-        const map = maps[selectedMapIndex.value]
-        const filename = getMapFilename(map.file)
+        const map = maps.value[selectedMapIndex.value]
         
-        if (mapData[filename] && mapData[filename].pois) {
-          const poiIndex = mapData[filename].pois.findIndex(p => p.id === id)
-          if (poiIndex !== -1) {
-            mapData[filename].pois[poiIndex][field] = newValue
-            saveMapData()
+        if (!map.id || !dbMapData.value[map.id]) {
+          error('Cannot update POI: Map is not connected to database')
+          return
+        }
+        
+        try {
+          const poiToUpdate = dbMapData.value[map.id].pois.find(p => p.id === id)
+          if (poiToUpdate) {
+            // Update in database
+            const updatedPOI = await poisAPI.save({
+              ...poiToUpdate,
+              [field]: newValue
+            })
+            
+            // Update local cache
+            const poiIndex = dbMapData.value[map.id].pois.findIndex(p => p.id === id)
+            if (poiIndex !== -1) {
+              dbMapData.value[map.id].pois[poiIndex] = updatedPOI
+            }
             
             // Update selectedPOI to reflect the change
             if (selectedPOI.value && selectedPOI.value.id === id) {
@@ -1668,73 +2409,363 @@ export default {
             render()
             success(`POI ${field} updated successfully`)
           }
+        } catch (err) {
+          console.error('Failed to update POI:', err)
+          error(`Failed to update POI: ${err.message || 'Database error'}`)
+          warning('Please check your internet connection and try again')
         }
       }
     }
     
-    const deleteConnection = (connectionId) => {
-      const map = maps[selectedMapIndex.value]
-      const filename = getMapFilename(map.file)
+    const deleteConnection = async (connectionId) => {
+      const map = maps.value[selectedMapIndex.value]
       
-      if (mapData[filename] && mapData[filename].connections) {
-        const connection = mapData[filename].connections.find(c => c.id === connectionId)
-        mapData[filename].connections = mapData[filename].connections.filter(conn => conn.id !== connectionId)
-        saveMapData()
-        render()
+      if (!map.id || !dbMapData.value[map.id]) {
+        error('Cannot delete connection: Map is not connected to database')
+        return
+      }
+      
+      try {
+        // For zone connectors
+        const connection = dbMapData.value[map.id].zoneConnectors?.find(c => c.id === connectionId)
+        
         if (connection) {
-          success(`Connection "${connection.label}" deleted successfully`)
-        }
-      }
-    }
-    
-    const deleteConnector = (connectorId) => {
-      const map = maps[selectedMapIndex.value]
-      const filename = getMapFilename(map.file)
-      
-      if (mapData[filename] && mapData[filename].connectors) {
-        const connector = mapData[filename].connectors.find(c => c.id === connectorId)
-        if (connector) {
-          // Find if there's a pair
-          const pairedConnector = mapData[filename].connectors.find(c => 
-            c.pairId === connector.pairId && c.id !== connector.id
-          )
-          // Delete both connectors in the pair
-          mapData[filename].connectors = mapData[filename].connectors.filter(c => c.pairId !== connector.pairId)
-          saveMapData()
-          render()
-          if (pairedConnector) {
-            success(`Connector pair "${connector.label}" ↔ "${pairedConnector.label}" deleted successfully`)
-          } else {
-            success(`Connector "${connector.label}" deleted successfully`)
+          await zoneConnectorsAPI.delete(connectionId)
+          
+          // Update local cache
+          if (dbMapData.value[map.id].zoneConnectors) {
+            dbMapData.value[map.id].zoneConnectors = dbMapData.value[map.id].zoneConnectors.filter(c => c.id !== connectionId)
           }
+          
+          render()
+          success(`Connection "${connection.from_label}" deleted successfully`)
         }
+      } catch (err) {
+        console.error('Failed to delete connection:', err)
+        error(`Failed to delete connection: ${err.message || 'Database error'}`)
+        warning('Please check your internet connection and try again')
       }
     }
     
-    const confirmPendingChange = () => {
+    const deleteConnector = async (connectorId) => {
+      const map = maps.value[selectedMapIndex.value]
+      
+      if (!map.id || !dbMapData.value[map.id]) {
+        error('Cannot delete connector: Map is not connected to database')
+        return
+      }
+      
+      try {
+        const connector = dbMapData.value[map.id].connectors?.find(c => c.id === connectorId)
+        if (connector) {
+          // For database connectors, we need to delete the actual database record
+          const dbId = connector.dbId || connector.pairId
+          
+          await pointConnectorsAPI.delete(dbId)
+          
+          // Update local cache - remove both connectors that share the same dbId/pairId
+          if (dbMapData.value[map.id].connectors) {
+            const pairId = connector.pairId || connector.dbId
+            dbMapData.value[map.id].connectors = dbMapData.value[map.id].connectors.filter(c => 
+              (c.pairId !== pairId && c.dbId !== pairId)
+            )
+          }
+          
+          render()
+          success(`Connector deleted successfully`)
+        }
+      } catch (err) {
+        console.error('Failed to delete connector:', err)
+        error(`Failed to delete connector: ${err.message || 'Database error'}`)
+        warning('Please check your internet connection and try again')
+      }
+    }
+    
+    const confirmPendingChange = async () => {
       if (!pendingChange.value) return
       
-      // Save the change
-      saveMapData()
+      const map = maps.value[selectedMapIndex.value]
       const itemType = pendingChange.value.type === 'poi' ? 'POI' : 
                       pendingChange.value.type === 'connection' ? 'Connection' : 'Connector'
       const itemName = pendingChange.value.item.name || pendingChange.value.item.label
-      pendingChange.value = null
-      render()
-      success(`${itemType} "${itemName}" moved successfully`)
+      
+      if (!map.id || !dbMapData.value[map.id]) {
+        error('Cannot move item: Map is not connected to database')
+        cancelPendingChange()
+        return
+      }
+      
+      try {
+        if (pendingChange.value.type === 'poi') {
+          // Update POI position in database
+          await poisAPI.save({
+            ...pendingChange.value.item,
+            x: Math.round(pendingChange.value.newPosition.x),
+            y: Math.round(pendingChange.value.newPosition.y)
+          })
+        } else if (pendingChange.value.type === 'connector') {
+          // Update connector position in database
+          const connector = pendingChange.value.item
+          if (connector.dbId || connector.pairId) {
+            // We need to get the full point connector data from the server
+            // First, load the current map data to get all connectors
+            const mapData = await mapsAPI.getById(map.id)
+            const pointConnectors = mapData.pointConnectors || []
+            
+            // Find the point connector by id
+            const dbConnector = pointConnectors.find(pc => pc.id === (connector.dbId || connector.pairId))
+            
+            if (dbConnector) {
+              // Create complete update data with all required fields
+              const updateData = {
+                id: dbConnector.id,
+                map_id: dbConnector.map_id,
+                name: dbConnector.name,
+                from_x: dbConnector.from_x,
+                from_y: dbConnector.from_y,
+                to_x: dbConnector.to_x,
+                to_y: dbConnector.to_y,
+                to_poi_id: dbConnector.to_poi_id,
+                from_icon: dbConnector.from_icon,
+                to_icon: dbConnector.to_icon,
+                from_icon_size: dbConnector.from_icon_size,
+                to_icon_size: dbConnector.to_icon_size,
+                from_label_visible: dbConnector.from_label_visible,
+                to_label_visible: dbConnector.to_label_visible,
+                from_label_position: dbConnector.from_label_position,
+                to_label_position: dbConnector.to_label_position,
+                from_icon_visible: dbConnector.from_icon_visible,
+                to_icon_visible: dbConnector.to_icon_visible
+              }
+              
+              // Update the appropriate position
+              if (connector.isFrom) {
+                updateData.from_x = Math.round(pendingChange.value.newPosition.x)
+                updateData.from_y = Math.round(pendingChange.value.newPosition.y)
+              } else {
+                updateData.to_x = Math.round(pendingChange.value.newPosition.x)
+                updateData.to_y = Math.round(pendingChange.value.newPosition.y)
+              }
+              
+              // Save the updated connector
+              const updatedConnector = await pointConnectorsAPI.save(updateData)
+              
+              // Update local cache with the updated connector
+              const connectors = [updatedConnector].flatMap(pc => {
+                const result = []
+                result.push({
+                  id: `${pc.id}-from`,
+                  x: pc.from_x,
+                  y: pc.from_y,
+                  label: pc.from_label || (pc.name ? pc.name.split(' ↔ ')[0] : ''),
+                  icon: pc.from_icon,
+                  customIcon: pc.from_icon,
+                  iconSize: pc.from_icon_size,
+                  labelVisible: pc.from_label_visible,
+                  labelPosition: pc.from_label_position,
+                  iconVisible: pc.from_icon_visible,
+                  showIcon: pc.from_icon_visible,
+                  invisible: !pc.from_label_visible,
+                  pairId: pc.id,
+                  dbId: pc.id,
+                  isFrom: true,
+                  connectsToPoi: pc.to_poi_id ? pc.to_poi_id : null
+                })
+                
+                if (!pc.to_poi_id) {
+                  result.push({
+                    id: `${pc.id}-to`,
+                    x: pc.to_x,
+                    y: pc.to_y,
+                    label: pc.to_label || (pc.name ? pc.name.split(' ↔ ')[1] : ''),
+                    icon: pc.to_icon,
+                    customIcon: pc.to_icon,
+                    iconSize: pc.to_icon_size,
+                    labelVisible: pc.to_label_visible,
+                    labelPosition: pc.to_label_position,
+                    iconVisible: pc.to_icon_visible,
+                    showIcon: pc.to_icon_visible,
+                    invisible: !pc.to_label_visible,
+                    pairId: pc.id,
+                    dbId: pc.id,
+                    isFrom: false
+                  })
+                }
+                
+                return result
+              })
+              
+              // Update the specific connector in the cache
+              if (dbMapData.value[map.id]) {
+                const idx = dbMapData.value[map.id].connectors.findIndex(c => 
+                  c.pairId === updatedConnector.id && c.isFrom === connector.isFrom
+                )
+                if (idx !== -1) {
+                  const newConnector = connectors.find(c => 
+                    c.pairId === updatedConnector.id && c.isFrom === connector.isFrom
+                  )
+                  if (newConnector) {
+                    dbMapData.value[map.id].connectors[idx] = newConnector
+                  }
+                }
+              }
+            } else {
+              throw new Error('Connector not found in database')
+            }
+          }
+        } else if (pendingChange.value.type === 'connection') {
+          // Update zone connector position in database
+          const connection = pendingChange.value.item
+          await zoneConnectorsAPI.save({
+            ...connection,
+            from_x: pendingChange.value.newPosition.x,
+            from_y: pendingChange.value.newPosition.y
+          })
+        }
+        
+        pendingChange.value = null
+        render()
+        success(`${itemType} "${itemName}" moved successfully`)
+      } catch (err) {
+        console.error('Failed to save position change:', err)
+        error(`Failed to save position change: ${err.message || 'Database error'}`)
+        warning('Please check your internet connection and try again')
+        // Revert the change
+        cancelPendingChange()
+      }
     }
     
-    const handleUpdateMaps = (newMaps) => {
-      // Update the global maps array
-      maps.splice(0, maps.length, ...newMaps)
+    const handleUpdateMaps = async (action) => {
+      const { type, data } = action
       
-      // Save the updated maps list
-      localStorage.setItem('customMaps', JSON.stringify(newMaps))
-      
-      // If the current map was deleted, switch to the first map
-      if (selectedMapIndex.value >= newMaps.length) {
-        selectedMapIndex.value = 0
-        loadSelectedMap()
+      try {
+        switch (type) {
+          case 'add': {
+            // Create new map in database
+            const newMap = await mapsAPI.save({
+              name: data.name,
+              image_url: data.image_url,
+              width: data.width || 1000,
+              height: data.height || 1000,
+              display_order: maps.value.length
+            })
+            
+            // Add to local array
+            maps.value.push({
+              id: newMap.id,
+              name: newMap.name,
+              file: newMap.image_url,
+              width: newMap.width,
+              height: newMap.height
+            })
+            
+            // Select and load the new map
+            selectedMapIndex.value = maps.value.length - 1
+            await loadSelectedMap()
+            
+            success(`Map "${newMap.name}" added successfully`)
+            break
+          }
+          
+          case 'update': {
+            // Update map in database
+            const updatedMap = await mapsAPI.save({
+              id: data.id,
+              name: data.name,
+              image_url: data.image_url,
+              width: data.width,
+              height: data.height,
+              display_order: data.display_order
+            })
+            
+            // Update local array
+            const index = maps.value.findIndex(m => m.id === data.id)
+            if (index !== -1) {
+              maps.value[index] = {
+                id: updatedMap.id,
+                name: updatedMap.name,
+                file: updatedMap.image_url,
+                width: updatedMap.width,
+                height: updatedMap.height
+              }
+            }
+            
+            success(`Map "${updatedMap.name}" updated successfully`)
+            break
+          }
+          
+          case 'delete': {
+            // Delete from database
+            await mapsAPI.delete(data.id)
+            
+            // Remove from local array
+            const index = maps.value.findIndex(m => m.id === data.id)
+            if (index !== -1) {
+              const deletedMap = maps.value[index]
+              maps.value.splice(index, 1)
+              
+              // Clear cached data
+              delete dbMapData.value[data.id]
+              
+              // If the current map was deleted, switch to the first map
+              if (selectedMapIndex.value === index) {
+                selectedMapIndex.value = 0
+                if (maps.value.length > 0) {
+                  await loadSelectedMap()
+                }
+              } else if (selectedMapIndex.value > index) {
+                selectedMapIndex.value--
+              }
+              
+              success(`Map "${deletedMap.name}" deleted successfully`)
+            }
+            break
+          }
+          
+          case 'reorder': {
+            // Update display order for all maps - only send minimal data
+            const updates = data.maps.map((map, index) => {
+              // Only send id and display_order to avoid sending large image data
+              return mapsAPI.save({
+                id: map.id,
+                name: map.name,
+                width: map.width,
+                height: map.height,
+                display_order: index
+                // Explicitly NOT sending image_url to avoid payload size issues
+              })
+            })
+            
+            try {
+              await Promise.all(updates)
+              
+              // Reload maps from database to ensure correct order
+              const reorderedMaps = await mapsAPI.getAll()
+              
+              // Update local array with the reordered maps
+              maps.value = reorderedMaps.map(m => ({
+                id: m.id,
+                name: m.name,
+                file: m.image_url,
+                width: m.width,
+                height: m.height
+              }))
+              
+              success('Map order updated successfully')
+            } catch (updateError) {
+              console.error('Failed to update map order:', updateError)
+              error('Failed to update map order')
+            }
+            break
+          }
+        }
+      } catch (err) {
+        console.error('Failed to update maps:', err)
+        if (err.message && err.message.includes('413')) {
+          error('Map image is too large. Please use a smaller image file.')
+        } else {
+          error(`Failed to ${type} map: ${err.message || 'Unknown error'}`)
+        }
       }
     }
     
@@ -1780,6 +2811,10 @@ export default {
       }
     })
     
+    // Debug admin popup position
+    watch(adminPopupPosition, (newVal) => {
+    }, { deep: true })
+    
     let animationFrameId = null
     
     const animate = () => {
@@ -1793,11 +2828,18 @@ export default {
         isAdmin.value = true
       }
       
+      // Load maps from database
+      maps.value = await loadMapsFromDatabase()
+      
       initCanvas(mapCanvas.value)
       resizeCanvas()
       window.addEventListener('resize', resizeCanvas)
       window.addEventListener('keydown', handleKeyboardShortcut)
-      await loadSelectedMap()
+      
+      // Load the first map if available
+      if (maps.value.length > 0) {
+        await loadSelectedMap()
+      }
       
       // Start animation loop for glowing effects
       animate()
@@ -1833,6 +2875,7 @@ export default {
       confirmDialog,
       isDragging,
       zoomPercent,
+      dbMapData,
       loadSelectedMap,
       handleMapClick,
       handleRightClick,

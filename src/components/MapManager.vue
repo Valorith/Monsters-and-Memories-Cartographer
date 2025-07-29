@@ -50,6 +50,8 @@
                   </button>
                 </div>
                 <div class="map-stats">
+                  <span>{{ selectedMap.width }}x{{ selectedMap.height }}px</span>
+                  <span class="separator">|</span>
                   <span>{{ getFilename(selectedMap.file) }}</span>
                   <span class="separator">|</span>
                   <span>POIs: {{ getMapStats().pois }}</span>
@@ -74,9 +76,24 @@
             </div>
             
             <div class="map-preview-container">
-              <canvas ref="previewCanvas" class="map-preview-canvas"></canvas>
+              <canvas 
+                ref="previewCanvas" 
+                class="map-preview-canvas"
+                :class="{ 'dragging': isDraggingPreview }"
+                @wheel.prevent="handlePreviewWheel"
+                @mousedown="handlePreviewMouseDown"
+                @mousemove="handlePreviewMouseMove"
+                @mouseup="handlePreviewMouseUp"
+                @mouseleave="handlePreviewMouseUp"
+              ></canvas>
               <div v-if="isLoadingPreview" class="preview-loading">
                 <div class="spinner"></div>
+              </div>
+              <div class="preview-controls">
+                <button class="preview-control-btn" @click="previewZoom = Math.min(previewZoom * 1.2, 5); drawPreview()" title="Zoom In">+</button>
+                <button class="preview-control-btn" @click="previewZoom = Math.max(previewZoom * 0.8, 0.1); drawPreview()" title="Zoom Out">−</button>
+                <button class="preview-control-btn" @click="resetPreviewView" title="Reset View">⟲</button>
+                <span class="zoom-level">{{ Math.round(previewZoom * 100) }}%</span>
               </div>
             </div>
             
@@ -167,7 +184,11 @@
 
 <script>
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
-import { mapData, getMapFilename, saveMapData } from '../data/mapData'
+
+// Helper function to get map filename from path
+function getMapFilename(path) {
+  return path.split('/').pop()
+}
 
 export default {
   name: 'MapManager',
@@ -179,6 +200,10 @@ export default {
     maps: {
       type: Array,
       required: true
+    },
+    dbMapData: {
+      type: Object,
+      default: () => ({})
     }
   },
   emits: ['close', 'updateMaps', 'showConfirm', 'showToast'],
@@ -192,6 +217,13 @@ export default {
     const previewImage = ref(null)
     const draggedIndex = ref(null)
     const dragOverIndex = ref(null)
+    
+    // Zoom and pan state for preview
+    const previewZoom = ref(1)
+    const previewPan = ref({ x: 0, y: 0 })
+    const isDraggingPreview = ref(false)
+    const dragStartPos = ref({ x: 0, y: 0 })
+    const dragStartPan = ref({ x: 0, y: 0 })
     
     // Dialog states
     const showAddMap = ref(false)
@@ -212,13 +244,26 @@ export default {
     )
     
     const getFilename = (filepath) => {
+      // For base64 images (database maps), return a descriptive text
+      if (filepath && filepath.startsWith('data:')) {
+        // Extract image type from data URL
+        const match = filepath.match(/^data:image\/(\w+);/)
+        const format = match ? match[1].toUpperCase() : 'Image'
+        return `Stored ${format}`
+      }
+      // For file paths, extract the filename
       return getMapFilename(filepath)
     }
     
     const getMapStats = () => {
       if (!selectedMap.value) return { pois: 0, connections: 0, connectors: 0 }
-      const filename = getFilename(selectedMap.value.file)
-      const data = mapData[filename] || { pois: [], connections: [], connectors: [] }
+      
+      // Only show stats for maps in database
+      if (!selectedMap.value.id || !props.dbMapData[selectedMap.value.id]) {
+        return { pois: 0, connections: 0, connectors: 0 }
+      }
+      
+      const data = props.dbMapData[selectedMap.value.id]
       return {
         pois: data.pois?.length || 0,
         connections: data.connections?.length || 0,
@@ -248,59 +293,15 @@ export default {
       
       isLoadingPreview.value = true
       
+      // Reset zoom and pan when loading new map
+      previewZoom.value = 1
+      previewPan.value = { x: 0, y: 0 }
+      
       // Load the image
       const img = new Image()
       img.onload = () => {
-        const canvas = previewCanvas.value
-        if (!canvas) {
-          isLoadingPreview.value = false
-          return
-        }
-        
-        const ctx = canvas.getContext('2d')
-        
-        // Ensure parent element exists and has dimensions
-        const parent = canvas.parentElement
-        if (!parent || parent.clientWidth === 0) {
-          // Try again after a short delay
-          setTimeout(() => {
-            isLoadingPreview.value = false
-            loadMapPreview()
-          }, 100)
-          return
-        }
-        
-        // Set canvas size to fit container while maintaining aspect ratio
-        const maxWidth = parent.clientWidth
-        const maxHeight = 600
-        const scale = Math.min(maxWidth / img.width, maxHeight / img.height)
-        
-        canvas.width = img.width * scale
-        canvas.height = img.height * scale
-        
-        // Clear and draw image
-        ctx.clearRect(0, 0, canvas.width, canvas.height)
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-        
-        // Draw POIs on preview
-        const filename = getFilename(selectedMap.value.file)
-        const data = mapData[filename]
-        if (data && data.pois) {
-          data.pois.forEach(poi => {
-            const x = poi.x * scale
-            const y = poi.y * scale
-            
-            // Draw POI marker
-            ctx.beginPath()
-            ctx.arc(x, y, 5, 0, Math.PI * 2)
-            ctx.fillStyle = '#4a7c59'
-            ctx.fill()
-            ctx.strokeStyle = '#fff'
-            ctx.lineWidth = 2
-            ctx.stroke()
-          })
-        }
-        
+        previewImage.value = img
+        drawPreview()
         isLoadingPreview.value = false
       }
       
@@ -310,6 +311,66 @@ export default {
       }
       
       img.src = selectedMap.value.file
+    }
+    
+    const drawPreview = () => {
+      if (!previewCanvas.value || !previewImage.value) return
+      
+      const canvas = previewCanvas.value
+      const ctx = canvas.getContext('2d')
+      const img = previewImage.value
+      
+      // Ensure parent element exists and has dimensions
+      const parent = canvas.parentElement
+      if (!parent || parent.clientWidth === 0) {
+        setTimeout(() => drawPreview(), 100)
+        return
+      }
+      
+      // Set canvas size to fit container
+      canvas.width = parent.clientWidth
+      canvas.height = Math.max(parent.clientHeight - 20, 400) // Use full height minus some padding
+      
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      
+      // Save context state
+      ctx.save()
+      
+      // Apply zoom and pan transformations
+      ctx.translate(canvas.width / 2 + previewPan.value.x, canvas.height / 2 + previewPan.value.y)
+      ctx.scale(previewZoom.value, previewZoom.value)
+      
+      // Calculate image position to center it - use 0.95 to better fill space
+      const baseScale = Math.min(canvas.width / img.width, canvas.height / img.height) * 0.95
+      const scaledWidth = img.width * baseScale
+      const scaledHeight = img.height * baseScale
+      
+      // Draw image centered
+      ctx.drawImage(img, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight)
+      
+      // Draw POIs on preview
+      if (selectedMap.value.id && props.dbMapData[selectedMap.value.id]) {
+        const data = props.dbMapData[selectedMap.value.id]
+        if (data && data.pois) {
+          data.pois.forEach(poi => {
+            const x = (poi.x * baseScale) - scaledWidth / 2
+            const y = (poi.y * baseScale) - scaledHeight / 2
+            
+            // Draw POI marker
+            ctx.beginPath()
+            ctx.arc(x, y, 5 / previewZoom.value, 0, Math.PI * 2)
+            ctx.fillStyle = '#4a7c59'
+            ctx.fill()
+            ctx.strokeStyle = '#fff'
+            ctx.lineWidth = 2 / previewZoom.value
+            ctx.stroke()
+          })
+        }
+      }
+      
+      // Restore context state
+      ctx.restore()
     }
     
     const startEditName = async () => {
@@ -327,14 +388,14 @@ export default {
       }
       
       // Update the map name
-      const newMaps = [...props.maps]
-      newMaps[selectedMapIndex.value] = {
-        ...newMaps[selectedMapIndex.value],
-        name: editedName.value.trim()
-      }
-      
-      emit('updateMaps', newMaps)
-      emit('showToast', { type: 'success', message: 'Map name updated' })
+      const map = props.maps[selectedMapIndex.value]
+      emit('updateMaps', {
+        type: 'update',
+        data: {
+          ...map,
+          name: editedName.value.trim()
+        }
+      })
       isEditingName.value = false
     }
     
@@ -392,21 +453,62 @@ export default {
       
       const reader = new FileReader()
       reader.onload = (e) => {
-        const newMap = {
-          name: newMapName.value.trim(),
-          file: e.target.result
+        // Create an image to get dimensions
+        const img = new Image()
+        img.onload = () => {
+          // Check if image needs resizing
+          const maxDimension = 4000
+          let finalImageUrl = e.target.result
+          let finalWidth = img.width
+          let finalHeight = img.height
+          
+          if (img.width > maxDimension || img.height > maxDimension) {
+            // Resize image
+            const canvas = document.createElement('canvas')
+            const ctx = canvas.getContext('2d')
+            
+            // Calculate new dimensions maintaining aspect ratio
+            const scale = Math.min(maxDimension / img.width, maxDimension / img.height)
+            finalWidth = Math.floor(img.width * scale)
+            finalHeight = Math.floor(img.height * scale)
+            
+            canvas.width = finalWidth
+            canvas.height = finalHeight
+            
+            // Draw resized image
+            ctx.drawImage(img, 0, 0, finalWidth, finalHeight)
+            
+            // Get compressed image (using JPEG for better compression)
+            finalImageUrl = canvas.toDataURL('image/jpeg', 0.85)
+            
+            emit('showToast', { 
+              type: 'info', 
+              message: `Image resized from ${img.width}x${img.height} to ${finalWidth}x${finalHeight}` 
+            })
+          }
+          
+          const newMap = {
+            name: newMapName.value.trim(),
+            image_url: finalImageUrl,
+            file: finalImageUrl,
+            width: finalWidth,
+            height: finalHeight
+          }
+          
+          emit('updateMaps', {
+            type: 'add',
+            data: newMap
+          })
+          
+          closeAddMapDialog()
+          // The watcher will automatically select the new map and load its preview
         }
         
-        const newMaps = [...props.maps, newMap]
-        emit('updateMaps', newMaps)
-        emit('showToast', { type: 'success', message: `Map "${newMap.name}" added successfully` })
+        img.onerror = () => {
+          emit('showToast', { type: 'error', message: 'Failed to load image' })
+        }
         
-        // Select the newly added map
-        selectedMapIndex.value = newMaps.length - 1
-        closeAddMapDialog()
-        
-        // Load preview after a short delay
-        setTimeout(() => loadMapPreview(), 100)
+        img.src = e.target.result
       }
       
       reader.readAsDataURL(selectedFile.value)
@@ -417,18 +519,62 @@ export default {
       
       const reader = new FileReader()
       reader.onload = (e) => {
-        const newMaps = [...props.maps]
-        newMaps[selectedMapIndex.value] = {
-          ...newMaps[selectedMapIndex.value],
-          file: e.target.result
+        // Create an image to get dimensions
+        const img = new Image()
+        img.onload = () => {
+          // Check if image needs resizing
+          const maxDimension = 4000
+          let finalImageUrl = e.target.result
+          let finalWidth = img.width
+          let finalHeight = img.height
+          
+          if (img.width > maxDimension || img.height > maxDimension) {
+            // Resize image
+            const canvas = document.createElement('canvas')
+            const ctx = canvas.getContext('2d')
+            
+            // Calculate new dimensions maintaining aspect ratio
+            const scale = Math.min(maxDimension / img.width, maxDimension / img.height)
+            finalWidth = Math.floor(img.width * scale)
+            finalHeight = Math.floor(img.height * scale)
+            
+            canvas.width = finalWidth
+            canvas.height = finalHeight
+            
+            // Draw resized image
+            ctx.drawImage(img, 0, 0, finalWidth, finalHeight)
+            
+            // Get compressed image (using JPEG for better compression)
+            finalImageUrl = canvas.toDataURL('image/jpeg', 0.85)
+            
+            emit('showToast', { 
+              type: 'info', 
+              message: `Image resized from ${img.width}x${img.height} to ${finalWidth}x${finalHeight}` 
+            })
+          }
+          
+          const map = props.maps[selectedMapIndex.value]
+          emit('updateMaps', {
+            type: 'update',
+            data: {
+              ...map,
+              image_url: finalImageUrl,
+              file: finalImageUrl,
+              width: finalWidth,
+              height: finalHeight
+            }
+          })
+          closeUpdateDialog()
+          
+          // Reload preview
+          setTimeout(() => loadMapPreview(), 100)
         }
         
-        emit('updateMaps', newMaps)
-        emit('showToast', { type: 'success', message: 'Map image updated successfully' })
-        closeUpdateDialog()
+        img.onerror = () => {
+          emit('showToast', { type: 'error', message: 'Failed to load image' })
+        }
         
-        // Reload preview
-        setTimeout(() => loadMapPreview(), 100)
+        img.src = e.target.result
       }
       
       reader.readAsDataURL(updateFile.value)
@@ -440,17 +586,16 @@ export default {
       const mapToDelete = selectedMap.value
       const filename = getFilename(mapToDelete.file)
       
-      // Remove map from list
-      const newMaps = props.maps.filter((_, index) => index !== selectedMapIndex.value)
-      
-      // Remove associated data
-      if (mapData[filename]) {
-        delete mapData[filename]
-        saveMapData()
+      // Only delete maps that are in the database
+      if (!mapToDelete.id) {
+        showError('Cannot delete local demo map')
+        return
       }
       
-      emit('updateMaps', newMaps)
-      emit('showToast', { type: 'success', message: `Map "${mapToDelete.name}" deleted successfully` })
+      emit('updateMaps', {
+        type: 'delete',
+        data: mapToDelete
+      })
       
       // Clear selection
       selectedMapIndex.value = null
@@ -540,15 +685,62 @@ export default {
         item.classList.remove('drag-over-top', 'drag-over-bottom')
       })
       
-      emit('updateMaps', newMaps)
-      emit('showToast', { type: 'success', message: 'Map order updated' })
+      emit('updateMaps', {
+        type: 'reorder',
+        data: { maps: newMaps }
+      })
     }
     
     // Handle window resize
     const handleResize = () => {
-      if (selectedMapIndex.value !== null) {
-        loadMapPreview()
+      if (selectedMapIndex.value !== null && previewImage.value) {
+        drawPreview()
       }
+    }
+    
+    // Preview zoom and pan handlers
+    const handlePreviewWheel = (event) => {
+      event.preventDefault()
+      
+      const delta = event.deltaY > 0 ? 0.9 : 1.1
+      const newZoom = previewZoom.value * delta
+      
+      // Limit zoom range
+      if (newZoom >= 0.1 && newZoom <= 5) {
+        previewZoom.value = newZoom
+        drawPreview()
+      }
+    }
+    
+    const handlePreviewMouseDown = (event) => {
+      isDraggingPreview.value = true
+      dragStartPos.value = { x: event.clientX, y: event.clientY }
+      dragStartPan.value = { ...previewPan.value }
+      event.preventDefault()
+    }
+    
+    const handlePreviewMouseMove = (event) => {
+      if (!isDraggingPreview.value) return
+      
+      const dx = event.clientX - dragStartPos.value.x
+      const dy = event.clientY - dragStartPos.value.y
+      
+      previewPan.value = {
+        x: dragStartPan.value.x + dx,
+        y: dragStartPan.value.y + dy
+      }
+      
+      drawPreview()
+    }
+    
+    const handlePreviewMouseUp = () => {
+      isDraggingPreview.value = false
+    }
+    
+    const resetPreviewView = () => {
+      previewZoom.value = 1
+      previewPan.value = { x: 0, y: 0 }
+      drawPreview()
     }
     
     onMounted(() => {
@@ -576,6 +768,28 @@ export default {
           setTimeout(() => loadMapPreview(), 50)
         })
       }
+    })
+    
+    // Redraw preview when zoom or pan changes
+    watch([previewZoom, previewPan], () => {
+      if (previewImage.value) {
+        drawPreview()
+      }
+    })
+    
+    // Watch for maps array changes to select newly added map
+    let previousMapCount = props.maps.length
+    watch(() => props.maps.length, (newLength) => {
+      // If a map was added (length increased)
+      if (newLength > previousMapCount) {
+        // Select the last map (newly added one)
+        selectedMapIndex.value = newLength - 1
+        // Load its preview
+        nextTick(() => {
+          setTimeout(() => loadMapPreview(), 100)
+        })
+      }
+      previousMapCount = newLength
     })
     
     return {
@@ -616,7 +830,16 @@ export default {
       handleDragStart,
       handleDragEnd,
       handleDragOver,
-      handleDrop
+      handleDrop,
+      previewZoom,
+      previewPan,
+      isDraggingPreview,
+      handlePreviewWheel,
+      handlePreviewMouseDown,
+      handlePreviewMouseMove,
+      handlePreviewMouseUp,
+      resetPreviewView,
+      drawPreview
     }
   }
 }
@@ -839,6 +1062,7 @@ export default {
   flex-direction: column;
   padding: 1rem;
   overflow: hidden;
+  gap: 0.75rem;
 }
 
 .map-preview-header {
@@ -948,13 +1172,20 @@ export default {
   position: relative;
   overflow: hidden;
   margin-bottom: 0.5rem;
-  min-height: 0;
+  min-height: 400px;
+  height: calc(100% - 120px); /* Account for header and actions */
 }
 
 .map-preview-canvas {
-  max-width: 100%;
-  max-height: 100%;
+  width: 100%;
+  height: 100%;
   display: block;
+  cursor: grab;
+  object-fit: contain;
+}
+
+.map-preview-canvas.dragging {
+  cursor: grabbing;
 }
 
 .preview-loading {
@@ -975,6 +1206,47 @@ export default {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+.preview-controls {
+  position: absolute;
+  bottom: 1rem;
+  right: 1rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  background: rgba(26, 26, 26, 0.9);
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #444;
+}
+
+.preview-control-btn {
+  width: 32px;
+  height: 32px;
+  background: #3a3a3a;
+  border: 1px solid #555;
+  color: #fff;
+  font-size: 1.2rem;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.preview-control-btn:hover {
+  background: #4a4a4a;
+  border-color: #666;
+}
+
+.zoom-level {
+  color: #ccc;
+  font-size: 0.85rem;
+  margin-left: 0.5rem;
+  min-width: 50px;
+  text-align: right;
 }
 
 .map-actions {

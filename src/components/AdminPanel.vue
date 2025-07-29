@@ -60,12 +60,12 @@
             rows="3"
           ></textarea>
           <select v-model="poiType">
-            <option value="landmark">Landmark</option>
-            <option value="quest">Quest</option>
-            <option value="merchant">Merchant</option>
-            <option value="npc">NPC</option>
-            <option value="dungeon">Dungeon</option>
-            <option value="other">Other</option>
+            <option value="landmark">🏛️ Landmark</option>
+            <option value="quest">❗ Quest</option>
+            <option value="merchant">💰 Merchant</option>
+            <option value="npc">💀 NPC</option>
+            <option value="dungeon">⚔️ Dungeon</option>
+            <option value="other">📍 Other</option>
           </select>
           <div class="form-buttons">
             <button @click="savePOI" class="save-btn">Save POI</button>
@@ -80,13 +80,13 @@
         <div class="connection-form">
           <select v-model="targetMap" ref="targetMapSelect">
             <option value="">Select Target Map</option>
-            <option v-for="map in availableMaps" :key="map.file" :value="map.file">
+            <option v-for="map in availableMaps" :key="map.id" :value="map.id">
               {{ map.name }}
             </option>
           </select>
           <input 
             v-model="connectionLabel" 
-            placeholder="Connection Label (e.g. 'To Deep Dunes')"
+            placeholder="Connection Label (defaults to 'to <zone name>')"
             @keyup.enter="saveConnection"
           />
           <div class="form-buttons">
@@ -103,7 +103,6 @@
             <input 
               type="checkbox" 
               v-model="invisibleLabel"
-              :disabled="pendingConnector || pendingConnectorPair.first"
             />
             <span>Invisible Label</span>
           </label>
@@ -111,29 +110,33 @@
             <input 
               type="checkbox" 
               v-model="invisibleIcon"
-              :disabled="pendingConnector"
             />
             <span>Invisible Icon</span>
           </label>
         </div>
         <h4>{{ pendingConnectorPair.first ? 'Second Connector' : 'First Connector' }}</h4>
         <div v-if="pendingConnector" class="connector-form">
+          <p v-if="pendingConnector.poiId" class="poi-connection">
+            Connecting to POI: <strong>{{ pendingConnector.poiName || 'POI' }}</strong>
+          </p>
           <input 
-            v-if="!pendingConnectorPair.first && !invisibleLabel"
+            v-if="!invisibleLabel && !pendingConnector.poiId && !pendingConnectorPair.first"
             v-model="connectorLabel" 
-            placeholder="Connector Label (e.g. 'A', '1')"
-            maxlength="3"
+            placeholder="Connector Label (e.g. A, 1)"
             @keyup.enter="saveConnector"
             ref="connectorLabelInput"
           />
           <div class="form-buttons">
             <button @click="saveConnector" class="save-btn">
-              {{ pendingConnectorPair.first ? 'Complete Pair' : 'Place First' }}
+              {{ pendingConnectorPair.first ? 'Complete Connection' : 'Place First' }}
             </button>
             <button @click="cancelConnector" class="cancel-btn">Cancel</button>
           </div>
           <p v-if="pendingConnectorPair.first" class="hint">
-            Place the second connector for pair{{ invisibleLabel ? '' : ` "${pendingConnectorPair.first.label}"` }}
+            {{ pendingConnector?.poiId 
+              ? 'Click to confirm connection to POI' 
+              : `Place the second connector for pair${invisibleLabel ? '' : ` "${pendingConnectorPair.first.label}"`}` 
+            }}
           </p>
         </div>
       </div>
@@ -159,8 +162,7 @@
 </template>
 
 <script>
-import { ref, watch, nextTick } from 'vue'
-import { mapList } from '../data/maps'
+import { ref, watch, nextTick, computed } from 'vue'
 
 export default {
   name: 'AdminPanel',
@@ -184,6 +186,10 @@ export default {
     pendingConnectorPair: {
       type: Object,
       default: () => ({ first: null, second: null })
+    },
+    maps: {
+      type: Array,
+      default: () => []
     }
   },
   emits: ['close', 'savePOI', 'saveConnection', 'saveConnector', 'cancelPOI', 'cancelConnection', 'cancelConnector', 'modeChange', 'connectorSettingsChange'],
@@ -202,7 +208,17 @@ export default {
     const targetMapSelect = ref(null)
     const connectorLabelInput = ref(null)
     
-    const availableMaps = mapList
+    const availableMaps = computed(() => props.maps)
+    
+    // Watch for target map selection to update default label
+    watch(targetMap, (newMapId) => {
+      if (newMapId) {
+        const selectedMap = props.maps.find(map => map.id === newMapId)
+        if (selectedMap) {
+          connectionLabel.value = `to ${selectedMap.name}`
+        }
+      }
+    })
     
     const toggleMinimize = () => {
       isMinimized.value = !isMinimized.value
@@ -259,10 +275,8 @@ export default {
     const saveConnection = () => {
       if (!targetMap.value || !connectionLabel.value) return
       
-      const targetMapFilename = targetMap.value.split('/').pop()
-      
       emit('saveConnection', {
-        targetMap: targetMapFilename,
+        targetMapId: targetMap.value,
         label: connectionLabel.value
       })
       
@@ -285,11 +299,11 @@ export default {
     }
     
     const saveConnector = () => {
-      // For first connector, require a label unless it's an invisible label
-      if (!props.pendingConnectorPair.first && !invisibleLabel.value && !connectorLabel.value) return
+      // Require a label unless it's an invisible label, connecting to POI, or second connector
+      if (!invisibleLabel.value && !connectorLabel.value && !props.pendingConnector?.poiId && !props.pendingConnectorPair.first) return
       
       // For invisible labels, use empty string as label
-      // For second connector, use the same label as the first
+      // For second connector, use the first connector's label
       const label = invisibleLabel.value 
         ? '' 
         : (props.pendingConnectorPair.first 
@@ -298,16 +312,16 @@ export default {
       
       emit('saveConnector', {
         label: label,
-        invisible: invisibleLabel.value,
-        showIcon: !invisibleIcon.value  // Note: inverted logic - invisibleIcon = true means showIcon = false
+        invisibleLabel: invisibleLabel.value,
+        invisibleIcon: invisibleIcon.value,
+        // TODO: Add icon selection and other customization options
+        icon: '🔗',
+        iconSize: 20,
+        labelPosition: 'bottom'
       })
       
-      // Reset form only after completing the pair
-      if (props.pendingConnectorPair.first) {
-        connectorLabel.value = ''
-        invisibleLabel.value = false
-        invisibleIcon.value = false
-      }
+      // Clear label for next connector
+      connectorLabel.value = ''
     }
     
     const cancelConnector = () => {
@@ -643,5 +657,18 @@ textarea {
 .checkbox-label input[type="checkbox"]:disabled + span {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.poi-connection {
+  background: #4a7c59;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  text-align: center;
+  color: #fff;
+}
+
+.poi-connection strong {
+  color: #ffd700;
 }
 </style>
