@@ -2606,20 +2606,34 @@ app.get('/api/admin/db-health', async (req, res) => {
 
 // Share page
 app.get('/share/:shareCode', (req, res) => {
-  // In development, serve from public; in production, serve from dist
-  const sharePath = process.env.NODE_ENV === 'production' 
-    ? join(__dirname, 'dist', 'share.html')
-    : join(__dirname, 'public', 'share.html');
-  res.sendFile(sharePath);
+  // Check if dist folder exists (production) or use public (development)
+  const distPath = join(__dirname, 'dist', 'share.html');
+  const publicPath = join(__dirname, 'public', 'share.html');
+  
+  // Try dist first (production), fallback to public (development)
+  require('fs').access(distPath, require('fs').constants.F_OK, (err) => {
+    if (err) {
+      res.sendFile(publicPath);
+    } else {
+      res.sendFile(distPath);
+    }
+  });
 });
 
 // Serve account page
 app.get('/account', (req, res) => {
-  // In development, serve from public; in production, serve from dist
-  const accountPath = process.env.NODE_ENV === 'production' 
-    ? join(__dirname, 'dist', 'account.html')
-    : join(__dirname, 'public', 'account.html');
-  res.sendFile(accountPath);
+  // Check if dist folder exists (production) or use public (development)
+  const distPath = join(__dirname, 'dist', 'account.html');
+  const publicPath = join(__dirname, 'public', 'account.html');
+  
+  // Try dist first (production), fallback to public (development)
+  require('fs').access(distPath, require('fs').constants.F_OK, (err) => {
+    if (err) {
+      res.sendFile(publicPath);
+    } else {
+      res.sendFile(distPath);
+    }
+  });
 });
 
 // Handle all other routes by serving index.html (for Vue Router)
