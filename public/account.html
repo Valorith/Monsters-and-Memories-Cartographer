@@ -532,11 +532,15 @@
       height: 100%;
       background-color: rgba(0, 0, 0, 0.5);
       animation: fadeIn 0.3s;
+      overflow-y: auto;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 2rem 0;
     }
     
     .modal-content {
       background-color: #2a2a2a;
-      margin: 5% auto;
+      margin: auto;
       padding: 0;
       border: 1px solid rgba(255, 215, 0, 0.2);
       border-radius: 12px;
@@ -544,6 +548,8 @@
       max-width: 600px;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
       animation: slideIn 0.3s;
+      max-height: 90vh;
+      overflow-y: auto;
     }
     
     .modal-header {
@@ -1064,8 +1070,15 @@
             
             <!-- Shared POIs Section -->
             <div id="shared-pois-section" style="display: block; margin-top: 3rem;">
-              <h3 class="sub-header">Shared POIs</h3>
-              <p style="color: #999; margin-bottom: 1rem; font-size: 0.9rem;">POIs that other users have shared with you.</p>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <div>
+                  <h3 class="sub-header" style="margin-bottom: 0.5rem;">Shared POIs</h3>
+                  <p style="color: #999; font-size: 0.9rem; margin: 0;">POIs that other users have shared with you.</p>
+                </div>
+                <button class="btn btn-sm" onclick="showAddSharedPOIModal()" style="background: #4a7c59;">
+                  <span style="margin-right: 0.5rem;">➕</span>Add Shared POI
+                </button>
+              </div>
               
               <table id="shared-pois-table" class="admin-table">
                 <thead>
@@ -1074,6 +1087,7 @@
                     <th>Name</th>
                     <th>Map</th>
                     <th>Shared By</th>
+                    <th>Status</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -1434,7 +1448,38 @@
         
         // Shared count cell
         const sharedCell = document.createElement('td');
-        sharedCell.textContent = poi.shared_count || 0;
+        const sharedCount = poi.shared_count || 0;
+        
+        const sharedLink = document.createElement('a');
+        sharedLink.href = '#';
+        sharedLink.style.color = sharedCount > 0 ? '#4dff4d' : '#999';
+        sharedLink.style.textDecoration = 'none';
+        sharedLink.style.cursor = 'pointer';
+        sharedLink.style.transition = 'all 0.2s';
+        sharedLink.textContent = `${sharedCount} user${sharedCount !== 1 ? 's' : ''}`;
+        
+        // Add glow effect for counts > 0
+        if (sharedCount > 0) {
+          sharedLink.style.textShadow = '0 0 8px rgba(77, 255, 77, 0.6), 0 0 12px rgba(77, 255, 77, 0.4)';
+        }
+        
+        sharedLink.onmouseover = () => {
+          sharedLink.style.textDecoration = 'underline';
+          if (sharedCount > 0) {
+            sharedLink.style.textShadow = '0 0 10px rgba(77, 255, 77, 0.8), 0 0 15px rgba(77, 255, 77, 0.6)';
+          }
+        };
+        sharedLink.onmouseout = () => {
+          sharedLink.style.textDecoration = 'none';
+          if (sharedCount > 0) {
+            sharedLink.style.textShadow = '0 0 8px rgba(77, 255, 77, 0.6), 0 0 12px rgba(77, 255, 77, 0.4)';
+          }
+        };
+        sharedLink.onclick = (e) => {
+          e.preventDefault();
+          viewSharedUsers(poi.id);
+        };
+        sharedCell.appendChild(sharedLink);
         row.appendChild(sharedCell);
       } else {
         // Shared by cell
@@ -1762,7 +1807,38 @@
           
           // Share cell
           const shareCell = document.createElement('td');
-          shareCell.textContent = poi.share_count ? `${poi.share_count} users` : '-';
+          const shareCount = poi.share_count || 0;
+          
+          const shareLink = document.createElement('a');
+          shareLink.href = '#';
+          shareLink.style.color = shareCount > 0 ? '#4dff4d' : '#999';
+          shareLink.style.textDecoration = 'none';
+          shareLink.style.cursor = 'pointer';
+          shareLink.style.transition = 'all 0.2s';
+          shareLink.textContent = `${shareCount} user${shareCount !== 1 ? 's' : ''}`;
+          
+          // Add glow effect for counts > 0
+          if (shareCount > 0) {
+            shareLink.style.textShadow = '0 0 8px rgba(77, 255, 77, 0.6), 0 0 12px rgba(77, 255, 77, 0.4)';
+          }
+          
+          shareLink.onmouseover = () => {
+            shareLink.style.textDecoration = 'underline';
+            if (shareCount > 0) {
+              shareLink.style.textShadow = '0 0 10px rgba(77, 255, 77, 0.8), 0 0 15px rgba(77, 255, 77, 0.6)';
+            }
+          };
+          shareLink.onmouseout = () => {
+            shareLink.style.textDecoration = 'none';
+            if (shareCount > 0) {
+              shareLink.style.textShadow = '0 0 8px rgba(77, 255, 77, 0.6), 0 0 12px rgba(77, 255, 77, 0.4)';
+            }
+          };
+          shareLink.onclick = (e) => {
+            e.preventDefault();
+            viewSharedUsers(poi.id);
+          };
+          shareCell.appendChild(shareLink);
           row.appendChild(shareCell);
           
           // Actions cell
@@ -1801,6 +1877,12 @@
         
         pageItems.forEach(poi => {
           const row = document.createElement('tr');
+          const isActive = poi.is_shared_active !== false; // Default to active if not specified
+          
+          // If revoked, add a visual indicator to the row
+          if (!isActive) {
+            row.style.opacity = '0.6';
+          }
           
           // Icon cell
           const iconCell = document.createElement('td');
@@ -1818,15 +1900,45 @@
           // Owner cell
           row.appendChild(createTextCell(poi.owner_name));
           
+          // Status cell
+          const statusCell = document.createElement('td');
+          if (isActive) {
+            const activeSpan = document.createElement('span');
+            activeSpan.style.background = '#28a745';
+            activeSpan.style.color = 'white';
+            activeSpan.style.padding = '0.2rem 0.5rem';
+            activeSpan.style.borderRadius = '4px';
+            activeSpan.style.fontSize = '0.8rem';
+            activeSpan.textContent = 'Active';
+            statusCell.appendChild(activeSpan);
+          } else {
+            const revokedSpan = document.createElement('span');
+            revokedSpan.style.background = '#dc3545';
+            revokedSpan.style.color = 'white';
+            revokedSpan.style.padding = '0.2rem 0.5rem';
+            revokedSpan.style.borderRadius = '4px';
+            revokedSpan.style.fontSize = '0.8rem';
+            revokedSpan.textContent = 'Revoked';
+            statusCell.appendChild(revokedSpan);
+          }
+          row.appendChild(statusCell);
+          
           // Actions cell
           const actionsCell = document.createElement('td');
           const actionsDiv = document.createElement('div');
           actionsDiv.className = 'action-buttons';
           
-          // View button
+          // View button - disabled for revoked POIs
           const viewBtn = document.createElement('button');
           viewBtn.className = 'small-btn info-btn';
-          viewBtn.onclick = () => goToPoi(poi.id, poi.map_id, poi.x, poi.y);
+          if (isActive) {
+            viewBtn.onclick = () => goToPoi(poi.id, poi.map_id, poi.x, poi.y);
+          } else {
+            viewBtn.disabled = true;
+            viewBtn.style.opacity = '0.5';
+            viewBtn.style.cursor = 'not-allowed';
+            viewBtn.title = 'This POI has been revoked';
+          }
           const viewIcon = document.createElement('span');
           viewIcon.className = 'btn-icon';
           viewIcon.textContent = '👁️';
@@ -1859,7 +1971,7 @@
         document.getElementById('shared-pois-pagination').style.display = 'none';
         const row = document.createElement('tr');
         row.innerHTML = `
-          <td colspan="5" style="text-align: center; color: #666; padding: 2rem;">
+          <td colspan="6" style="text-align: center; color: #666; padding: 2rem;">
             No POIs have been shared with you yet. When someone shares a POI with you, it will appear here.
           </td>
         `;
@@ -1883,22 +1995,14 @@
         
         if (response.ok) {
           const data = await response.json();
-          const shareUrl = `${window.location.origin}/share/${data.shareCode}`;
-          
-          // Copy to clipboard
-          navigator.clipboard.writeText(shareUrl).then(() => {
-            showMessage('Share link copied to clipboard!', 'success');
-          }).catch(() => {
-            // Fallback for browsers that don't support clipboard API
-            prompt('Copy this share link:', shareUrl);
-          });
+          showShareCodeModal(data.shareCode, poiId);
         } else {
           const error = await response.json();
-          showMessage(error.error || 'Failed to create share link', 'error');
+          showMessage(error.error || 'Failed to create share code', 'error');
         }
       } catch (error) {
         console.error('Error in sharePoi:', error);
-        showMessage('Failed to create share link', 'error');
+        showMessage('Failed to create share code', 'error');
       }
     }
 
@@ -3391,6 +3495,307 @@
 
     // Initialize
     checkAuth();
+  </script>
+
+  <!-- Share Code Modal -->
+  <div id="share-code-modal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3>Share POI</h3>
+        <button class="close-btn" onclick="closeShareCodeModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom: 1rem;">Share this code with others to let them add this POI to their map:</p>
+        
+        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+          <input type="text" id="share-code-display" readonly 
+                 style="flex: 1; padding: 1rem; font-size: 1.5rem; font-family: monospace; 
+                        text-align: center; letter-spacing: 2px; background: #2d2d2d; 
+                        border: 2px solid #4a7c59; border-radius: 8px; color: #4dff4d;">
+          <button class="btn" onclick="copyShareCode()" style="padding: 1rem;">
+            📋 Copy
+          </button>
+        </div>
+        
+        <div id="share-users-section" style="display: none; margin-top: 2rem; padding-top: 2rem; border-top: 1px solid #444;">
+          <h4 style="color: #FFD700; margin-bottom: 1rem;">Users sharing this POI:</h4>
+          <div id="share-users-list" style="max-height: 200px; overflow-y: auto;"></div>
+        </div>
+        
+        <div style="margin-top: 2rem; padding-top: 2rem; border-top: 1px solid #444;">
+          <p style="color: #999; font-size: 0.9rem; margin-bottom: 1rem;">
+            ⚠️ Creating a new share code will invalidate the previous code and remove access for all users who were using it.
+          </p>
+          <div style="display: flex; gap: 1rem;">
+            <button class="btn secondary-btn" onclick="regenerateShareCode()">
+              🔄 Generate New Code
+            </button>
+            <button class="btn danger-btn" onclick="revokeShareCode()">
+              🚫 Revoke Share
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Share Users Modal -->
+  <div id="share-users-modal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 id="share-users-title">Users Sharing This POI</h3>
+        <button class="close-btn" onclick="closeShareUsersModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="share-users-loading" style="text-align: center; padding: 2rem;">
+          Loading users...
+        </div>
+        <div id="share-users-content" style="display: none;">
+          <div id="share-users-list-modal" style="max-height: 400px; overflow-y: auto;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Shared POI Modal -->
+  <div id="add-shared-poi-modal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 400px; height: auto; margin-top: 10%; margin-bottom: auto;">
+      <div class="modal-header">
+        <h3>Add Shared POI</h3>
+        <button class="close-btn" onclick="closeAddSharedPOIModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom: 1rem;">Enter the share code you received:</p>
+        
+        <input type="text" id="share-code-input" placeholder="Enter share code" maxlength="10"
+               style="width: 100%; padding: 1rem; font-size: 1.2rem; font-family: monospace; 
+                      text-align: center; letter-spacing: 2px; text-transform: uppercase;
+                      background: #2d2d2d; border: 2px solid #555; border-radius: 8px; 
+                      color: #e0e0e0; margin-bottom: 1.5rem;"
+               onkeyup="this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '')"
+               onkeypress="if(event.key === 'Enter') addSharedPOI()">
+        
+        <div style="display: flex; gap: 1rem;">
+          <button class="btn" onclick="addSharedPOI()" style="flex: 1;">
+            ➕ Add POI
+          </button>
+          <button class="btn secondary-btn" onclick="closeAddSharedPOIModal()">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Share code modal functions
+    let currentSharePoiId = null;
+
+    function showShareCodeModal(shareCode, poiId) {
+      currentSharePoiId = poiId;
+      document.getElementById('share-code-display').value = shareCode;
+      document.getElementById('share-code-modal').style.display = 'flex';
+      
+      // Load users who have this POI shared
+      loadShareUsers(poiId);
+    }
+
+    function closeShareCodeModal() {
+      document.getElementById('share-code-modal').style.display = 'none';
+      currentSharePoiId = null;
+    }
+
+    function copyShareCode() {
+      const shareCode = document.getElementById('share-code-display').value;
+      navigator.clipboard.writeText(shareCode).then(() => {
+        showMessage('Share code copied to clipboard!', 'success');
+      }).catch(() => {
+        // Fallback
+        document.getElementById('share-code-display').select();
+        document.execCommand('copy');
+        showMessage('Share code copied!', 'success');
+      });
+    }
+
+    async function loadShareUsers(poiId) {
+      try {
+        const response = await fetch(`/api/custom-pois/${poiId}/shared-users`);
+        if (response.ok) {
+          const data = await response.json();
+          const section = document.getElementById('share-users-section');
+          const list = document.getElementById('share-users-list');
+          
+          if (data.users.length > 0) {
+            section.style.display = 'block';
+            list.innerHTML = data.users.map(user => `
+              <div style="padding: 0.5rem; border-bottom: 1px solid #333;">
+                <span style="color: #FFD700;">${window.escapeHTML(user.display_name)}</span>
+                <span style="color: #999; font-size: 0.85rem; margin-left: 1rem;">
+                  Added ${new Date(user.added_at).toLocaleDateString()}
+                </span>
+              </div>
+            `).join('');
+          } else {
+            section.style.display = 'none';
+          }
+        }
+      } catch (error) {
+        console.error('Error loading share users:', error);
+      }
+    }
+
+    async function regenerateShareCode() {
+      if (!confirm('Are you sure? This will invalidate the current share code and remove access for all users currently using it.')) {
+        return;
+      }
+      
+      try {
+        const response = await window.csrfHelper.fetchWithCSRF(`/api/custom-pois/${currentSharePoiId}/share`, {
+          method: 'POST'
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          document.getElementById('share-code-display').value = data.shareCode;
+          showMessage('New share code generated', 'success');
+          loadShareUsers(currentSharePoiId);
+        } else {
+          const error = await response.json();
+          showMessage(error.error || 'Failed to generate new code', 'error');
+        }
+      } catch (error) {
+        showMessage('Failed to generate new code', 'error');
+      }
+    }
+
+    async function revokeShareCode() {
+      if (!confirm('Are you sure? This will revoke the share code and remove access for all users currently using it.')) {
+        return;
+      }
+      
+      try {
+        const response = await window.csrfHelper.fetchWithCSRF(`/api/custom-pois/${currentSharePoiId}/revoke-share`, {
+          method: 'POST'
+        });
+        
+        if (response.ok) {
+          showMessage('Share code revoked', 'success');
+          closeShareCodeModal();
+          loadCustomPois(); // Refresh the list
+        } else {
+          const error = await response.json();
+          showMessage(error.error || 'Failed to revoke share', 'error');
+        }
+      } catch (error) {
+        showMessage('Failed to revoke share', 'error');
+      }
+    }
+
+    // Add shared POI modal functions
+    function showAddSharedPOIModal() {
+      document.getElementById('share-code-input').value = '';
+      document.getElementById('add-shared-poi-modal').style.display = 'flex';
+      document.getElementById('share-code-input').focus();
+    }
+
+    function closeAddSharedPOIModal() {
+      document.getElementById('add-shared-poi-modal').style.display = 'none';
+    }
+
+    async function addSharedPOI() {
+      const shareCode = document.getElementById('share-code-input').value.trim();
+      
+      if (!shareCode) {
+        showMessage('Please enter a share code', 'error');
+        return;
+      }
+      
+      try {
+        const response = await window.csrfHelper.fetchWithCSRF('/api/custom-pois/add-shared', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ shareCode })
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          showMessage(`Added "${data.poi.name}" from ${data.poi.owner_name}`, 'success');
+          closeAddSharedPOIModal();
+          loadCustomPois(); // Refresh the list
+        } else {
+          const error = await response.json();
+          showMessage(error.error || 'Failed to add shared POI', 'error');
+        }
+      } catch (error) {
+        showMessage('Failed to add shared POI', 'error');
+      }
+    }
+
+    // Share users modal functions
+    async function showShareUsersModal(poiId, poiName) {
+      document.getElementById('share-users-title').textContent = `Users Sharing "${poiName}"`;
+      document.getElementById('share-users-modal').style.display = 'flex';
+      document.getElementById('share-users-loading').style.display = 'block';
+      document.getElementById('share-users-content').style.display = 'none';
+      
+      try {
+        const response = await fetch(`/api/custom-pois/${poiId}/shared-users`);
+        if (response.ok) {
+          const data = await response.json();
+          const listEl = document.getElementById('share-users-list-modal');
+          
+          if (data.users.length > 0) {
+            listEl.innerHTML = data.users.map(user => `
+              <div style="padding: 1rem; border-bottom: 1px solid #333;">
+                <div style="font-size: 1.1rem; color: #FFD700; margin-bottom: 0.25rem;">
+                  ${window.escapeHTML(user.display_name)}
+                </div>
+                <div style="color: #999; font-size: 0.9rem;">
+                  Added ${new Date(user.added_at).toLocaleDateString()} at ${new Date(user.added_at).toLocaleTimeString()}
+                </div>
+              </div>
+            `).join('');
+          } else {
+            listEl.innerHTML = '<div style="text-align: center; padding: 2rem; color: #999;">No users have added this POI yet.</div>';
+          }
+          
+          document.getElementById('share-users-loading').style.display = 'none';
+          document.getElementById('share-users-content').style.display = 'block';
+        } else {
+          showMessage('Failed to load users', 'error');
+          closeShareUsersModal();
+        }
+      } catch (error) {
+        console.error('Error loading share users:', error);
+        showMessage('Failed to load users', 'error');
+        closeShareUsersModal();
+      }
+    }
+
+    function closeShareUsersModal() {
+      document.getElementById('share-users-modal').style.display = 'none';
+    }
+    
+    // Helper function to view shared users from the table
+    function viewSharedUsers(poiId) {
+      const poi = customPois.find(p => p.id === poiId);
+      if (poi) {
+        showShareUsersModal(poiId, poi.name);
+      }
+    }
+
+    // Close modals when clicking outside
+    window.addEventListener('click', function(event) {
+      if (event.target.classList.contains('modal')) {
+        if (event.target.id === 'share-code-modal') {
+          closeShareCodeModal();
+        } else if (event.target.id === 'add-shared-poi-modal') {
+          closeAddSharedPOIModal();
+        } else if (event.target.id === 'share-users-modal') {
+          closeShareUsersModal();
+        }
+      }
+    });
   </script>
 </body>
 </html>

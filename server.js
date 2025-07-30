@@ -2119,17 +2119,21 @@ app.get('/api/custom-pois', async (req, res) => {
   try {
     // Get POIs created by user and POIs shared with user
     const result = await pool.query(`
-      SELECT cp.*, COALESCE(u.nickname, u.name) as owner_name, u.email as owner_email, m.name as map_name,
+      SELECT cp.*, 
+             COALESCE(u.nickname, u.name) as owner_name, 
+             u.email as owner_email, 
+             m.name as map_name,
              CASE WHEN cp.user_id = $1 THEN true ELSE false END as is_owner,
-             (SELECT COUNT(*) FROM custom_poi_shares WHERE custom_poi_id = cp.id AND accepted = true) as share_count
+             cp.share_code,
+             cp.share_code_revoked,
+             (SELECT COUNT(*) FROM shared_pois WHERE custom_poi_id = cp.id AND is_active = true) as share_count,
+             sp.is_active as is_shared_active
       FROM custom_pois cp
       JOIN users u ON cp.user_id = u.id
       JOIN maps m ON cp.map_id = m.id
+      LEFT JOIN shared_pois sp ON cp.id = sp.custom_poi_id AND sp.user_id = $1
       WHERE cp.user_id = $1
-         OR cp.id IN (
-           SELECT custom_poi_id FROM custom_poi_shares 
-           WHERE shared_with_user_id = $1 AND accepted = true
-         )
+         OR sp.user_id = $1
       ORDER BY cp.created_at DESC
     `, [req.user.id]);
     
@@ -2151,15 +2155,14 @@ app.get('/api/maps/:mapId/custom-pois', async (req, res) => {
       SELECT cp.*, COALESCE(u.nickname, u.name) as owner_name,
         pp.vote_score,
         (SELECT COUNT(*) FROM pending_poi_votes WHERE pending_poi_id = pp.id AND vote = 1) as upvotes,
-        (SELECT COUNT(*) FROM pending_poi_votes WHERE pending_poi_id = pp.id AND vote = -1) as downvotes
+        (SELECT COUNT(*) FROM pending_poi_votes WHERE pending_poi_id = pp.id AND vote = -1) as downvotes,
+        sp.is_active as is_shared_active
       FROM custom_pois cp
       JOIN users u ON cp.user_id = u.id
       LEFT JOIN pending_pois pp ON pp.custom_poi_id = cp.id
+      LEFT JOIN shared_pois sp ON cp.id = sp.custom_poi_id AND sp.user_id = $2
       WHERE cp.map_id = $1 
-        AND (cp.user_id = $2 OR cp.id IN (
-          SELECT custom_poi_id FROM custom_poi_shares 
-          WHERE shared_with_user_id = $2 AND accepted = true
-        ))
+        AND (cp.user_id = $2 OR (sp.user_id = $2 AND sp.is_active = true))
     `, [req.params.mapId, req.user.id]);
     
     res.json(result.rows);
@@ -2280,8 +2283,81 @@ app.delete('/api/custom-pois/:id', validateCSRF, async (req, res) => {
   }
 });
 
-// Create share link for custom POI
+// Generate or get share code for custom POI
 app.post('/api/custom-pois/:id/share', validateCSRF, async (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  try {
+    // Check if user owns this POI
+    const poiResult = await pool.query(
+      'SELECT user_id, share_code, share_code_revoked FROM custom_pois WHERE id = $1',
+      [req.params.id]
+    );
+
+    if (poiResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Custom POI not found' });
+    }
+
+    if (poiResult.rows[0].user_id !== req.user.id) {
+      return res.status(403).json({ error: 'You can only share your own custom POIs' });
+    }
+
+    const poi = poiResult.rows[0];
+
+    // If POI already has a valid share code, return it
+    if (poi.share_code && !poi.share_code_revoked) {
+      return res.json({ shareCode: poi.share_code });
+    }
+
+    // Generate a new 8-character alphanumeric code
+    const generateShareCode = () => {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let code = '';
+      for (let i = 0; i < 8; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return code;
+    };
+
+    // Keep trying until we get a unique code
+    let shareCode;
+    let attempts = 0;
+    while (attempts < 10) {
+      shareCode = generateShareCode();
+      
+      // Check if code already exists
+      const existing = await pool.query(
+        'SELECT id FROM custom_pois WHERE share_code = $1',
+        [shareCode]
+      );
+      
+      if (existing.rows.length === 0) {
+        break; // Found unique code
+      }
+      attempts++;
+    }
+
+    if (attempts >= 10) {
+      return res.status(500).json({ error: 'Failed to generate unique share code' });
+    }
+
+    // Update POI with new share code
+    await pool.query(
+      'UPDATE custom_pois SET share_code = $1, share_code_created_at = CURRENT_TIMESTAMP, share_code_revoked = FALSE WHERE id = $2',
+      [shareCode, req.params.id]
+    );
+    
+    res.json({ shareCode });
+  } catch (error) {
+    console.error('Error creating share link:', error);
+    res.status(500).json({ error: 'Failed to create share link' });
+  }
+});
+
+// Revoke share code for custom POI
+app.post('/api/custom-pois/:id/revoke-share', validateCSRF, async (req, res) => {
   if (!req.isAuthenticated()) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
@@ -2298,17 +2374,19 @@ app.post('/api/custom-pois/:id/share', validateCSRF, async (req, res) => {
     }
 
     if (ownership.rows[0].user_id !== req.user.id) {
-      return res.status(403).json({ error: 'You can only share your own custom POIs' });
+      return res.status(403).json({ error: 'You can only revoke shares for your own custom POIs' });
     }
 
-    // Generate a unique share code with POI ID embedded
-    const randomCode = Math.random().toString(36).substring(2, 15);
-    const shareCode = `${req.params.id}-${randomCode}`;
-    
-    res.json({ shareCode });
+    // Revoke the share code
+    await pool.query(
+      'UPDATE custom_pois SET share_code_revoked = TRUE WHERE id = $1',
+      [req.params.id]
+    );
+
+    res.json({ success: true });
   } catch (error) {
-    console.error('Error creating share link:', error);
-    res.status(500).json({ error: 'Failed to create share link' });
+    console.error('Error revoking share:', error);
+    res.status(500).json({ error: 'Failed to revoke share' });
   }
 });
 
@@ -2370,6 +2448,80 @@ app.post('/api/custom-pois/:id/share-with', validateCSRF, async (req, res) => {
   }
 });
 
+// Add shared POI using share code
+app.post('/api/custom-pois/add-shared', validateCSRF, async (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  const { shareCode } = req.body;
+
+  // Validate share code format (alphanumeric, max 10 chars)
+  if (!shareCode || typeof shareCode !== 'string' || shareCode.length > 10 || !/^[A-Z0-9]+$/i.test(shareCode)) {
+    return res.status(400).json({ error: 'Invalid share code format' });
+  }
+
+  try {
+    // Find POI with this share code
+    const poiResult = await pool.query(
+      `SELECT cp.*, u.nickname, u.name, m.name as map_name
+       FROM custom_pois cp
+       JOIN users u ON cp.user_id = u.id
+       JOIN maps m ON cp.map_id = m.id
+       WHERE UPPER(cp.share_code) = UPPER($1) AND cp.share_code_revoked = FALSE`,
+      [shareCode]
+    );
+
+    if (poiResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Invalid or revoked share code' });
+    }
+
+    const poi = poiResult.rows[0];
+
+    // Check if user owns this POI
+    if (poi.user_id === req.user.id) {
+      return res.status(400).json({ error: 'You cannot share a POI with yourself' });
+    }
+
+    // Check if already shared with this user
+    const existingShare = await pool.query(
+      'SELECT id, is_active FROM shared_pois WHERE user_id = $1 AND custom_poi_id = $2',
+      [req.user.id, poi.id]
+    );
+
+    if (existingShare.rows.length > 0) {
+      if (existingShare.rows[0].is_active) {
+        return res.status(400).json({ error: 'This POI is already shared with you' });
+      } else {
+        // Reactivate the share
+        await pool.query(
+          'UPDATE shared_pois SET is_active = TRUE, share_code = $1, added_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [shareCode, existingShare.rows[0].id]
+        );
+      }
+    } else {
+      // Create new share entry
+      await pool.query(
+        'INSERT INTO shared_pois (user_id, custom_poi_id, share_code) VALUES ($1, $2, $3)',
+        [req.user.id, poi.id, shareCode]
+      );
+    }
+
+    res.json({ 
+      success: true,
+      poi: {
+        id: poi.id,
+        name: poi.name,
+        map_name: poi.map_name,
+        owner_name: poi.nickname || poi.name
+      }
+    });
+  } catch (error) {
+    console.error('Error adding shared POI:', error);
+    res.status(500).json({ error: 'Failed to add shared POI' });
+  }
+});
+
 // Remove shared POI (unshare)
 app.delete('/api/custom-pois/:id/unshare', validateCSRF, async (req, res) => {
   if (!req.isAuthenticated()) {
@@ -2377,19 +2529,19 @@ app.delete('/api/custom-pois/:id/unshare', validateCSRF, async (req, res) => {
   }
 
   try {
-    // Check if this POI is actually shared with the user
+    // Check if this POI is actually shared with the user (active or revoked)
     const shareCheck = await pool.query(
-      'SELECT * FROM custom_poi_shares WHERE custom_poi_id = $1 AND shared_with_user_id = $2',
+      'SELECT id FROM shared_pois WHERE custom_poi_id = $1 AND user_id = $2',
       [req.params.id, req.user.id]
     );
 
     if (shareCheck.rows.length === 0) {
-      return res.status(404).json({ error: 'Share not found' });
+      return res.status(404).json({ error: 'Shared POI not found' });
     }
 
-    // Remove the share
+    // Delete the share record completely so user can remove revoked shares
     await pool.query(
-      'DELETE FROM custom_poi_shares WHERE custom_poi_id = $1 AND shared_with_user_id = $2',
+      'DELETE FROM shared_pois WHERE custom_poi_id = $1 AND user_id = $2',
       [req.params.id, req.user.id]
     );
 
@@ -2397,6 +2549,44 @@ app.delete('/api/custom-pois/:id/unshare', validateCSRF, async (req, res) => {
   } catch (error) {
     console.error('Error removing shared POI:', error);
     res.status(500).json({ error: 'Failed to remove shared POI' });
+  }
+});
+
+// Get users who have added a shared POI
+app.get('/api/custom-pois/:id/shared-users', async (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  try {
+    // Check if user owns this POI
+    const ownership = await pool.query(
+      'SELECT user_id FROM custom_pois WHERE id = $1',
+      [req.params.id]
+    );
+
+    if (ownership.rows.length === 0) {
+      return res.status(404).json({ error: 'Custom POI not found' });
+    }
+
+    if (ownership.rows[0].user_id !== req.user.id) {
+      return res.status(403).json({ error: 'You can only view share users for your own custom POIs' });
+    }
+
+    // Get list of users who have added this POI
+    const users = await pool.query(
+      `SELECT u.id, COALESCE(u.nickname, u.name) as display_name, sp.added_at
+       FROM shared_pois sp
+       JOIN users u ON sp.user_id = u.id
+       WHERE sp.custom_poi_id = $1 AND sp.is_active = TRUE
+       ORDER BY sp.added_at DESC`,
+      [req.params.id]
+    );
+
+    res.json({ users: users.rows });
+  } catch (error) {
+    console.error('Error fetching shared users:', error);
+    res.status(500).json({ error: 'Failed to fetch shared users' });
   }
 });
 

@@ -190,6 +190,22 @@ async function migrate() {
       console.log('Added avatar_missing_count field to users table');
     }
     
+    // Update shared POI system
+    const updateSharedPOIPath = path.join(__dirname, 'update-shared-poi-system.sql');
+    if (fs.existsSync(updateSharedPOIPath)) {
+      const updateSharedPOISchema = fs.readFileSync(updateSharedPOIPath, 'utf8');
+      await pool.query(updateSharedPOISchema);
+      console.log('Updated shared POI system with persistent codes');
+    }
+    
+    // Clean up old share system
+    const cleanupOldSharePath = path.join(__dirname, 'cleanup-old-share-system.sql');
+    if (fs.existsSync(cleanupOldSharePath)) {
+      const cleanupOldShareSchema = fs.readFileSync(cleanupOldSharePath, 'utf8');
+      await pool.query(cleanupOldShareSchema);
+      console.log('Cleaned up old share system components');
+    }
+    
     console.log('Database migration completed successfully!');
     
     // Check tables after migration

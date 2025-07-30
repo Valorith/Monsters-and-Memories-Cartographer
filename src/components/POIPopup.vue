@@ -95,7 +95,7 @@
       <!-- Shared indicator -->
       <div v-if="isSharedPOI" class="poi-shared">
         <span class="shared-icon">🔗</span>
-        <span class="shared-text">Shared with you</span>
+        <span class="shared-text">Shared by {{ localPoi.owner_name || 'Unknown' }}</span>
       </div>
       
       <p v-if="canEdit" class="edit-hint">{{ isAdmin ? 'Click any field to edit' : 'Alt+drag to move' }}</p>
