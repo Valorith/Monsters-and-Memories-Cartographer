@@ -871,7 +871,27 @@ app.get('/api/auth/status', async (req, res) => {
     // Build avatar URL if user has a custom avatar file
     let avatarUrl = req.user.picture; // Default to OAuth picture
     if (req.user.avatar_filename) {
-      avatarUrl = `/avatars/${req.user.avatar_filename}?v=${req.user.avatar_version || 1}`;
+      // Check if file exists
+      const avatarPath = join(__dirname, 'public', 'avatars', req.user.avatar_filename);
+      const fileExists = await fs.access(avatarPath).then(() => true).catch(() => false);
+      
+      if (fileExists) {
+        avatarUrl = `/avatars/${req.user.avatar_filename}?v=${req.user.avatar_version || 1}`;
+      } else {
+        console.error('Avatar file not found, using Google picture:', {
+          filename: req.user.avatar_filename,
+          expectedPath: avatarPath
+        });
+        // File doesn't exist, use Google picture and clear the avatar from database
+        try {
+          await pool.query(
+            'UPDATE users SET avatar_filename = NULL, avatar_version = 0 WHERE id = $1',
+            [req.user.id]
+          );
+        } catch (updateError) {
+          console.error('Error clearing missing avatar from database:', updateError);
+        }
+      }
     }
     
     res.json({

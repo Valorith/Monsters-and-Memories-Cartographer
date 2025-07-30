@@ -3338,8 +3338,6 @@ export default {
     
     // Handle avatar loading error by falling back to Google avatar
     const handleAvatarError = async (event) => {
-      console.error('Avatar failed to load:', event.target.src)
-      
       // Don't retry if we're already trying the Google picture
       if (event.target.src.includes('/api/user/google-picture')) {
         event.target.style.display = 'none'

@@ -1464,6 +1464,7 @@
       document.getElementById('user-name').textContent = displayName;
       document.getElementById('user-email').textContent = currentUser.email;
       
+      
       // Use picture from server (auth/status already returns the correct avatar URL)
       const userAvatar = document.getElementById('user-avatar');
       userAvatar.src = currentUser.picture;
@@ -1471,7 +1472,6 @@
       
       // Add error handler for avatar fallback
       userAvatar.onerror = async function() {
-        console.error('Avatar failed to load:', this.src);
         
         // Try to get the Google picture from the API
         try {
@@ -1484,7 +1484,7 @@
             }
           }
         } catch (error) {
-          console.error('Error fetching Google picture:', error);
+          // Silently fail
         }
         
         // If all else fails, hide the image
