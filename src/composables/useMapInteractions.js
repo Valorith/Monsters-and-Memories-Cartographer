@@ -87,6 +87,91 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     }
   }
 
+  // Draw POI tooltip separately (to be called after all POIs are drawn)
+  const drawPOITooltip = (ctx, poi) => {
+    const canvasPos = imageToCanvas(poi.x, poi.y)
+    const isHovered = hoveredPOI.value?.id === poi.id
+    
+    if (!isHovered || (!poi.name && !poi.groupedPOIs)) return
+    
+    ctx.save()
+    ctx.translate(canvasPos.x, canvasPos.y)
+    
+    const fontSize = Math.max(14, Math.min(18, 16 * Math.sqrt(scale.value)))
+    ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif`
+    
+    let tooltipContent = []
+    let maxWidth = 0
+    
+    if (poi.groupedPOIs && poi.groupedPOIs.length > 1) {
+      // For grouped POIs, show all POI names with their icons
+      poi.groupedPOIs.forEach(p => {
+        const pColors = getPOIColors(p.type)
+        const pIcon = p.custom_icon || p.icon || pColors.icon
+        const text = `${pIcon} ${p.name}`
+        const metrics = ctx.measureText(text)
+        maxWidth = Math.max(maxWidth, metrics.width)
+        tooltipContent.push({ text, icon: pIcon, name: p.name })
+      })
+    } else {
+      // Single POI tooltip
+      const text = poi.name
+      const metrics = ctx.measureText(text)
+      maxWidth = metrics.width
+      tooltipContent.push({ text, icon: null, name: text })
+    }
+    
+    const padding = 8
+    const lineHeight = fontSize * 1.4
+    const iconSize = 24 // Base icon size
+    const tooltipY = -(iconSize + 10)
+    const tooltipHeight = (tooltipContent.length * lineHeight) + padding * 2
+    const tooltipWidth = maxWidth + padding * 2
+    
+    // Draw tooltip background with higher opacity for better visibility
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.95)'
+    const borderRadius = 6
+    
+    // Create rounded rectangle path
+    ctx.beginPath()
+    ctx.moveTo(-tooltipWidth/2 + borderRadius, tooltipY - tooltipHeight)
+    ctx.lineTo(tooltipWidth/2 - borderRadius, tooltipY - tooltipHeight)
+    ctx.quadraticCurveTo(tooltipWidth/2, tooltipY - tooltipHeight, tooltipWidth/2, tooltipY - tooltipHeight + borderRadius)
+    ctx.lineTo(tooltipWidth/2, tooltipY - borderRadius)
+    ctx.quadraticCurveTo(tooltipWidth/2, tooltipY, tooltipWidth/2 - borderRadius, tooltipY)
+    ctx.lineTo(-tooltipWidth/2 + borderRadius, tooltipY)
+    ctx.quadraticCurveTo(-tooltipWidth/2, tooltipY, -tooltipWidth/2, tooltipY - borderRadius)
+    ctx.lineTo(-tooltipWidth/2, tooltipY - tooltipHeight + borderRadius)
+    ctx.quadraticCurveTo(-tooltipWidth/2, tooltipY - tooltipHeight, -tooltipWidth/2 + borderRadius, tooltipY - tooltipHeight)
+    ctx.closePath()
+    ctx.fill()
+    
+    // Draw small triangle pointing down
+    ctx.beginPath()
+    ctx.moveTo(-5, tooltipY)
+    ctx.lineTo(5, tooltipY)
+    ctx.lineTo(0, tooltipY + 5)
+    ctx.closePath()
+    ctx.fill()
+    
+    // Draw border with stronger visibility
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+    
+    // Draw text content
+    ctx.fillStyle = '#fff'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    
+    tooltipContent.forEach((item, index) => {
+      const y = tooltipY - tooltipHeight + padding + (index + 0.5) * lineHeight
+      ctx.fillText(item.text, 0, y)
+    })
+    
+    ctx.restore()
+  }
+
   // Draw POI on canvas
   const drawPOI = (ctx, poi, isDragging = false) => {
     const canvasPos = imageToCanvas(poi.x, poi.y)
@@ -215,85 +300,7 @@ export function useMapInteractions(scale, offsetX, offsetY) {
       ctx.fillText(poi.groupSize.toString(), badgeX, badgeY)
     }
     
-    // Draw connector mode indicator on POI hover
-    if (isHovered && scale.value && offsetX.value !== undefined) {
-      // Check if we're in connector mode (this would need to be passed in)
-      // For now, we'll always show the name tooltip
-    }
-    
-    // Draw name tooltip on hover
-    if (isHovered && (poi.name || poi.groupedPOIs)) {
-      const fontSize = Math.max(14, Math.min(18, 16 * Math.sqrt(scale.value)))
-      ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif`
-      
-      let tooltipContent = []
-      let maxWidth = 0
-      
-      if (poi.groupedPOIs && poi.groupedPOIs.length > 1) {
-        // For grouped POIs, show all POI names with their icons
-        poi.groupedPOIs.forEach(p => {
-          const pColors = getPOIColors(p.type)
-          const pIcon = p.custom_icon || p.icon || pColors.icon
-          const text = `${pIcon} ${p.name}`
-          const metrics = ctx.measureText(text)
-          maxWidth = Math.max(maxWidth, metrics.width)
-          tooltipContent.push({ text, icon: pIcon, name: p.name })
-        })
-      } else {
-        // Single POI tooltip
-        const text = poi.name
-        const metrics = ctx.measureText(text)
-        maxWidth = metrics.width
-        tooltipContent.push({ text, icon: null, name: text })
-      }
-      
-      const padding = 8
-      const lineHeight = fontSize * 1.4
-      const tooltipY = -(iconSize + 10)
-      const tooltipHeight = (tooltipContent.length * lineHeight) + padding * 2
-      const tooltipWidth = maxWidth + padding * 2
-      
-      // Draw tooltip background
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.9)'
-      const borderRadius = 6
-      
-      // Create rounded rectangle path
-      ctx.beginPath()
-      ctx.moveTo(-tooltipWidth/2 + borderRadius, tooltipY - tooltipHeight)
-      ctx.lineTo(tooltipWidth/2 - borderRadius, tooltipY - tooltipHeight)
-      ctx.quadraticCurveTo(tooltipWidth/2, tooltipY - tooltipHeight, tooltipWidth/2, tooltipY - tooltipHeight + borderRadius)
-      ctx.lineTo(tooltipWidth/2, tooltipY - borderRadius)
-      ctx.quadraticCurveTo(tooltipWidth/2, tooltipY, tooltipWidth/2 - borderRadius, tooltipY)
-      ctx.lineTo(-tooltipWidth/2 + borderRadius, tooltipY)
-      ctx.quadraticCurveTo(-tooltipWidth/2, tooltipY, -tooltipWidth/2, tooltipY - borderRadius)
-      ctx.lineTo(-tooltipWidth/2, tooltipY - tooltipHeight + borderRadius)
-      ctx.quadraticCurveTo(-tooltipWidth/2, tooltipY - tooltipHeight, -tooltipWidth/2 + borderRadius, tooltipY - tooltipHeight)
-      ctx.closePath()
-      ctx.fill()
-      
-      // Draw small triangle pointing down
-      ctx.beginPath()
-      ctx.moveTo(-5, tooltipY)
-      ctx.lineTo(5, tooltipY)
-      ctx.lineTo(0, tooltipY + 5)
-      ctx.closePath()
-      ctx.fill()
-      
-      // Draw border
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)'
-      ctx.lineWidth = 1
-      ctx.stroke()
-      
-      // Draw text content
-      ctx.fillStyle = '#fff'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      
-      tooltipContent.forEach((item, index) => {
-        const y = tooltipY - tooltipHeight + padding + (index + 0.5) * lineHeight
-        ctx.fillText(item.text, 0, y)
-      })
-    }
+    // Note: Tooltips are now drawn in a separate pass after all POIs to ensure they appear on top
     
     ctx.restore()
   }
@@ -778,6 +785,7 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     isConnectionHit,
     isConnectorHit,
     drawPOI,
+    drawPOITooltip,
     drawConnection,
     drawConnector
   }

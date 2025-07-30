@@ -1172,13 +1172,19 @@
             </div>
             
             <div id="user-management-content" style="display: none;">
-              <div style="margin-bottom: 1rem; display: flex; gap: 1rem; align-items: center;">
+              <div style="margin-bottom: 1rem; display: flex; gap: 0.5rem; align-items: stretch;">
                 <input type="text" id="user-search" placeholder="Search users by name or email..." 
                        style="width: 300px; padding: 0.5rem; border: 1px solid #555; border-radius: 4px; 
                               background: #2d2d2d; color: #e0e0e0;"
                        onkeyup="searchUsers()">
-                <button class="btn btn-sm" onclick="refreshUsers()" style="background: #4a7c59;" title="Refresh user list">
-                  🔄 Refresh
+                <button onclick="refreshUsers()" style="background: #2d2d2d; border: 1px solid #555; color: #999; 
+                        padding: 0.5rem 0.75rem; border-radius: 4px; cursor: pointer; 
+                        display: flex; align-items: center; justify-content: center;
+                        transition: all 0.2s;" 
+                        onmouseover="this.style.borderColor='#777'; this.style.color='#ccc';" 
+                        onmouseout="this.style.borderColor='#555'; this.style.color='#999';"
+                        title="Refresh user list">
+                  <span style="font-size: 1rem;">🔄</span>
                 </button>
               </div>
               

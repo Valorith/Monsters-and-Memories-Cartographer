@@ -381,6 +381,7 @@ export default {
       isConnectionHit,
       isConnectorHit,
       drawPOI,
+      drawPOITooltip,
       drawConnection,
       drawConnector
     } = useMapInteractions(scale, offsetX, offsetY)
@@ -689,6 +690,11 @@ export default {
       // Draw highlight effect for navigated POI
       if (highlightedPOI.value) {
         drawHighlightEffect(ctx.value, highlightedPOI.value)
+      }
+      
+      // Draw all POI tooltips last to ensure they appear on top
+      if (hoveredPOI.value) {
+        drawPOITooltip(ctx.value, hoveredPOI.value)
       }
       
       // Draw pending items

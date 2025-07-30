@@ -1,7 +1,7 @@
 <template>
   <div class="xp-bar-container" v-if="user">
     <div class="xp-info">
-      <div class="level-badge" @click="toggleLeaderboard" :class="{ 'clickable': true }">
+      <div class="level-badge" @click="toggleLeaderboard" :class="{ 'clickable': true }" title="Click to view leaderboard">
         <div class="level-number">{{ currentLevel }}</div>
         <div class="level-label">Level</div>
       </div>
@@ -12,7 +12,7 @@
           <span class="next-level-xp">{{ xpRequiredForNextLevel }}</span>
           <span class="xp-label">XP</span>
         </div>
-        <div class="xp-bar-wrapper">
+        <div class="xp-bar-wrapper" title="Publish POIs to the project to gain XP">
           <div class="xp-bar-background">
             <div class="xp-bar-fill" :style="{ width: animatedProgress + '%' }">
               <div class="xp-bar-glow"></div>
