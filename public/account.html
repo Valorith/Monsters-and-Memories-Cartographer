@@ -1177,14 +1177,14 @@
                        style="width: 300px; padding: 0.5rem; border: 1px solid #555; border-radius: 4px; 
                               background: #2d2d2d; color: #e0e0e0;"
                        onkeyup="searchUsers()">
-                <button onclick="refreshUsers()" style="background: #2d2d2d; border: 1px solid #555; color: #999; 
-                        padding: 0.5rem 0.75rem; border-radius: 4px; cursor: pointer; 
+                <button onclick="refreshUsers()" style="background: transparent; border: none; color: #999; 
+                        padding: 0.5rem; cursor: pointer; 
                         display: flex; align-items: center; justify-content: center;
-                        transition: all 0.2s;" 
-                        onmouseover="this.style.borderColor='#777'; this.style.color='#ccc';" 
-                        onmouseout="this.style.borderColor='#555'; this.style.color='#999';"
+                        transition: all 0.2s; height: 100%;" 
+                        onmouseover="this.style.color='#FFD700'; this.style.transform='rotate(180deg)';" 
+                        onmouseout="this.style.color='#999'; this.style.transform='rotate(0deg)';"
                         title="Refresh user list">
-                  <span style="font-size: 1rem;">🔄</span>
+                  <span style="font-size: 1.25rem;">🔄</span>
                 </button>
               </div>
               

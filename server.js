@@ -936,15 +936,16 @@ app.get('/api/auth/status', async (req, res) => {
           
           const missingCount = missingCheck.rows[0]?.avatar_missing_count || 0;
           
-          if (missingCount >= 3) {
-            // File has been missing for multiple checks, clear it
-            console.error('Avatar missing for multiple checks, clearing from database');
+          if (missingCount >= 10) {
+            // File has been missing for many checks, clear it
+            console.error('Avatar missing for 10+ checks, clearing from database');
             await pool.query(
               'UPDATE users SET avatar_filename = NULL, avatar_version = 0, avatar_missing_count = 0 WHERE id = $1',
               [req.user.id]
             );
           } else {
             // Increment missing count
+            console.log(`Avatar missing (count: ${missingCount + 1}/10) for user ${req.user.id}`);
             await pool.query(
               'UPDATE users SET avatar_missing_count = COALESCE(avatar_missing_count, 0) + 1 WHERE id = $1',
               [req.user.id]
@@ -1211,39 +1212,45 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
     // Ensure avatars directory exists
     await fs.mkdir(avatarsDir, { recursive: true });
     
-    // Save file to disk
-    await fs.writeFile(filepath, processedBuffer);
+    // Get current avatar to delete old file later
+    const currentUser = await pool.query(
+      'SELECT avatar_filename FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    const oldAvatarFilename = currentUser.rows[0]?.avatar_filename;
     
-    // Verify file was written successfully
+    // IMPORTANT: Update database FIRST to prevent race condition with cleanup
+    // This ensures the filename is in the database before the file exists on disk
+    await pool.query(
+      'UPDATE users SET avatar_filename = $1, avatar_version = COALESCE(avatar_version, 1) + 1, avatar_updated_at = CURRENT_TIMESTAMP, avatar_missing_count = 0 WHERE id = $2',
+      [filename, req.user.id]
+    );
+    
     try {
+      // Now save file to disk
+      await fs.writeFile(filepath, processedBuffer);
+      
+      // Verify file was written successfully
       await fs.access(filepath);
       const stats = await fs.stat(filepath);
       if (stats.size === 0) {
         throw new Error('Written file is empty');
       }
-    } catch (verifyError) {
-      console.error('Avatar file verification failed:', verifyError);
+      
+      // Success - delete old avatar file if exists
+      if (oldAvatarFilename) {
+        const oldFilepath = join(__dirname, 'public', 'avatars', oldAvatarFilename);
+        fs.unlink(oldFilepath).catch(() => {}); // Ignore errors if file doesn't exist
+      }
+    } catch (fileError) {
+      // File save failed - rollback database update
+      console.error('Avatar file save failed:', fileError);
+      await pool.query(
+        'UPDATE users SET avatar_filename = $1 WHERE id = $2',
+        [oldAvatarFilename, req.user.id]
+      );
       return res.status(500).json({ error: 'Failed to save avatar file' });
     }
-    
-    // Get current avatar to delete old file
-    const currentUser = await pool.query(
-      'SELECT avatar_filename FROM users WHERE id = $1',
-      [req.user.id]
-    );
-    
-    // Delete old avatar file if exists
-    if (currentUser.rows[0]?.avatar_filename) {
-      const oldFilepath = join(__dirname, 'public', 'avatars', currentUser.rows[0].avatar_filename);
-      fs.unlink(oldFilepath).catch(() => {}); // Ignore errors if file doesn't exist
-    }
-    
-    // Update database with new filename and increment version for cache busting
-    // Also reset missing count since we have a new avatar
-    await pool.query(
-      'UPDATE users SET avatar_filename = $1, avatar_version = COALESCE(avatar_version, 1) + 1, avatar_updated_at = CURRENT_TIMESTAMP, avatar_missing_count = 0 WHERE id = $2',
-      [filename, req.user.id]
-    );
 
     // Update session with fresh data from database
     const updatedUser = await pool.query(

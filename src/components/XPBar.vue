@@ -43,8 +43,6 @@
           <div v-for="(player, index) in leaderboardData" :key="player.id" 
                class="leaderboard-item" :class="{ 'current-user': player.id === user.id }">
             <div class="rank">{{ index + 1 }}</div>
-            <img v-if="player.avatar" :src="player.avatar" :alt="player.display_name" class="player-avatar" @error="handleLeaderboardAvatarError($event, player)" />
-            <div v-else class="player-avatar-placeholder">{{ player.display_name[0] }}</div>
             <div class="player-info">
               <div class="player-name">{{ player.display_name }}</div>
               <div class="player-level">Level {{ player.level }} • {{ player.xp }} XP</div>
@@ -217,12 +215,6 @@ export default {
       document.removeEventListener('click', handleClickOutside);
     });
 
-    // Handle avatar loading errors in leaderboard
-    const handleLeaderboardAvatarError = (event, player) => {
-      // Hide the broken image
-      event.target.style.display = 'none';
-      // The placeholder with initials will show instead
-    };
 
     return {
       currentLevel,
@@ -235,8 +227,7 @@ export default {
       leaderboardData,
       loadingLeaderboard,
       leaderboardError,
-      toggleLeaderboard,
-      handleLeaderboardAvatarError
+      toggleLeaderboard
     };
   }
 };
@@ -609,7 +600,7 @@ export default {
 .leaderboard-item {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   padding: 12px;
   background: rgba(0, 0, 0, 0.3);
   border: 1px solid rgba(139, 69, 19, 0.5);
@@ -657,28 +648,6 @@ export default {
   background: radial-gradient(circle, #CD7F32, #8B4513);
 }
 
-.player-avatar, .player-avatar-placeholder {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: 2px solid #8B4513;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
-}
-
-.player-avatar {
-  object-fit: cover;
-}
-
-.player-avatar-placeholder {
-  background: linear-gradient(135deg, #8B4513, #A0522D);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  font-weight: bold;
-  color: #FFD700;
-  text-transform: uppercase;
-}
 
 .player-info {
   flex: 1;
@@ -730,12 +699,7 @@ export default {
   
   .leaderboard-item {
     padding: 10px;
-    gap: 10px;
-  }
-  
-  .player-avatar, .player-avatar-placeholder {
-    width: 36px;
-    height: 36px;
+    gap: 12px;
   }
   
   .player-name {
