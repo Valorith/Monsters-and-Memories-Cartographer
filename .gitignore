@@ -30,3 +30,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# User uploaded files
+public/avatars/*
+!public/avatars/.gitkeep

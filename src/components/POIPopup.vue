@@ -37,7 +37,7 @@
         placeholder="Enter description..."
       ></textarea>
       
-      <div class="poi-type">
+      <div v-if="localPoi.type !== undefined" class="poi-type">
         <span class="type-icon">{{ getTypeIcon(localPoi.type) }}</span>
         <span v-if="!isEditing.type" @click="isAdmin && startEdit('type')" class="type-text" :class="{ editable: isAdmin }">
           {{ formatType(localPoi.type) }}
@@ -59,9 +59,62 @@
         </select>
       </div>
       
-      <p v-if="isAdmin" class="edit-hint">Click any field to edit</p>
+      <div v-else class="poi-type">
+        <span class="type-icon">{{ localPoi.icon || '📍' }}</span>
+        <span class="type-text">Custom POI</span>
+      </div>
       
-      <button v-if="isAdmin" class="delete-btn" @click="handleDelete">
+      <div v-if="localPoi.display_created_by || localPoi.created_by || localPoi.owner_name" class="poi-creator">
+        <span class="creator-label">Created by:</span>
+        <span class="creator-name">{{ localPoi.display_created_by || localPoi.created_by || localPoi.owner_name }}</span>
+      </div>
+      
+      <!-- Custom POI Status -->
+      <div v-if="isCustomPOI && localPoi.status" class="poi-status">
+        <span class="status-label">Status:</span>
+        <span :class="['status-value', `status-${localPoi.status}`]">
+          {{ formatStatus(localPoi.status) }}
+        </span>
+      </div>
+      
+      <!-- Voting information for pending POIs -->
+      <div v-if="isCustomPOI && localPoi.status === 'pending' && localPoi.vote_score !== undefined" class="poi-voting-inline">
+        <span class="vote-item">
+          <span class="vote-icon">👍</span>
+          <span class="vote-count upvote">{{ localPoi.upvotes || 0 }}</span>
+        </span>
+        <span class="vote-item">
+          <span class="vote-icon">👎</span>
+          <span class="vote-count downvote">{{ localPoi.downvotes || 0 }}</span>
+        </span>
+        <span class="vote-total" :class="localPoi.vote_score > 0 ? 'positive' : localPoi.vote_score < 0 ? 'negative' : ''">
+          ({{ localPoi.vote_score > 0 ? '+' : '' }}{{ localPoi.vote_score || 0 }})
+        </span>
+      </div>
+      
+      <!-- Shared indicator -->
+      <div v-if="isSharedPOI" class="poi-shared">
+        <span class="shared-icon">🔗</span>
+        <span class="shared-text">Shared with you</span>
+      </div>
+      
+      <p v-if="canEdit" class="edit-hint">{{ isAdmin ? 'Click any field to edit' : 'Alt+drag to move' }}</p>
+      <p v-else-if="isOwnCustomPOI && localPoi.status === 'pending'" class="edit-hint pending-hint">
+        POI can not be edited while pending publication.
+      </p>
+      
+      <!-- Action buttons for custom POIs -->
+      <div v-if="isOwnCustomPOI && localPoi.status !== 'pending'" class="custom-poi-actions">
+        <button v-if="canPublish" class="publish-btn" @click="handlePublish">
+          Publish
+        </button>
+        <button class="delete-btn" @click="handleDelete">
+          Delete
+        </button>
+      </div>
+      
+      <!-- Admin delete button for regular POIs -->
+      <button v-else-if="isAdmin && !isCustomPOI" class="delete-btn" @click="handleDelete">
         Delete POI
       </button>
     </div>
@@ -93,9 +146,13 @@ export default {
     isLeftSide: {
       type: Boolean,
       default: false
+    },
+    currentUserId: {
+      type: Number,
+      default: null
     }
   },
-  emits: ['close', 'delete', 'update', 'confirmUpdate'],
+  emits: ['close', 'delete', 'update', 'confirmUpdate', 'publish'],
   setup(props, { emit }) {
     const localPoi = ref({ ...props.poi })
     const originalValues = ref({})
@@ -119,7 +176,31 @@ export default {
       top: `${props.position.y}px`
     }))
     
+    const isCustomPOI = computed(() => {
+      return props.poi && props.poi.is_custom === true
+    })
+    
+    const isOwnCustomPOI = computed(() => {
+      return isCustomPOI.value && props.poi.user_id === props.currentUserId
+    })
+    
+    const isSharedPOI = computed(() => {
+      return isCustomPOI.value && props.poi.user_id !== props.currentUserId
+    })
+    
+    const canEdit = computed(() => {
+      // Admins can always edit
+      if (props.isAdmin) return true
+      // Users can edit their own custom POIs only if not pending
+      return isOwnCustomPOI.value && props.poi.status !== 'pending'
+    })
+    
+    const canPublish = computed(() => {
+      return isOwnCustomPOI.value && (props.poi.status === 'private' || props.poi.status === 'rejected')
+    })
+    
     const getTypeIcon = (type) => {
+      if (!type) return '📍'
       const icons = {
         landmark: '🏛️',
         quest: '❗',
@@ -132,11 +213,12 @@ export default {
     }
     
     const formatType = (type) => {
+      if (!type) return 'Custom'
       return type.charAt(0).toUpperCase() + type.slice(1)
     }
     
     const startEdit = async (field) => {
-      if (!props.isAdmin) return
+      if (!canEdit.value) return
       
       // Store original value
       originalValues.value[field] = localPoi.value[field]
@@ -201,6 +283,21 @@ export default {
       emit('delete', props.poi.id)
     }
     
+    const handlePublish = () => {
+      emit('publish', props.poi.id)
+    }
+    
+    const formatStatus = (status) => {
+      const statusMap = {
+        'private': 'Private',
+        'pending': 'Pending Approval',
+        'published': 'Published',
+        'rejected': 'Rejected'
+      }
+      return statusMap[status] || status
+    }
+    
+    
     const deleteField = (field) => {
       const oldValue = localPoi.value[field]
       
@@ -229,7 +326,14 @@ export default {
       saveEdit,
       cancelEdit,
       handleDelete,
-      deleteField
+      deleteField,
+      isCustomPOI,
+      isOwnCustomPOI,
+      isSharedPOI,
+      canEdit,
+      canPublish,
+      formatStatus,
+      handlePublish
     }
   }
 }
@@ -399,6 +503,24 @@ export default {
   text-transform: capitalize;
 }
 
+.poi-creator {
+  font-size: 0.85rem;
+  color: #999;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.creator-label {
+  color: #777;
+}
+
+.creator-name {
+  color: #FFD700;
+  font-weight: 500;
+}
+
 .type-text.editable {
   cursor: pointer;
   padding: 2px 6px;
@@ -464,5 +586,137 @@ export default {
 
 .delete-btn:hover {
   background: #b91c1c;
+}
+
+.poi-status {
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.status-label {
+  color: #999;
+}
+
+.status-value {
+  font-weight: 500;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.status-private {
+  background: rgba(108, 117, 125, 0.2);
+  color: #adb5bd;
+}
+
+.status-pending {
+  background: rgba(255, 193, 7, 0.2);
+  color: #ffc107;
+}
+
+.status-published {
+  background: rgba(40, 167, 69, 0.2);
+  color: #28a745;
+}
+
+.status-rejected {
+  background: rgba(220, 53, 69, 0.2);
+  color: #dc3545;
+}
+
+.custom-poi-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.custom-poi-actions button {
+  flex: 1;
+  margin-top: 0;
+}
+
+.publish-btn {
+  padding: 0.5rem;
+  background: #28a745;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.publish-btn:hover {
+  background: #218838;
+}
+
+.poi-shared {
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  color: #17a2b8;
+}
+
+.shared-icon {
+  font-size: 1rem;
+}
+
+.shared-text {
+  font-style: italic;
+}
+
+.pending-hint {
+  color: #ffc107;
+  font-weight: 500;
+}
+
+.poi-voting-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.poi-voting-inline .vote-item {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.poi-voting-inline .vote-icon {
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+.poi-voting-inline .vote-count {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.poi-voting-inline .vote-count.upvote {
+  color: #28a745;
+}
+
+.poi-voting-inline .vote-count.downvote {
+  color: #dc3545;
+}
+
+.poi-voting-inline .vote-total {
+  font-weight: 600;
+  color: #999;
+}
+
+.poi-voting-inline .vote-total.positive {
+  color: #28a745;
+}
+
+.poi-voting-inline .vote-total.negative {
+  color: #dc3545;
 }
 </style>

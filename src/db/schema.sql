@@ -108,17 +108,22 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS update_maps_updated_at ON maps;
 CREATE TRIGGER update_maps_updated_at BEFORE UPDATE ON maps
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_pois_updated_at ON pois;
 CREATE TRIGGER update_pois_updated_at BEFORE UPDATE ON pois
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_connections_updated_at ON connections;
 CREATE TRIGGER update_connections_updated_at BEFORE UPDATE ON connections
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_point_connectors_updated_at ON point_connectors;
 CREATE TRIGGER update_point_connectors_updated_at BEFORE UPDATE ON point_connectors
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_zone_connectors_updated_at ON zone_connectors;
 CREATE TRIGGER update_zone_connectors_updated_at BEFORE UPDATE ON zone_connectors
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

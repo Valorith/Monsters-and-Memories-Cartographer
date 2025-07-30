@@ -1,0 +1,3026 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account Settings - MMC</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600&display=swap');
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a1a;
+      color: #e0e0e0;
+    }
+    
+    .account-header {
+      background: #2d2d2d;
+      color: white;
+      padding: 1rem 0;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+    
+    .header-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 2rem;
+    }
+    
+    .back-link {
+      color: #FFD700;
+      text-decoration: none;
+      font-size: 0.9rem;
+      display: inline-block;
+      margin-bottom: 0.5rem;
+    }
+    
+    .back-link:hover {
+      color: #FFA500;
+    }
+    
+    .account-header h1 {
+      margin: 0;
+      font-size: 2rem;
+      font-family: 'Cinzel', serif;
+      background: linear-gradient(135deg, #FFD700, #FFA500, #FF8C00);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    .account-container {
+      max-width: 1200px;
+      margin: 2rem auto;
+      padding: 0 2rem;
+      display: grid;
+      grid-template-columns: 250px 1fr;
+      gap: 2rem;
+    }
+    
+    .account-sidebar {
+      background: #2d2d2d;
+      border-radius: 8px;
+      padding: 1rem;
+      height: fit-content;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+    
+    .nav-item {
+      display: block;
+      padding: 0.75rem 1rem;
+      color: #ccc;
+      text-decoration: none;
+      border-radius: 6px;
+      margin-bottom: 0.5rem;
+      cursor: pointer;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+      font-size: 1rem;
+    }
+    
+    .nav-item:hover {
+      background: #3a3a3a;
+      color: white;
+    }
+    
+    .nav-item.active {
+      background: #4a7c59;
+      color: white;
+    }
+    
+    .account-content {
+      background: #2d2d2d;
+      border-radius: 8px;
+      padding: 2rem;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+    
+    .tab-content {
+      display: none;
+    }
+    
+    .tab-content.active {
+      display: block;
+    }
+    
+    .profile-card {
+      background: #3a3a3a;
+      border-radius: 8px;
+      padding: 2rem;
+      margin-bottom: 2rem;
+    }
+    
+    .profile-xp-section {
+      margin-top: 2rem;
+      padding-top: 2rem;
+      border-top: 1px solid #555;
+    }
+    
+    .xp-level-display {
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+    }
+    
+    .level-badge-large {
+      background: radial-gradient(circle, #FFD700, #FFA500);
+      border: 3px solid #8B4513;
+      border-radius: 50%;
+      width: 80px;
+      height: 80px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+    }
+    
+    .level-badge-large .level-number {
+      font-size: 32px;
+      font-weight: bold;
+      color: #2a1810;
+      font-family: 'Cinzel', serif;
+    }
+    
+    .level-badge-large .level-label {
+      font-size: 12px;
+      color: #2a1810;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-weight: bold;
+    }
+    
+    .xp-info-display {
+      flex: 1;
+    }
+    
+    .xp-info-display .xp-text {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      color: #FFD700;
+      font-family: 'Cinzel', serif;
+      margin-bottom: 0.5rem;
+    }
+    
+    .xp-info-display .current-xp {
+      font-size: 24px;
+      font-weight: bold;
+    }
+    
+    .xp-info-display .separator {
+      font-size: 20px;
+      color: #FFA500;
+    }
+    
+    .xp-info-display .next-level-xp {
+      font-size: 20px;
+      color: #FFA500;
+    }
+    
+    .xp-info-display .xp-label {
+      font-size: 16px;
+      margin-left: 8px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    
+    .xp-info-display .xp-bar-wrapper {
+      width: 100%;
+      height: 24px;
+      margin-bottom: 0.5rem;
+    }
+    
+    .xp-info-display .xp-bar-background {
+      width: 100%;
+      height: 100%;
+      background: #1a1a1a;
+      border: 2px solid #8B4513;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    
+    .xp-info-display .xp-bar-fill {
+      height: 100%;
+      background: linear-gradient(to right, #FF6B35, #FFD700, #FFA500);
+      transition: width 0.3s ease;
+    }
+    
+    .xp-rank {
+      color: #999;
+      font-size: 0.9rem;
+    }
+    
+    .profile-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    
+    .stat-card {
+      background: #3a3a3a;
+      border-radius: 8px;
+      padding: 1.5rem;
+      border: 1px solid #444;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      transition: all 0.3s ease;
+    }
+    
+    .stat-card:hover {
+      background: #424242;
+      border-color: #555;
+      transform: translateY(-2px);
+    }
+    
+    .stat-icon {
+      font-size: 2.5rem;
+      opacity: 0.8;
+    }
+    
+    .stat-info {
+      flex: 1;
+    }
+    
+    .stat-value {
+      font-size: 1.8rem;
+      font-weight: bold;
+      color: #FFD700;
+      font-family: 'Cinzel', serif;
+    }
+    
+    .stat-label {
+      font-size: 0.9rem;
+      color: #999;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    @media (max-width: 768px) {
+      .profile-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      
+      .xp-level-display {
+        flex-direction: column;
+        text-align: center;
+      }
+    }
+    
+    .profile-header {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    
+    .profile-avatar {
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 3px solid #4a7c59;
+    }
+    
+    .admin-badge {
+      display: inline-block;
+      background: #4CAF50;
+      color: white;
+      padding: 6px 16px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      align-self: flex-start;
+      white-space: nowrap;
+    }
+    
+    .preference-section {
+      margin-bottom: 2rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid #444;
+    }
+    
+    .preference-section:last-child {
+      border-bottom: none;
+    }
+    
+    .preference-item {
+      margin-bottom: 1rem;
+    }
+    
+    .preference-item label {
+      display: block;
+      color: #ccc;
+      font-size: 0.9rem;
+      margin-bottom: 0.5rem;
+    }
+    
+    .preference-item select {
+      width: 100%;
+      max-width: 300px;
+      padding: 0.75rem;
+      border: 1px solid #444;
+      border-radius: 4px;
+      font-size: 1rem;
+      background: #3a3a3a;
+      color: #e0e0e0;
+    }
+    
+    .btn {
+      background: #4a7c59;
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 4px;
+      font-size: 1rem;
+      cursor: pointer;
+      margin-top: 1rem;
+    }
+    
+    .btn:hover {
+      background: #3a6249;
+    }
+    
+    .secondary-btn {
+      background: #6c757d;
+    }
+    
+    .secondary-btn:hover {
+      background: #5a6268;
+    }
+    
+    .danger-btn {
+      background: #dc3545;
+    }
+    
+    .danger-btn:hover {
+      background: #c82333;
+    }
+    
+    .loading {
+      text-align: center;
+      padding: 4rem;
+      color: #ccc;
+    }
+    
+    .error {
+      background: #f8d7da;
+      color: #721c24;
+      padding: 1rem;
+      border-radius: 4px;
+      margin-bottom: 1rem;
+    }
+    
+    .success {
+      background: #d4edda;
+      color: #155724;
+      padding: 1rem;
+      border-radius: 4px;
+      margin-bottom: 1rem;
+    }
+    
+    .admin-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    
+    .admin-table th {
+      background: #3a3a3a;
+      padding: 0.75rem;
+      text-align: left;
+      font-weight: 600;
+      color: #e0e0e0;
+      border-bottom: 2px solid #444;
+    }
+    
+    .admin-table td {
+      padding: 0.75rem;
+      border-bottom: 1px solid #444;
+      color: #ccc;
+      vertical-align: middle;
+    }
+    
+    .admin-table td img {
+      display: block;
+      margin: 0 auto;
+      object-fit: cover;
+    }
+    
+    .admin-table tr:hover {
+      background: #333;
+    }
+    
+    .sub-header {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: #FFD700;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid #444;
+    }
+    
+    .pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 1rem;
+      margin-top: 1.5rem;
+      padding: 1rem 0;
+    }
+    
+    .pagination-btn {
+      background: #4a7c59;
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: background-color 0.3s;
+    }
+    
+    .pagination-btn:hover:not(:disabled) {
+      background: #5a8d69;
+    }
+    
+    .pagination-btn:disabled {
+      background: #333;
+      color: #666;
+      cursor: not-allowed;
+    }
+    
+    .pagination-info {
+      color: #ccc;
+      font-size: 0.9rem;
+    }
+    
+    .vote-buttons {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .vote-btn {
+      background: #444;
+      color: white;
+      border: none;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: all 0.2s;
+      min-width: 35px;
+    }
+    
+    .vote-btn:hover {
+      background: #555;
+    }
+    
+    .vote-btn.upvote {
+      background: #444;
+    }
+    
+    .vote-btn.upvote.active {
+      background: #4CAF50;
+    }
+    
+    .vote-btn.downvote {
+      background: #444;
+    }
+    
+    .vote-btn.downvote.active {
+      background: #f44336;
+    }
+    
+    .vote-score {
+      font-weight: bold;
+      color: #FFD700;
+      min-width: 40px;
+      text-align: center;
+    }
+    
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      animation: fadeIn 0.3s;
+    }
+    
+    .modal-content {
+      background-color: #2a2a2a;
+      margin: 5% auto;
+      padding: 0;
+      border: 1px solid rgba(255, 215, 0, 0.2);
+      border-radius: 12px;
+      width: 80%;
+      max-width: 600px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+      animation: slideIn 0.3s;
+    }
+    
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid #444;
+      background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 165, 0, 0.05));
+      border-radius: 12px 12px 0 0;
+    }
+    
+    .modal-header h2 {
+      margin: 0;
+      color: #FFD700;
+      font-size: 1.5rem;
+      font-family: 'Cinzel', serif;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+    
+    .modal-body {
+      padding: 1.5rem;
+    }
+    
+    .modal-body h3 {
+      color: #FFD700;
+      margin-bottom: 0.5rem;
+    }
+    
+    .modal-body p {
+      color: #ccc;
+      margin-bottom: 1rem;
+    }
+    
+    .close-btn {
+      background: none;
+      border: none;
+      color: #ccc;
+      font-size: 1.5rem;
+      cursor: pointer;
+      padding: 0;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      transition: all 0.2s;
+    }
+    
+    .close-btn:hover {
+      background: #444;
+      color: white;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    @keyframes slideIn {
+      from { 
+        transform: translateY(-50px);
+        opacity: 0;
+      }
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+    
+    .small-btn {
+      background: #4a7c59;
+      color: white;
+      border: none;
+      padding: 0.25rem 0.75rem;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+    
+    .small-btn:hover {
+      background: #3a6249;
+    }
+    
+    .small-btn.secondary-btn {
+      background: #6c757d;
+    }
+    
+    .small-btn.secondary-btn:hover {
+      background: #5a6268;
+    }
+    
+    .small-btn.danger-btn {
+      background: #dc3545;
+    }
+    
+    .small-btn.danger-btn:hover {
+      background: #c82333;
+    }
+    
+    .small-btn.warning-btn {
+      background: #FF6B35;
+    }
+    
+    .small-btn.warning-btn:hover {
+      background: #FF5722;
+    }
+    
+    .small-btn.info-btn {
+      background: #17a2b8;
+    }
+    
+    .small-btn.info-btn:hover {
+      background: #138496;
+    }
+    
+    .small-btn.success-btn {
+      background: #28a745;
+    }
+    
+    .small-btn.success-btn:hover {
+      background: #218838;
+    }
+    
+    .action-buttons {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      justify-content: flex-start;
+      align-items: center;
+    }
+    
+    .action-group {
+      display: flex;
+      gap: 0.25rem;
+    }
+    
+    .admin-actions {
+      border-left: 2px solid #444;
+      padding-left: 0.5rem;
+      margin-left: 0.25rem;
+    }
+    
+    .btn-icon {
+      margin-right: 0.25rem;
+      display: inline-block;
+    }
+    /* Voting Status Bar Styles */
+    .vote-status-row {
+      background: transparent !important;
+    }
+    
+    .vote-status-row:hover {
+      background: transparent !important;
+    }
+    
+    .vote-status-row td {
+      border: none !important;
+      border-top: none !important;
+      padding-top: 0 !important;
+      padding-bottom: 0.75rem !important;
+      background: transparent !important;
+    }
+    
+    /* Remove bottom border from POI data rows when followed by status bar */
+    .admin-table tbody tr:has(+ .vote-status-row) td {
+      border-bottom: none !important;
+    }
+    
+    /* Fallback for browsers without :has() support */
+    .admin-table tbody tr.poi-data-row td {
+      border-bottom: none !important;
+    }
+    
+    /* Restore border for status rows followed by data rows */
+    .admin-table tbody tr.vote-status-row + tr.poi-data-row td {
+      border-top: 1px solid #dee2e6 !important;
+    }
+    
+    .vote-status-bar {
+      width: 100%;
+      padding: 0 1rem;
+    }
+    
+    .vote-bar-track {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      width: 100%;
+    }
+    
+    .vote-bar-container {
+      flex: 1;
+      height: 16px;
+      background: #f8f8f8;
+      border-radius: 8px;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid #ddd;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+    }
+    
+    .vote-bar-fill {
+      position: absolute;
+      height: 100%;
+      transition: all 0.3s ease;
+      opacity: 0.9;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+      z-index: 0;
+    }
+    
+    .vote-bar-marker {
+      position: absolute;
+      width: 2px;
+      height: 100%;
+      background: #333;
+      top: 0;
+      transform: translateX(-50%);
+      z-index: 2;
+      box-shadow: 0 0 2px rgba(0,0,0,0.3);
+    }
+    
+    .vote-bar-center {
+      position: absolute;
+      width: 2px;
+      height: 100%;
+      background: #333;
+      left: 50%;
+      top: 0;
+      transform: translateX(-50%);
+      z-index: 1;
+      box-shadow: 0 0 1px rgba(0,0,0,0.5);
+    }
+    
+    .vote-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      white-space: nowrap;
+      min-width: 85px;
+      text-align: center;
+    }
+    
+    .vote-label.reject {
+      color: #dc3545;
+    }
+    
+    .vote-label.approve {
+      color: #28a745;
+    }
+    
+    .xp-input {
+      width: 80px;
+      padding: 0.25rem 0.5rem;
+      border: 1px solid #555;
+      border-radius: 4px;
+      font-size: 1rem;
+      text-align: center;
+      background: #2d2d2d;
+      color: #e0e0e0;
+    }
+    
+    .xp-input:focus {
+      outline: none;
+      border-color: #4a7c59;
+      background: #1a1a1a;
+      box-shadow: 0 0 0 2px rgba(74, 124, 89, 0.3);
+    }
+    
+    .btn-sm {
+      padding: 0.25rem 0.75rem;
+      font-size: 0.875rem;
+    }
+    
+    .admin-section {
+      background: #3a3a3a;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      border: 1px solid #444;
+    }
+    
+    .admin-section h3 {
+      margin: 0 0 0.5rem 0;
+      color: #FFD700;
+      font-size: 1.3rem;
+    }
+    
+    #toggle-admin-btn.small-btn {
+      background: #6f42c1;
+    }
+    
+    #toggle-admin-btn.small-btn:hover {
+      background: #5930a1;
+    }
+  </style>
+  <script src="/safe-html.js"></script>
+  <script src="/csrf-helper.js"></script>
+</head>
+<body>
+  <div id="app">
+    <header class="account-header">
+      <div class="header-content">
+        <a href="/" class="back-link">← Back to Maps</a>
+        <h1>Account Settings</h1>
+      </div>
+    </header>
+
+    <div class="account-container" id="account-content" style="display: none;">
+      <div class="account-sidebar">
+        <button class="nav-item active" onclick="showTab('profile')">👤 Profile</button>
+        <button class="nav-item" onclick="showTab('preferences')">⚙️ Preferences</button>
+        <button class="nav-item" onclick="showTab('privacy')">🔒 Privacy & Security</button>
+        <button class="nav-item" onclick="showTab('custom-pois')">📍 Custom POIs</button>
+        <button class="nav-item" id="admin-tab-btn" style="display: none;" onclick="showTab('admin')">👑 Admin</button>
+      </div>
+
+      <div class="account-content">
+        <div id="message"></div>
+        
+        <!-- Profile Tab -->
+        <div id="profile-tab" class="tab-content active">
+          <h2>Profile Information</h2>
+          
+          <!-- Main Profile Card -->
+          <div class="profile-card">
+            <div class="profile-header">
+              <img id="user-avatar" class="profile-avatar" alt="">
+              <div style="flex: 1;">
+                <h3 id="user-name"></h3>
+                <p id="user-email"></p>
+              </div>
+              <span id="admin-badge" class="admin-badge" style="display: none;">Administrator</span>
+            </div>
+            
+            <!-- XP and Level Info -->
+            <div class="profile-xp-section">
+              <div class="xp-level-display">
+                <div class="level-badge-large">
+                  <div class="level-number" id="user-level">1</div>
+                  <div class="level-label">Level</div>
+                </div>
+                <div class="xp-info-display">
+                  <div class="xp-text">
+                    <span class="current-xp" id="user-current-xp">0</span>
+                    <span class="separator">/</span>
+                    <span class="next-level-xp" id="user-next-level-xp">100</span>
+                    <span class="xp-label">XP</span>
+                  </div>
+                  <div class="xp-bar-wrapper">
+                    <div class="xp-bar-background">
+                      <div class="xp-bar-fill" id="user-xp-bar" style="width: 0%;"></div>
+                    </div>
+                  </div>
+                  <div class="xp-rank" id="user-rank">Rank: #--</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Statistics Section -->
+          <div class="profile-stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon">📍</div>
+              <div class="stat-info">
+                <div class="stat-value" id="total-pois">0</div>
+                <div class="stat-label">POIs Created</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">✅</div>
+              <div class="stat-info">
+                <div class="stat-value" id="approved-pois">0</div>
+                <div class="stat-label">Approved POIs</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">⏳</div>
+              <div class="stat-info">
+                <div class="stat-value" id="pending-pois">0</div>
+                <div class="stat-label">Pending POIs</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">🗳️</div>
+              <div class="stat-info">
+                <div class="stat-value" id="total-votes">0</div>
+                <div class="stat-label">Votes Cast</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Preferences Tab -->
+        <div id="preferences-tab" class="tab-content">
+          <h2>Preferences</h2>
+          
+          <div class="preference-section">
+            <h3>Profile Customization</h3>
+            
+            <!-- Profile Picture -->
+            <div style="margin-bottom: 2rem;">
+              <h4 style="color: #FFD700; margin-bottom: 1rem;">Profile Picture</h4>
+              <div style="display: flex; align-items: center; gap: 2rem;">
+                <div style="position: relative;">
+                  <img id="preview-avatar" style="width: 100px; height: 100px; border-radius: 50%; border: 3px solid #4a7c59; object-fit: cover;">
+                  <div id="avatar-loading" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); border-radius: 50%; align-items: center; justify-content: center;">
+                    <div style="color: white;">Uploading...</div>
+                  </div>
+                </div>
+                <div style="flex: 1;">
+                  <p style="color: #999; margin-bottom: 1rem; font-size: 0.9rem;">
+                    Upload a custom profile picture. Images will be resized to 200x200 pixels.
+                  </p>
+                  <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <label for="avatar-upload" class="btn btn-sm" style="cursor: pointer;">
+                      📷 Upload New Picture
+                    </label>
+                    <input type="file" id="avatar-upload" accept="image/*" style="display: none;" onchange="handleAvatarUpload(event)">
+                    <button id="reset-avatar-btn" class="btn secondary-btn btn-sm" onclick="resetAvatar()" style="display: none;">
+                      ↩️ Reset to Google Picture
+                    </button>
+                  </div>
+                  <p style="color: #666; margin-top: 0.5rem; font-size: 0.85rem;">
+                    Maximum file size: 5MB. Supported formats: JPG, PNG, GIF, WebP
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Nickname -->
+            <div style="margin-bottom: 2rem;">
+              <h4 style="color: #FFD700; margin-bottom: 1rem;">Display Name (Nickname)</h4>
+              <p style="color: #999; margin-bottom: 1rem; font-size: 0.9rem;">
+                Set a nickname that will be displayed instead of your real name throughout the application.
+              </p>
+              <div style="display: flex; gap: 1rem; align-items: center; max-width: 500px;">
+                <input type="text" id="nickname-input" placeholder="Enter nickname (optional)" maxlength="50" 
+                       style="flex: 1; padding: 0.5rem; border: 1px solid #555; border-radius: 4px; 
+                              background: #2d2d2d; color: #e0e0e0;">
+                <button class="btn btn-sm" onclick="updateNickname()">Save</button>
+              </div>
+              <p style="color: #666; margin-top: 0.5rem; font-size: 0.85rem;">
+                Leave empty to use your real name. 3-50 characters, letters, numbers, spaces, underscores, and hyphens only.
+              </p>
+              <p id="nickname-error" style="color: #dc3545; margin-top: 0.5rem; font-size: 0.85rem; display: none;"></p>
+            </div>
+          </div>
+          
+          <div class="preference-section">
+            <h3>Display Settings</h3>
+            <div style="text-align: center; padding: 2rem;">
+              <div style="display: inline-block; background: #4a7c59; color: white; padding: 0.75rem 2rem; border-radius: 30px; font-size: 1.1rem; font-weight: 500; box-shadow: 0 4px 12px rgba(74, 124, 89, 0.3);">
+                ✨ More Options Coming Soon
+              </div>
+              <p style="margin-top: 1rem; color: #999; font-size: 0.95rem;">
+                Theme customization and other display options will be available in a future update.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Privacy Tab -->
+        <div id="privacy-tab" class="tab-content">
+          <h2>Privacy & Security</h2>
+          <div class="preference-section">
+            <h3>Data & Privacy</h3>
+            <p>Your data is stored securely and is never shared with third parties.</p>
+            <button class="btn danger-btn" onclick="deleteAccount()">Delete Account</button>
+          </div>
+          
+          <div class="preference-section">
+            <h3>Active Sessions</h3>
+            <p>Manage your active login sessions across devices.</p>
+            <button class="btn secondary-btn" onclick="logoutAll()">Log Out All Devices</button>
+          </div>
+        </div>
+
+        <!-- Custom POIs Tab -->
+        <div id="custom-pois-tab" class="tab-content">
+          <h2 style="color: #FFD700;">Custom Points of Interest (POI)</h2>
+          <p style="color: #999; margin-bottom: 2rem;">Create personal markers on maps that only you can see. Share them with friends or keep them private.</p>
+          
+          <div id="custom-pois-loading" style="text-align: center; padding: 2rem;">
+            Loading custom POIs...
+          </div>
+          
+          <div id="custom-pois-content" style="display: none;">
+            <h3 class="sub-header">My POIs</h3>
+            
+            <table id="custom-pois-table" class="admin-table">
+              <thead>
+                <tr>
+                  <th>Icon</th>
+                  <th>Name</th>
+                  <th>Map</th>
+                  <th>Created</th>
+                  <th>Status</th>
+                  <th>Shared</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="custom-pois-tbody"></tbody>
+            </table>
+            
+            <!-- My POIs Pagination -->
+            <div id="my-pois-pagination" class="pagination" style="display: none;">
+              <button class="pagination-btn" onclick="changeMyPoisPage(-1)" id="my-pois-prev">Previous</button>
+              <span class="pagination-info" id="my-pois-page-info">Page 1 of 1</span>
+              <button class="pagination-btn" onclick="changeMyPoisPage(1)" id="my-pois-next">Next</button>
+            </div>
+            
+            <!-- Shared POIs Section -->
+            <div id="shared-pois-section" style="display: block; margin-top: 3rem;">
+              <h3 class="sub-header">Shared POIs</h3>
+              <p style="color: #999; margin-bottom: 1rem; font-size: 0.9rem;">POIs that other users have shared with you.</p>
+              
+              <table id="shared-pois-table" class="admin-table">
+                <thead>
+                  <tr>
+                    <th>Icon</th>
+                    <th>Name</th>
+                    <th>Map</th>
+                    <th>Shared By</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="shared-pois-tbody"></tbody>
+              </table>
+              
+              <!-- Shared POIs Pagination -->
+              <div id="shared-pois-pagination" class="pagination" style="display: none;">
+                <button class="pagination-btn" onclick="changeSharedPoisPage(-1)" id="shared-pois-prev">Previous</button>
+                <span class="pagination-info" id="shared-pois-page-info">Page 1 of 1</span>
+                <button class="pagination-btn" onclick="changeSharedPoisPage(1)" id="shared-pois-next">Next</button>
+              </div>
+            </div>
+            
+            <!-- Pending POIs Section -->
+            <div id="pending-pois-section" style="display: block; margin-top: 3rem;">
+              <h3 class="sub-header">Pending Community POIs</h3>
+              <p style="color: #999; margin-bottom: 1rem; font-size: 0.9rem;">Vote on POIs submitted by the community. POIs need 10 total upvotes to be approved (creator's vote counts as 1). POIs with -10 total score get rejected.</p>
+              
+              <div id="pending-pois-loading" style="display: none; text-align: center; padding: 2rem;">
+                Loading pending POIs...
+              </div>
+              
+              <table id="pending-pois-table" class="admin-table">
+                <thead>
+                  <tr>
+                    <th>Icon</th>
+                    <th>Name</th>
+                    <th>Map</th>
+                    <th>Submitted By</th>
+                    <th>Vote Score</th>
+                    <th>Your Vote</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="pending-pois-tbody"></tbody>
+              </table>
+              
+              <!-- Pending POIs Pagination -->
+              <div id="pending-pois-pagination" class="pagination" style="display: none;">
+                <button class="pagination-btn" onclick="changePendingPoisPage(-1)" id="pending-pois-prev">Previous</button>
+                <span class="pagination-info" id="pending-pois-page-info">Page 1 of 1</span>
+                <button class="pagination-btn" onclick="changePendingPoisPage(1)" id="pending-pois-next">Next</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Admin Tab -->
+        <div id="admin-tab" class="tab-content">
+          <h2 style="color: #FFD700;">Admin Settings</h2>
+          
+          <div class="admin-section">
+            <h3>XP Configuration</h3>
+            <p style="color: #999; margin-bottom: 1.5rem;">Configure experience points awarded for various actions</p>
+            
+            <div id="xp-config-loading" style="text-align: center; padding: 2rem;">
+              Loading XP configuration...
+            </div>
+            
+            <div id="xp-config-content" style="display: none;">
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>Action</th>
+                    <th>Description</th>
+                    <th>XP Value</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="xp-config-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+          
+          <div class="admin-section">
+            <h3>User Management</h3>
+            <p style="color: #999; margin-bottom: 1.5rem;">View and manage all user accounts</p>
+            
+            <div id="user-management-loading" style="text-align: center; padding: 2rem;">
+              Loading users...
+            </div>
+            
+            <div id="user-management-content" style="display: none;">
+              <div style="margin-bottom: 1rem;">
+                <input type="text" id="user-search" placeholder="Search users by name or email..." 
+                       style="width: 300px; padding: 0.5rem; border: 1px solid #555; border-radius: 4px; 
+                              background: #2d2d2d; color: #e0e0e0;"
+                       onkeyup="searchUsers()">
+              </div>
+              
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>Avatar</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>XP</th>
+                    <th>POIs</th>
+                    <th>Status</th>
+                    <th>Joined</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="users-tbody"></tbody>
+              </table>
+              
+              <!-- Users Pagination -->
+              <div id="users-pagination" class="pagination" style="display: none;">
+                <button class="pagination-btn" onclick="changeUsersPage(-1)" id="users-prev">Previous</button>
+                <span class="pagination-info" id="users-page-info">Page 1 of 1</span>
+                <button class="pagination-btn" onclick="changeUsersPage(1)" id="users-next">Next</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="loading" class="loading">
+      Loading account information...
+    </div>
+
+    <div id="not-authenticated" class="account-container" style="display: none;">
+      <div class="account-content">
+        <h2>Not Authenticated</h2>
+        <p>Please sign in to access your account settings.</p>
+        <a href="/" class="btn">Return to Maps</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Vote Inspect Modal -->
+  <div id="vote-inspect-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Vote Details</h2>
+        <button class="close-btn" onclick="closeVoteModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <h3 id="inspect-poi-name"></h3>
+        <p id="inspect-poi-stats"></p>
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Voter</th>
+              <th>Vote</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody id="vote-details-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- XP Adjustment Modal -->
+  <div id="xp-adjustment-modal" class="modal" style="display: none; z-index: 1001;">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2>Adjust Experience Points</h2>
+        <button class="close-btn" onclick="closeXPModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="text-align: center; margin-bottom: 1.5rem;">
+          <img id="xp-user-avatar" style="width: 60px; height: 60px; border-radius: 50%; border: 3px solid #FFD700; margin-bottom: 0.5rem;">
+          <h3 id="xp-user-name" style="margin: 0; color: #FFD700;"></h3>
+          <p style="color: #999; margin: 0.5rem 0;">Current XP: <span id="xp-current" style="color: #FFD700; font-weight: bold;"></span></p>
+        </div>
+        
+        <div style="background: #2d2d2d; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem;">
+          <label style="display: block; margin-bottom: 0.5rem; color: #e0e0e0;">New XP Value:</label>
+          <input type="number" id="xp-new-value" min="0" style="width: 100%; padding: 0.5rem; border: 1px solid #555; border-radius: 4px; background: #1a1a1a; color: #e0e0e0; font-size: 1.1rem;">
+          
+          <label style="display: block; margin-top: 1rem; margin-bottom: 0.5rem; color: #e0e0e0;">Reason (optional):</label>
+          <input type="text" id="xp-reason" placeholder="e.g., Bonus for exceptional contribution" style="width: 100%; padding: 0.5rem; border: 1px solid #555; border-radius: 4px; background: #1a1a1a; color: #e0e0e0;">
+        </div>
+        
+        <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+          <button class="btn secondary-btn" onclick="closeXPModal()">Cancel</button>
+          <button class="btn" onclick="updateUserXP()" style="background: #FFD700; color: #2a1810;">Update XP</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- User Detail Modal -->
+  <div id="user-detail-modal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 800px;">
+      <div class="modal-header">
+        <h2>User Details</h2>
+        <button class="close-btn" onclick="closeUserModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; gap: 2rem; margin-bottom: 2rem;">
+          <div style="flex: 1;">
+            <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+              <img id="detail-user-avatar" style="width: 80px; height: 80px; border-radius: 50%; border: 3px solid #4a7c59;">
+              <div>
+                <h3 id="detail-user-name" style="margin: 0; color: #FFD700;"></h3>
+                <p id="detail-user-email" style="margin: 0.25rem 0; color: #999;"></p>
+                <span id="detail-user-status" style="display: inline-block; padding: 0.25rem 0.75rem; border-radius: 4px; font-size: 0.85rem;"></span>
+              </div>
+            </div>
+            
+            <div style="background: #2d2d2d; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+              <h4 style="color: #FFD700; margin-top: 0;">Account Information</h4>
+              <p><strong>User ID:</strong> <span id="detail-user-id"></span></p>
+              <p><strong>Joined:</strong> <span id="detail-user-joined"></span></p>
+              <p><strong>Last Active:</strong> <span id="detail-user-last-active"></span></p>
+              <p style="display: flex; justify-content: space-between; align-items: center;">
+                <strong>XP:</strong> 
+                <span style="display: flex; align-items: center; gap: 0.5rem;">
+                  <span id="detail-user-xp" style="color: #FFD700; font-weight: bold;"></span>
+                  <button class="small-btn" onclick="showXPAdjustment()" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; background: #FFD700; color: #2a1810;">
+                    <span class="btn-icon">✏️</span>Edit
+                  </button>
+                </span>
+              </p>
+              <p><strong>Admin:</strong> <span id="detail-user-admin"></span></p>
+            </div>
+          </div>
+          
+          <div style="flex: 1;">
+            <div style="background: #2d2d2d; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+              <h4 style="color: #FFD700; margin-top: 0;">Activity Statistics</h4>
+              <p><strong>Total POIs Created:</strong> <span id="detail-user-total-pois"></span></p>
+              <p><strong>Published POIs:</strong> <span id="detail-user-published-pois"></span></p>
+              <p><strong>Pending POIs:</strong> <span id="detail-user-pending-pois"></span></p>
+              <p><strong>Votes Cast:</strong> <span id="detail-user-votes"></span></p>
+            </div>
+            
+            <div style="background: #2d2d2d; padding: 1rem; border-radius: 8px;">
+              <h4 style="color: #FFD700; margin-top: 0;">Admin Actions</h4>
+              <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                <button id="ban-user-btn" class="small-btn danger-btn" onclick="banUser()">
+                  <span class="btn-icon">🚫</span>Ban User
+                </button>
+                <button id="unban-user-btn" class="small-btn success-btn" onclick="unbanUser()" style="display: none;">
+                  <span class="btn-icon">✅</span>Unban User
+                </button>
+                <button class="small-btn warning-btn" onclick="warnUser()">
+                  <span class="btn-icon">⚠️</span>Warn User
+                </button>
+                <button class="small-btn secondary-btn" onclick="logoutUser()">
+                  <span class="btn-icon">🚪</span>Force Logout
+                </button>
+                <button class="small-btn info-btn" onclick="viewUserPois()">
+                  <span class="btn-icon">📍</span>View POIs
+                </button>
+                <button id="toggle-admin-btn" class="small-btn" onclick="toggleAdminStatus()">
+                  <span class="btn-icon">👑</span><span id="toggle-admin-text">Make Admin</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div id="user-warnings-section" style="display: none;">
+          <h4 style="color: #FFD700;">Previous Warnings</h4>
+          <div id="user-warnings-list" style="background: #2d2d2d; padding: 1rem; border-radius: 8px; max-height: 200px; overflow-y: auto;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentUser = null;
+    let preferences = {};
+
+    // Helper functions for safe table cell creation
+    function createTextCell(text) {
+      const td = document.createElement('td');
+      td.textContent = text;
+      return td;
+    }
+    
+    function createImageCell(src, alt) {
+      const td = document.createElement('td');
+      td.style.textAlign = 'center';
+      const img = document.createElement('img');
+      img.src = src;
+      img.alt = alt;
+      img.style.width = '32px';
+      img.style.height = '32px';
+      img.style.borderRadius = '50%';
+      img.style.objectFit = 'cover';
+      img.style.display = 'block';
+      img.style.margin = '0 auto';
+      td.appendChild(img);
+      return td;
+    }
+    
+    function createXPCell(xp) {
+      const td = document.createElement('td');
+      td.style.color = '#FFD700';
+      td.style.fontWeight = 'bold';
+      td.textContent = xp;
+      return td;
+    }
+    
+    function createHTMLCell(html) {
+      const td = document.createElement('td');
+      if (window.safeHTML) {
+        td.innerHTML = window.safeHTML(html);
+      } else {
+        td.textContent = html.replace(/<[^>]*>/g, ''); // Strip HTML if no sanitizer
+      }
+      return td;
+    }
+    
+    function createButtonCell(userId, buttonText = 'Details', iconText = '👁️') {
+      const td = document.createElement('td');
+      const btn = document.createElement('button');
+      btn.className = 'small-btn info-btn';
+      btn.onclick = () => viewUserDetails(userId);
+      const icon = document.createElement('span');
+      icon.className = 'btn-icon';
+      icon.textContent = iconText;
+      btn.appendChild(icon);
+      btn.appendChild(document.createTextNode(buttonText));
+      td.appendChild(btn);
+      return td;
+    }
+    
+    // Helper functions for POI table cells
+    function createPOIRow(poi, actions, isOwner = true) {
+      const row = document.createElement('tr');
+      
+      // Icon cell
+      const iconCell = document.createElement('td');
+      iconCell.style.textAlign = 'center';
+      iconCell.style.fontSize = '1.5rem';
+      iconCell.textContent = poi.icon;
+      row.appendChild(iconCell);
+      
+      // Name cell
+      row.appendChild(createTextCell(poi.name));
+      
+      // Map name cell
+      row.appendChild(createTextCell(poi.map_name));
+      
+      if (isOwner) {
+        // Created date cell
+        row.appendChild(createTextCell(new Date(poi.created_at).toLocaleDateString()));
+        
+        // Status cell
+        const statusCell = document.createElement('td');
+        if (window.safeHTML) {
+          statusCell.innerHTML = window.safeHTML(getStatusBadge(poi.status));
+        } else {
+          statusCell.textContent = poi.status;
+        }
+        row.appendChild(statusCell);
+        
+        // Shared count cell
+        const sharedCell = document.createElement('td');
+        sharedCell.textContent = poi.shared_count || 0;
+        row.appendChild(sharedCell);
+      } else {
+        // Shared by cell
+        row.appendChild(createTextCell(poi.shared_by_name || 'Unknown'));
+      }
+      
+      // Actions cell
+      const actionsCell = document.createElement('td');
+      if (window.safeHTML) {
+        actionsCell.innerHTML = window.safeHTML(actions);
+      } else {
+        actionsCell.textContent = 'Actions';
+      }
+      row.appendChild(actionsCell);
+      
+      return row;
+    }
+
+    // Check authentication status
+    async function checkAuth() {
+      try {
+        const response = await fetch('/api/auth/status');
+        const data = await response.json();
+        
+        document.getElementById('loading').style.display = 'none';
+        
+        if (data.authenticated) {
+          currentUser = data.user;
+          document.getElementById('account-content').style.display = 'grid';
+          loadUserData();
+          loadPreferences();
+        } else {
+          document.getElementById('not-authenticated').style.display = 'block';
+        }
+      } catch (error) {
+        document.getElementById('loading').innerHTML = 'Error loading account information';
+      }
+    }
+
+    function loadUserData() {
+      // Use display name (nickname or real name)
+      const displayName = currentUser.displayName || currentUser.name;
+      document.getElementById('user-name').textContent = displayName;
+      document.getElementById('user-email').textContent = currentUser.email;
+      
+      // Use custom avatar or Google picture
+      const avatarUrl = currentUser.custom_avatar || currentUser.picture;
+      document.getElementById('user-avatar').src = avatarUrl;
+      document.getElementById('user-avatar').alt = displayName;
+      
+      // Initialize preferences tab
+      document.getElementById('preview-avatar').src = avatarUrl;
+      document.getElementById('nickname-input').value = currentUser.nickname || '';
+      
+      // Show/hide reset avatar button
+      if (currentUser.custom_avatar) {
+        document.getElementById('reset-avatar-btn').style.display = 'inline-block';
+      }
+      
+      if (currentUser.isAdmin) {
+        document.getElementById('admin-badge').style.display = 'inline-block';
+        document.getElementById('admin-tab-btn').style.display = 'block';
+      }
+      
+      // Load XP and level information
+      loadProfileStats();
+    }
+    
+    async function loadProfileStats() {
+      try {
+        // Get user XP and calculate level
+        const userXP = currentUser.xp || 0;
+        const xpProgress = getXPProgress(userXP);
+        
+        // Update level display
+        document.getElementById('user-level').textContent = xpProgress.level;
+        document.getElementById('user-current-xp').textContent = xpProgress.xpIntoLevel;
+        document.getElementById('user-next-level-xp').textContent = xpProgress.level * xpProgress.level * 100;
+        document.getElementById('user-xp-bar').style.width = xpProgress.progressPercent + '%';
+        
+        // Load stats
+        const [statsResponse, rankResponse] = await Promise.all([
+          fetch('/api/user/stats'),
+          fetch('/api/user/rank')
+        ]);
+        
+        if (statsResponse.ok) {
+          const stats = await statsResponse.json();
+          document.getElementById('total-pois').textContent = stats.totalPois || 0;
+          document.getElementById('approved-pois').textContent = stats.approvedPois || 0;
+          document.getElementById('pending-pois').textContent = stats.pendingPois || 0;
+          document.getElementById('total-votes').textContent = stats.totalVotes || 0;
+        }
+        
+        if (rankResponse.ok) {
+          const rankData = await rankResponse.json();
+          document.getElementById('user-rank').textContent = `Rank: #${rankData.rank}`;
+        }
+      } catch (error) {
+        console.error('Error loading profile stats:', error);
+      }
+    }
+    
+    function getXPProgress(totalXP) {
+      // Calculate level from total XP
+      let level = 1;
+      let xpForNextLevel = 0;
+      
+      // Calculate which level the user is at
+      while (xpForNextLevel <= totalXP) {
+        xpForNextLevel += level * level * 100;
+        if (xpForNextLevel <= totalXP) {
+          level++;
+        }
+      }
+      
+      // Calculate XP needed for current level and progress
+      const xpForCurrentLevel = level > 1 ? (level - 1) * (level - 1) * 100 * level / 2 : 0;
+      const xpIntoLevel = totalXP - xpForCurrentLevel;
+      const xpNeededForNextLevel = level * level * 100;
+      const progressPercent = Math.min(100, (xpIntoLevel / xpNeededForNextLevel) * 100);
+      
+      return {
+        level,
+        xpIntoLevel,
+        xpNeededForNextLevel,
+        progressPercent,
+        totalXP
+      };
+    }
+
+    async function loadPreferences() {
+      // Preferences are coming soon
+    }
+
+    function showTab(tabName) {
+      // Hide all tabs
+      document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+      });
+      
+      // Remove active class from all nav items
+      document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.remove('active');
+      });
+      
+      // Show selected tab
+      document.getElementById(tabName + '-tab').classList.add('active');
+      
+      // Add active class to clicked nav item
+      event.target.classList.add('active');
+    }
+
+    async function updatePreference(key, value) {
+      // Preferences are coming soon
+    }
+
+
+    async function deleteAccount() {
+      if (!confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
+        return;
+      }
+      
+      try {
+        const response = await window.csrfHelper.fetchWithCSRF('/api/user/account', {
+          method: 'DELETE'
+        });
+        
+        if (response.ok) {
+          window.location.href = '/';
+        }
+      } catch (error) {
+        showMessage('Failed to delete account', 'error');
+      }
+    }
+
+    async function logoutAll() {
+      try {
+        const response = await fetch('/api/auth/logout-all', {
+          method: 'POST'
+        });
+        
+        if (response.ok) {
+          window.location.href = '/';
+        }
+      } catch (error) {
+        showMessage('Failed to logout from all devices', 'error');
+      }
+    }
+
+    function showMessage(text, type) {
+      const messageEl = document.getElementById('message');
+      messageEl.textContent = text;
+      messageEl.className = type;
+      setTimeout(() => {
+        messageEl.textContent = '';
+        messageEl.className = '';
+      }, 3000);
+    }
+
+    // Custom POIs functionality
+    let customPois = [];
+    let pendingPois = [];
+    let myPoisCurrentPage = 1;
+    let sharedPoisCurrentPage = 1;
+    let pendingPoisCurrentPage = 1;
+    const ITEMS_PER_PAGE = 10;
+
+    async function loadCustomPois() {
+      try {
+        const response = await fetch('/api/custom-pois');
+        if (response.ok) {
+          customPois = await response.json();
+          displayCustomPois();
+        }
+      } catch (error) {
+        console.error('Error loading custom POIs:', error);
+      }
+    }
+
+    function displayCustomPois() {
+      document.getElementById('custom-pois-loading').style.display = 'none';
+      document.getElementById('custom-pois-content').style.display = 'block';
+      
+      // Separate owned POIs from shared POIs
+      const ownedPois = customPois.filter(poi => poi.is_owner);
+      const sharedPois = customPois.filter(poi => !poi.is_owner);
+      
+      // Display owned POIs with pagination
+      displayMyPois(ownedPois);
+      
+      // Display shared POIs with pagination
+      displaySharedPois(sharedPois);
+    }
+    
+    function displayMyPois(ownedPois) {
+      const totalPages = Math.ceil(ownedPois.length / ITEMS_PER_PAGE);
+      myPoisCurrentPage = Math.max(1, Math.min(myPoisCurrentPage, totalPages || 1));
+      
+      // Table is always visible
+      document.getElementById('custom-pois-table').style.display = 'table';
+      
+      const tbody = document.getElementById('custom-pois-tbody');
+      tbody.innerHTML = '';
+      
+      if (ownedPois.length === 0) {
+        // Show empty message in table
+        document.getElementById('my-pois-pagination').style.display = 'none';
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td colspan="7" style="text-align: center; color: #666; padding: 2rem;">
+            <p style="margin-bottom: 0.5rem;">You haven't created any custom POIs yet.</p>
+            <p style="font-size: 0.9rem; color: #999;">Right-click on any map to create your first custom POI!</p>
+          </td>
+        `;
+        tbody.appendChild(row);
+      } else {
+        // Only show pagination if there's more than one page
+        document.getElementById('my-pois-pagination').style.display = totalPages > 1 ? 'flex' : 'none';
+        
+        // Calculate pagination
+        const startIndex = (myPoisCurrentPage - 1) * ITEMS_PER_PAGE;
+        const endIndex = startIndex + ITEMS_PER_PAGE;
+        const pageItems = ownedPois.slice(startIndex, endIndex);
+        
+        pageItems.forEach(poi => {
+          const row = document.createElement('tr');
+          
+          // Icon cell
+          const iconCell = document.createElement('td');
+          iconCell.style.textAlign = 'center';
+          iconCell.style.fontSize = '1.5rem';
+          iconCell.textContent = poi.icon;
+          row.appendChild(iconCell);
+          
+          // Name cell
+          const nameCell = document.createElement('td');
+          nameCell.textContent = poi.name;
+          row.appendChild(nameCell);
+          
+          // Map cell
+          const mapCell = document.createElement('td');
+          mapCell.textContent = poi.map_name;
+          row.appendChild(mapCell);
+          
+          // Date cell
+          const dateCell = document.createElement('td');
+          dateCell.textContent = new Date(poi.created_at).toLocaleDateString();
+          row.appendChild(dateCell);
+          
+          // Status cell
+          const statusCell = document.createElement('td');
+          const statusBadge = getStatusBadge(poi.status);
+          if (window.safeHTML) {
+            statusCell.innerHTML = window.safeHTML(statusBadge);
+          } else {
+            statusCell.innerHTML = statusBadge; // Safe - our generated HTML
+          }
+          row.appendChild(statusCell);
+          
+          // Share cell
+          const shareCell = document.createElement('td');
+          shareCell.textContent = poi.share_count ? `${poi.share_count} users` : '-';
+          row.appendChild(shareCell);
+          
+          // Actions cell
+          const actionCell = document.createElement('td');
+          const actions = getPoiActions(poi);
+          if (window.safeHTML) {
+            actionCell.innerHTML = window.safeHTML(actions);
+          } else {
+            actionCell.innerHTML = actions; // Safe - our generated HTML
+          }
+          row.appendChild(actionCell);
+          
+          tbody.appendChild(row);
+        });
+        
+        // Update pagination controls
+        document.getElementById('my-pois-page-info').textContent = `Page ${myPoisCurrentPage} of ${totalPages}`;
+        document.getElementById('my-pois-prev').disabled = myPoisCurrentPage === 1;
+        document.getElementById('my-pois-next').disabled = myPoisCurrentPage === totalPages;
+      }
+    }
+    
+    function displaySharedPois(sharedPois) {
+      // Always display shared POIs section
+      document.getElementById('shared-pois-section').style.display = 'block';
+      
+      const totalPages = Math.ceil(sharedPois.length / ITEMS_PER_PAGE);
+      sharedPoisCurrentPage = Math.max(1, Math.min(sharedPoisCurrentPage, totalPages || 1));
+      
+      const sharedTbody = document.getElementById('shared-pois-tbody');
+      sharedTbody.innerHTML = '';
+      
+      if (sharedPois.length > 0) {
+        // Only show pagination if there's more than one page
+        document.getElementById('shared-pois-pagination').style.display = totalPages > 1 ? 'flex' : 'none';
+        
+        // Calculate pagination
+        const startIndex = (sharedPoisCurrentPage - 1) * ITEMS_PER_PAGE;
+        const endIndex = startIndex + ITEMS_PER_PAGE;
+        const pageItems = sharedPois.slice(startIndex, endIndex);
+        
+        pageItems.forEach(poi => {
+          const row = document.createElement('tr');
+          
+          // Icon cell
+          const iconCell = document.createElement('td');
+          iconCell.style.textAlign = 'center';
+          iconCell.style.fontSize = '1.5rem';
+          iconCell.textContent = poi.icon;
+          row.appendChild(iconCell);
+          
+          // Name cell
+          row.appendChild(createTextCell(poi.name));
+          
+          // Map cell
+          row.appendChild(createTextCell(poi.map_name));
+          
+          // Owner cell
+          row.appendChild(createTextCell(poi.owner_name));
+          
+          // Actions cell
+          const actionsCell = document.createElement('td');
+          const actionsDiv = document.createElement('div');
+          actionsDiv.className = 'action-buttons';
+          
+          // View button
+          const viewBtn = document.createElement('button');
+          viewBtn.className = 'small-btn info-btn';
+          viewBtn.onclick = () => goToPoi(poi.id, poi.map_id, poi.x, poi.y);
+          const viewIcon = document.createElement('span');
+          viewIcon.className = 'btn-icon';
+          viewIcon.textContent = '👁️';
+          viewBtn.appendChild(viewIcon);
+          viewBtn.appendChild(document.createTextNode('View'));
+          
+          // Remove button
+          const removeBtn = document.createElement('button');
+          removeBtn.className = 'small-btn danger-btn';
+          removeBtn.onclick = () => removeSharedPoi(poi.id);
+          const removeIcon = document.createElement('span');
+          removeIcon.className = 'btn-icon';
+          removeIcon.textContent = '🗑️';
+          removeBtn.appendChild(removeIcon);
+          removeBtn.appendChild(document.createTextNode('Remove'));
+          
+          actionsDiv.appendChild(viewBtn);
+          actionsDiv.appendChild(removeBtn);
+          actionsCell.appendChild(actionsDiv);
+          row.appendChild(actionsCell);
+          
+          sharedTbody.appendChild(row);
+        });
+        
+        // Update pagination controls
+        document.getElementById('shared-pois-page-info').textContent = `Page ${sharedPoisCurrentPage} of ${totalPages}`;
+        document.getElementById('shared-pois-prev').disabled = sharedPoisCurrentPage === 1;
+        document.getElementById('shared-pois-next').disabled = sharedPoisCurrentPage === totalPages;
+      } else {
+        document.getElementById('shared-pois-pagination').style.display = 'none';
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td colspan="5" style="text-align: center; color: #666; padding: 2rem;">
+            No POIs have been shared with you yet. When someone shares a POI with you, it will appear here.
+          </td>
+        `;
+        sharedTbody.appendChild(row);
+      }
+    }
+
+    function goToPoi(poiId, mapId, x, y) {
+      // Store POI location in sessionStorage to highlight it when the map loads
+      sessionStorage.setItem('highlightCustomPoi', JSON.stringify({ id: poiId, mapId, x, y }));
+      window.location.href = '/';
+    }
+
+    async function sharePoi(poiId) {
+      try {
+        const response = await fetch(`/api/custom-pois/${poiId}/share`, {
+          method: 'POST'
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          const shareUrl = `${window.location.origin}/share/${data.shareCode}`;
+          
+          // Copy to clipboard
+          navigator.clipboard.writeText(shareUrl).then(() => {
+            showMessage('Share link copied to clipboard!', 'success');
+          }).catch(() => {
+            // Fallback for browsers that don't support clipboard API
+            prompt('Copy this share link:', shareUrl);
+          });
+        }
+      } catch (error) {
+        showMessage('Failed to create share link', 'error');
+      }
+    }
+
+    async function deletePoi(poiId) {
+      if (!confirm('Are you sure you want to delete this custom POI? This will also remove it from anyone you shared it with and from pending community approval if applicable.')) {
+        return;
+      }
+      
+      try {
+        const response = await fetchWithCSRF(`/api/custom-pois/${poiId}`, {
+          method: 'DELETE'
+        });
+        
+        if (response.ok) {
+          showMessage('Custom POI deleted', 'success');
+          loadCustomPois(); // Reload the list
+          loadPendingPois(); // Also reload pending POIs in case it was there
+        }
+      } catch (error) {
+        showMessage('Failed to delete custom POI', 'error');
+      }
+    }
+
+    async function removeSharedPoi(poiId) {
+      if (!confirm('Are you sure you want to remove this shared POI? You will no longer have access to it.')) {
+        return;
+      }
+      
+      try {
+        const response = await fetchWithCSRF(`/api/custom-pois/${poiId}/unshare`, {
+          method: 'DELETE'
+        });
+        
+        if (response.ok) {
+          showMessage('Shared POI removed', 'success');
+          loadCustomPois(); // Reload the list
+        }
+      } catch (error) {
+        showMessage('Failed to remove shared POI', 'error');
+      }
+    }
+    
+    // Helper functions for POI display
+    function getStatusBadge(status) {
+      switch(status) {
+        case 'private':
+          return '<span style="color: #999;">Private</span>';
+        case 'pending':
+          return '<span style="color: #FFA500;">Pending</span>';
+        case 'published':
+          return '<span style="color: #4CAF50;">Published</span>';
+        case 'rejected':
+          return '<span style="color: #f44336;">Rejected</span>';
+        default:
+          return '<span style="color: #999;">Private</span>';
+      }
+    }
+    
+    function getPoiActions(poi) {
+      let actions = '<div class="action-buttons">';
+      
+      // Primary actions group
+      actions += '<div class="action-group">';
+      actions += `<button onclick="goToPoi(${poi.id}, ${poi.map_id}, ${poi.x}, ${poi.y})" class="small-btn info-btn"><span class="btn-icon">👁️</span>View</button>`;
+      
+      if (poi.status === 'private' || poi.status === 'rejected') {
+        actions += `<button onclick="publishPoi(${poi.id})" class="small-btn warning-btn"><span class="btn-icon">📢</span>Publish</button>`;
+      }
+      actions += '</div>';
+      
+      // Secondary actions group
+      if (poi.status !== 'published') {
+        actions += '<div class="action-group">';
+        actions += `<button onclick="sharePoi(${poi.id})" class="small-btn secondary-btn"><span class="btn-icon">🔗</span>Share</button>`;
+        actions += `<button onclick="deletePoi(${poi.id})" class="small-btn danger-btn"><span class="btn-icon">🗑️</span>Delete</button>`;
+        actions += '</div>';
+      }
+      
+      actions += '</div>';
+      return actions;
+    }
+    
+    // Publish POI function
+    async function publishPoi(poiId) {
+      if (!confirm('Are you sure you want to submit this POI for community approval? Once approved, it will become a permanent part of the map.')) {
+        return;
+      }
+      
+      try {
+        const response = await fetch(`/api/custom-pois/${poiId}/publish`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          showMessage('POI submitted for approval!', 'success');
+          loadCustomPois(); // Reload the list
+          loadPendingPois(); // Also reload pending POIs
+        } else {
+          const error = await response.json();
+          showMessage(error.error || 'Failed to publish POI', 'error');
+        }
+      } catch (error) {
+        showMessage('Failed to publish POI', 'error');
+      }
+    }
+    
+    // Pagination functions
+    function changeMyPoisPage(direction) {
+      const ownedPois = customPois.filter(poi => poi.is_owner);
+      const totalPages = Math.ceil(ownedPois.length / ITEMS_PER_PAGE);
+      
+      myPoisCurrentPage += direction;
+      myPoisCurrentPage = Math.max(1, Math.min(myPoisCurrentPage, totalPages));
+      
+      displayMyPois(ownedPois);
+    }
+    
+    function changeSharedPoisPage(direction) {
+      const sharedPois = customPois.filter(poi => !poi.is_owner);
+      const totalPages = Math.ceil(sharedPois.length / ITEMS_PER_PAGE);
+      
+      sharedPoisCurrentPage += direction;
+      sharedPoisCurrentPage = Math.max(1, Math.min(sharedPoisCurrentPage, totalPages));
+      
+      displaySharedPois(sharedPois);
+    }
+    
+    function changePendingPoisPage(direction) {
+      const totalPages = Math.ceil(pendingPois.length / ITEMS_PER_PAGE);
+      
+      pendingPoisCurrentPage += direction;
+      pendingPoisCurrentPage = Math.max(1, Math.min(pendingPoisCurrentPage, totalPages));
+      
+      displayPendingPois();
+    }
+    
+    // Pending POIs functionality
+    async function loadPendingPois() {
+      document.getElementById('pending-pois-loading').style.display = 'block';
+      
+      try {
+        const response = await fetch('/api/pending-pois');
+        if (response.ok) {
+          pendingPois = await response.json();
+          displayPendingPois();
+        }
+      } catch (error) {
+        console.error('Error loading pending POIs:', error);
+      } finally {
+        document.getElementById('pending-pois-loading').style.display = 'none';
+      }
+    }
+    
+    function displayPendingPois() {
+      const totalPages = Math.ceil(pendingPois.length / ITEMS_PER_PAGE);
+      pendingPoisCurrentPage = Math.max(1, Math.min(pendingPoisCurrentPage, totalPages || 1));
+      
+      const tbody = document.getElementById('pending-pois-tbody');
+      tbody.innerHTML = '';
+      
+      if (pendingPois.length === 0) {
+        document.getElementById('pending-pois-pagination').style.display = 'none';
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td colspan="7" style="text-align: center; color: #666; padding: 2rem;">
+            No POIs are currently pending community approval.
+          </td>
+        `;
+        tbody.appendChild(row);
+      } else {
+        // Only show pagination if there's more than one page
+        document.getElementById('pending-pois-pagination').style.display = totalPages > 1 ? 'flex' : 'none';
+        
+        // Calculate pagination
+        const startIndex = (pendingPoisCurrentPage - 1) * ITEMS_PER_PAGE;
+        const endIndex = startIndex + ITEMS_PER_PAGE;
+        const pageItems = pendingPois.slice(startIndex, endIndex);
+        
+        pageItems.forEach(poi => {
+          const row = document.createElement('tr');
+          row.className = 'poi-data-row';
+          const voteButtons = getVoteButtons(poi);
+          
+          // Build row using DOM methods for safety
+          // Icon cell
+          const iconCell = document.createElement('td');
+          iconCell.style.textAlign = 'center';
+          iconCell.style.fontSize = '1.5rem';
+          iconCell.textContent = poi.icon;
+          row.appendChild(iconCell);
+          
+          // Name cell
+          row.appendChild(createTextCell(poi.name));
+          
+          // Map cell
+          row.appendChild(createTextCell(poi.map_name));
+          
+          // Creator cell
+          row.appendChild(createTextCell(poi.creator_name));
+          
+          // Vote score cell
+          const voteScoreCell = document.createElement('td');
+          voteScoreCell.className = 'vote-score';
+          voteScoreCell.textContent = (poi.vote_score > 0 ? '+' : '') + poi.vote_score;
+          row.appendChild(voteScoreCell);
+          
+          // Vote buttons cell
+          const voteBtnCell = document.createElement('td');
+          if (window.safeHTML) {
+            voteBtnCell.innerHTML = window.safeHTML(voteButtons);
+          } else {
+            voteBtnCell.innerHTML = voteButtons; // Safe - our generated HTML
+          }
+          row.appendChild(voteBtnCell);
+          
+          // Actions cell
+          const actionsCell = document.createElement('td');
+          const actionsDiv = document.createElement('div');
+          actionsDiv.className = 'action-buttons';
+          
+          // Action group
+          const actionGroup = document.createElement('div');
+          actionGroup.className = 'action-group';
+          
+          // View button
+          const viewBtn = document.createElement('button');
+          viewBtn.className = 'small-btn info-btn';
+          viewBtn.onclick = () => goToPoi(poi.custom_poi_id, poi.map_id, poi.x, poi.y);
+          const viewIcon = document.createElement('span');
+          viewIcon.className = 'btn-icon';
+          viewIcon.textContent = '👁️';
+          viewBtn.appendChild(viewIcon);
+          viewBtn.appendChild(document.createTextNode('View'));
+          actionGroup.appendChild(viewBtn);
+          
+          // Inspect button (admin only)
+          if (currentUser && currentUser.isAdmin) {
+            const inspectBtn = document.createElement('button');
+            inspectBtn.className = 'small-btn secondary-btn';
+            inspectBtn.onclick = () => inspectVotes(poi.id, poi.name);
+            const inspectIcon = document.createElement('span');
+            inspectIcon.className = 'btn-icon';
+            inspectIcon.textContent = '🔍';
+            inspectBtn.appendChild(inspectIcon);
+            inspectBtn.appendChild(document.createTextNode('Inspect'));
+            actionGroup.appendChild(inspectBtn);
+          }
+          
+          actionsDiv.appendChild(actionGroup);
+          
+          // Admin actions
+          if (currentUser && currentUser.isAdmin) {
+            const adminGroup = document.createElement('div');
+            adminGroup.className = 'action-group admin-actions';
+            
+            // Approve button
+            const approveBtn = document.createElement('button');
+            approveBtn.className = 'small-btn success-btn';
+            approveBtn.onclick = () => forcePublishPoi(poi.id);
+            const approveIcon = document.createElement('span');
+            approveIcon.className = 'btn-icon';
+            approveIcon.textContent = '✅';
+            approveBtn.appendChild(approveIcon);
+            approveBtn.appendChild(document.createTextNode('Approve'));
+            adminGroup.appendChild(approveBtn);
+            
+            // Reject button
+            const rejectBtn = document.createElement('button');
+            rejectBtn.className = 'small-btn danger-btn';
+            rejectBtn.onclick = () => forceRejectPoi(poi.id);
+            const rejectIcon = document.createElement('span');
+            rejectIcon.className = 'btn-icon';
+            rejectIcon.textContent = '❌';
+            rejectBtn.appendChild(rejectIcon);
+            rejectBtn.appendChild(document.createTextNode('Reject'));
+            adminGroup.appendChild(rejectBtn);
+            
+            actionsDiv.appendChild(adminGroup);
+          }
+          
+          actionsCell.appendChild(actionsDiv);
+          row.appendChild(actionsCell);
+          tbody.appendChild(row);
+          
+          // Add status bar row
+          const statusRow = document.createElement('tr');
+          statusRow.className = 'vote-status-row';
+          statusRow.innerHTML = `
+            <td colspan="7" style="padding: 0;">
+              <div class="vote-status-bar">
+                <div class="vote-bar-track">
+                  <span class="vote-label reject">Rejected (-10)</span>
+                  <div class="vote-bar-container">
+                    <div class="vote-bar-fill" style="left: ${poi.vote_score < 0 ? 50 + (poi.vote_score * 5) : 50}%; width: ${Math.abs(poi.vote_score * 5)}%; background-color: ${poi.vote_score >= 0 ? '#28a745' : '#dc3545'};"></div>
+                    <div class="vote-bar-center"></div>
+                  </div>
+                  <span class="vote-label approve">Approved (+10)</span>
+                </div>
+              </div>
+            </td>
+          `;
+          tbody.appendChild(statusRow);
+        });
+        
+        // Update pagination controls
+        document.getElementById('pending-pois-page-info').textContent = `Page ${pendingPoisCurrentPage} of ${totalPages}`;
+        document.getElementById('pending-pois-prev').disabled = pendingPoisCurrentPage === 1;
+        document.getElementById('pending-pois-next').disabled = pendingPoisCurrentPage === totalPages;
+      }
+    }
+    
+    function getVoteButtons(poi) {
+      const upvoteClass = poi.user_vote === 1 ? 'active' : '';
+      const downvoteClass = poi.user_vote === -1 ? 'active' : '';
+      const isCreator = poi.is_creator ? 'true' : 'false';
+      
+      return `
+        <div class="vote-buttons">
+          <button class="vote-btn upvote ${upvoteClass}" onclick="votePoi(${poi.id}, 1, ${isCreator})" title="Upvote">👍</button>
+          <button class="vote-btn downvote ${downvoteClass}" onclick="votePoi(${poi.id}, -1, ${isCreator})" title="${poi.is_creator ? 'Withdraw from voting' : 'Downvote'}">👎</button>
+        </div>
+      `;
+    }
+    
+    async function votePoi(poiId, vote, isCreator = false) {
+      // Check if creator is downvoting their own POI
+      if (isCreator && vote === -1) {
+        if (!confirm('Are you sure you want to withdraw your POI from community voting? This will remove it from the pending list and return it to private status.')) {
+          return;
+        }
+      }
+      
+      try {
+        const response = await fetch(`/api/pending-pois/${poiId}/vote`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ vote })
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          if (result.approved) {
+            showMessage('POI approved and published!', 'success');
+          } else if (result.rejected) {
+            showMessage('POI rejected', 'info');
+          } else if (result.withdrawn) {
+            showMessage('POI withdrawn from community voting', 'success');
+          }
+          loadPendingPois(); // Reload the list
+          loadCustomPois(); // Also reload custom POIs if withdrawn
+        } else {
+          const error = await response.json();
+          showMessage(error.error || 'Failed to vote', 'error');
+        }
+      } catch (error) {
+        showMessage('Failed to vote', 'error');
+      }
+    }
+    
+    async function forcePublishPoi(poiId) {
+      if (!confirm('Are you sure you want to force-publish this POI? This will bypass the normal voting process.')) {
+        return;
+      }
+      
+      try {
+        const response = await fetch(`/api/pending-pois/${poiId}/force-publish`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          showMessage('POI approved and published! It will now appear on the map.', 'success');
+          loadPendingPois(); // Reload the pending list
+          loadCustomPois(); // Reload My POIs to show updated status
+        } else {
+          const error = await response.json();
+          showMessage(error.error || 'Failed to force-publish POI', 'error');
+        }
+      } catch (error) {
+        showMessage('Failed to force-publish POI', 'error');
+      }
+    }
+    
+    async function forceRejectPoi(poiId) {
+      if (!confirm('Are you sure you want to force-reject this POI? This will bypass the normal voting process and remove XP from the creator.')) {
+        return;
+      }
+      
+      try {
+        const response = await fetch(`/api/pending-pois/${poiId}/force-reject`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          showMessage('POI rejected and returned to creator with "Rejected" status.', 'success');
+          loadPendingPois(); // Reload the pending list
+          loadCustomPois(); // Reload My POIs to show updated status
+        } else {
+          const error = await response.json();
+          showMessage(error.error || 'Failed to force-reject POI', 'error');
+        }
+      } catch (error) {
+        showMessage('Failed to force-reject POI', 'error');
+      }
+    }
+    
+    // Modal functions
+    async function inspectVotes(poiId, poiName) {
+      try {
+        const response = await fetch(`/api/pending-pois/${poiId}/votes`);
+        if (response.ok) {
+          const votes = await response.json();
+          displayVoteModal(poiName, votes);
+        } else {
+          showMessage('Failed to load vote details', 'error');
+        }
+      } catch (error) {
+        showMessage('Failed to load vote details', 'error');
+      }
+    }
+    
+    function displayVoteModal(poiName, votes) {
+      document.getElementById('inspect-poi-name').textContent = poiName;
+      
+      // Calculate vote stats
+      const upvotes = votes.filter(v => v.vote === 1).length;
+      const downvotes = votes.filter(v => v.vote === -1).length;
+      const totalScore = upvotes - downvotes;
+      
+      document.getElementById('inspect-poi-stats').textContent = 
+        `Total Score: ${totalScore > 0 ? '+' : ''}${totalScore} (${upvotes} upvotes, ${downvotes} downvotes)`;
+      
+      // Populate vote table
+      const tbody = document.getElementById('vote-details-tbody');
+      tbody.innerHTML = '';
+      
+      if (votes.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: #666;">No votes yet</td></tr>';
+      } else {
+        votes.forEach(vote => {
+          const row = document.createElement('tr');
+          const voteIcon = vote.vote === 1 ? '👍' : '👎';
+          const voteClass = vote.vote === 1 ? 'color: #4CAF50;' : 'color: #f44336;';
+          
+          row.innerHTML = `
+            <td>${vote.voter_name} <span style="color: #666; font-size: 0.85rem;">(${vote.voter_email})</span></td>
+            <td style="text-align: center; ${voteClass} font-size: 1.2rem;">${voteIcon}</td>
+            <td>${new Date(vote.created_at).toLocaleString()}</td>
+          `;
+          tbody.appendChild(row);
+        });
+      }
+      
+      // Show modal
+      document.getElementById('vote-inspect-modal').style.display = 'block';
+    }
+    
+    function closeVoteModal() {
+      document.getElementById('vote-inspect-modal').style.display = 'none';
+    }
+    
+    // Close modal when clicking outside
+    window.onclick = function(event) {
+      const modal = document.getElementById('vote-inspect-modal');
+      if (event.target === modal) {
+        closeVoteModal();
+      }
+    }
+
+    // Update showTab to load custom POIs when tab is clicked
+    const originalShowTab = showTab;
+    showTab = function(tabName) {
+      originalShowTab(tabName);
+      
+      if (tabName === 'custom-pois') {
+        // Always reload to get fresh data
+        loadCustomPois();
+        loadPendingPois();
+      } else if (tabName === 'admin' && currentUser?.isAdmin) {
+        loadXPConfig();
+        loadUsers();
+      }
+    };
+
+    // XP Configuration Functions
+    async function loadXPConfig() {
+      console.log('Loading XP config...');
+      const loading = document.getElementById('xp-config-loading');
+      const content = document.getElementById('xp-config-content');
+      const tbody = document.getElementById('xp-config-tbody');
+      
+      if (!loading || !content || !tbody) {
+        console.error('XP config elements not found:', { loading, content, tbody });
+        return;
+      }
+      
+      loading.style.display = 'block';
+      content.style.display = 'none';
+      
+      try {
+        const response = await fetch('/api/admin/xp-config');
+        if (response.ok) {
+          const configs = await response.json();
+          
+          tbody.innerHTML = '';
+          configs.forEach(config => {
+            const row = document.createElement('tr');
+            const displayName = getXPActionName(config.key);
+            
+            // Action name cell
+            row.appendChild(createTextCell(displayName));
+            
+            // Description cell
+            row.appendChild(createTextCell(config.description));
+            
+            // XP input cell
+            const inputCell = document.createElement('td');
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.id = `xp-${config.key}`;
+            input.value = config.value;
+            input.className = 'xp-input';
+            input.min = '-100';
+            input.max = '100';
+            inputCell.appendChild(input);
+            row.appendChild(inputCell);
+            
+            // Update button cell
+            const btnCell = document.createElement('td');
+            const btn = document.createElement('button');
+            btn.className = 'btn btn-sm';
+            btn.textContent = 'Update';
+            btn.onclick = () => updateXPConfig(config.key);
+            btnCell.appendChild(btn);
+            row.appendChild(btnCell);
+            
+            tbody.appendChild(row);
+          });
+          
+          loading.style.display = 'none';
+          content.style.display = 'block';
+        }
+      } catch (error) {
+        console.error('Error loading XP config:', error);
+        loading.innerHTML = '<p style="color: #dc3545;">Failed to load XP configuration</p>';
+      }
+    }
+    
+    function getXPActionName(key) {
+      const names = {
+        'poi_publish': 'Publish POI',
+        'poi_pending_remove': 'Remove from Pending',
+        'poi_approved': 'POI Approved'
+      };
+      return names[key] || key;
+    }
+    
+    async function updateXPConfig(key) {
+      const input = document.getElementById(`xp-${key}`);
+      const value = parseInt(input.value);
+      
+      if (isNaN(value)) {
+        showMessage('Please enter a valid number', 'error');
+        return;
+      }
+      
+      try {
+        const response = await fetch(`/api/admin/xp-config/${key}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ value })
+        });
+        
+        if (response.ok) {
+          showMessage('XP configuration updated successfully', 'success');
+        } else {
+          showMessage('Failed to update XP configuration', 'error');
+        }
+      } catch (error) {
+        console.error('Error updating XP config:', error);
+        showMessage('Failed to update XP configuration', 'error');
+      }
+    }
+
+    // User Management Functions
+    let allUsers = [];
+    let filteredUsers = [];
+    let usersCurrentPage = 1;
+    let selectedUser = null;
+    
+    async function loadUsers() {
+      const loading = document.getElementById('user-management-loading');
+      const content = document.getElementById('user-management-content');
+      
+      loading.style.display = 'block';
+      content.style.display = 'none';
+      
+      try {
+        const response = await fetch('/api/admin/users');
+        if (response.ok) {
+          allUsers = await response.json();
+          filteredUsers = [...allUsers];
+          displayUsers();
+          
+          loading.style.display = 'none';
+          content.style.display = 'block';
+        }
+      } catch (error) {
+        console.error('Error loading users:', error);
+        loading.innerHTML = '<p style="color: #dc3545;">Failed to load users</p>';
+      }
+    }
+    
+    function searchUsers() {
+      const searchTerm = document.getElementById('user-search').value.toLowerCase();
+      
+      if (searchTerm) {
+        filteredUsers = allUsers.filter(user => 
+          user.name.toLowerCase().includes(searchTerm) || 
+          user.email.toLowerCase().includes(searchTerm)
+        );
+      } else {
+        filteredUsers = [...allUsers];
+      }
+      
+      usersCurrentPage = 1;
+      displayUsers();
+    }
+    
+    function displayUsers() {
+      const totalPages = Math.ceil(filteredUsers.length / ITEMS_PER_PAGE);
+      usersCurrentPage = Math.max(1, Math.min(usersCurrentPage, totalPages || 1));
+      
+      const tbody = document.getElementById('users-tbody');
+      tbody.innerHTML = '';
+      
+      if (filteredUsers.length === 0) {
+        document.getElementById('users-pagination').style.display = 'none';
+        const row = document.createElement('tr');
+        const noDataCell = document.createElement('td');
+        noDataCell.colSpan = 8;
+        noDataCell.style.textAlign = 'center';
+        noDataCell.style.color = '#666';
+        noDataCell.style.padding = '2rem';
+        noDataCell.textContent = 'No users found';
+        row.appendChild(noDataCell);
+        tbody.appendChild(row);
+      } else {
+        document.getElementById('users-pagination').style.display = totalPages > 1 ? 'flex' : 'none';
+        
+        const startIndex = (usersCurrentPage - 1) * ITEMS_PER_PAGE;
+        const endIndex = startIndex + ITEMS_PER_PAGE;
+        const pageUsers = filteredUsers.slice(startIndex, endIndex);
+        
+        pageUsers.forEach(user => {
+          const row = document.createElement('tr');
+          const statusBadge = getUserStatusBadge(user);
+          
+          // Always use DOM manipulation for consistent rendering
+          const cells = [
+            createImageCell(user.custom_avatar || user.picture, user.display_name || user.name),
+            createTextCell(user.display_name || user.name),
+            createTextCell(user.email),
+            createXPCell(user.xp || 0),
+            createTextCell(user.poi_count || 0),
+            createHTMLCell(statusBadge),
+            createTextCell(new Date(user.created_at).toLocaleDateString()),
+            createButtonCell(user.id)
+          ];
+          cells.forEach(cell => row.appendChild(cell));
+          tbody.appendChild(row);
+        });
+        
+        document.getElementById('users-page-info').textContent = `Page ${usersCurrentPage} of ${totalPages}`;
+        document.getElementById('users-prev').disabled = usersCurrentPage === 1;
+        document.getElementById('users-next').disabled = usersCurrentPage === totalPages;
+      }
+    }
+    
+    function getUserStatusBadge(user) {
+      if (user.is_banned) {
+        return '<span style="background: #dc3545; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">Banned</span>';
+      } else if (user.is_admin) {
+        return '<span style="background: #FFD700; color: #2a1810; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">Admin</span>';
+      } else {
+        return '<span style="background: #28a745; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">Active</span>';
+      }
+    }
+    
+    function changeUsersPage(direction) {
+      const totalPages = Math.ceil(filteredUsers.length / ITEMS_PER_PAGE);
+      usersCurrentPage += direction;
+      usersCurrentPage = Math.max(1, Math.min(usersCurrentPage, totalPages));
+      displayUsers();
+    }
+    
+    async function viewUserDetails(userId) {
+      try {
+        const response = await fetch(`/api/admin/users/${userId}`);
+        if (response.ok) {
+          selectedUser = await response.json();
+          displayUserModal(selectedUser);
+        }
+      } catch (error) {
+        showMessage('Failed to load user details', 'error');
+      }
+    }
+    
+    function displayUserModal(user) {
+      document.getElementById('detail-user-avatar').src = user.custom_avatar || user.picture;
+      document.getElementById('detail-user-name').textContent = user.display_name || user.name;
+      document.getElementById('detail-user-email').textContent = user.email;
+      document.getElementById('detail-user-id').textContent = user.id;
+      document.getElementById('detail-user-joined').textContent = new Date(user.created_at).toLocaleString();
+      document.getElementById('detail-user-last-active').textContent = user.last_visit ? new Date(user.last_visit).toLocaleString() : 'Never';
+      document.getElementById('detail-user-xp').textContent = user.xp || 0;
+      document.getElementById('detail-user-admin').textContent = user.is_admin ? 'Yes' : 'No';
+      
+      document.getElementById('detail-user-total-pois').textContent = user.total_pois || 0;
+      document.getElementById('detail-user-published-pois').textContent = user.published_pois || 0;
+      document.getElementById('detail-user-pending-pois').textContent = user.pending_pois || 0;
+      document.getElementById('detail-user-votes').textContent = user.votes_cast || 0;
+      
+      // Update status
+      const statusEl = document.getElementById('detail-user-status');
+      if (user.is_banned) {
+        statusEl.textContent = 'Banned';
+        statusEl.style.background = '#dc3545';
+        statusEl.style.color = 'white';
+        document.getElementById('ban-user-btn').style.display = 'none';
+        document.getElementById('unban-user-btn').style.display = 'inline-flex';
+      } else {
+        statusEl.textContent = 'Active';
+        statusEl.style.background = '#28a745';
+        statusEl.style.color = 'white';
+        document.getElementById('ban-user-btn').style.display = 'inline-flex';
+        document.getElementById('unban-user-btn').style.display = 'none';
+      }
+      
+      // Update admin toggle button
+      const toggleBtn = document.getElementById('toggle-admin-text');
+      toggleBtn.textContent = user.is_admin ? 'Remove Admin' : 'Make Admin';
+      
+      // Show warnings if any
+      if (user.warnings && user.warnings.length > 0) {
+        document.getElementById('user-warnings-section').style.display = 'block';
+        const warningsList = document.getElementById('user-warnings-list');
+        warningsList.innerHTML = user.warnings.map(w => `
+          <div style="margin-bottom: 0.75rem; padding: 0.75rem; background: rgba(0, 0, 0, 0.3); border-radius: 6px; border-left: 3px solid #ffc107;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+              <strong style="color: #ffc107;">${new Date(w.created_at).toLocaleDateString()}</strong>
+              <span style="color: #888; font-size: 0.85rem;">by ${w.admin_name}</span>
+            </div>
+            <p style="margin: 0; color: #e0e0e0; line-height: 1.4;">${w.reason}</p>
+          </div>
+        `).join('');
+      } else {
+        document.getElementById('user-warnings-section').style.display = 'none';
+      }
+      
+      document.getElementById('user-detail-modal').style.display = 'block';
+    }
+    
+    function closeUserModal() {
+      document.getElementById('user-detail-modal').style.display = 'none';
+      selectedUser = null;
+    }
+    
+    async function banUser() {
+      if (!confirm('Are you sure you want to ban this user? They will be immediately logged out and unable to access their account.')) return;
+      
+      const reason = prompt('Enter reason for ban:');
+      if (!reason) return;
+      
+      try {
+        const response = await fetch(`/api/admin/users/${selectedUser.id}/ban`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason })
+        });
+        
+        if (response.ok) {
+          showMessage('User banned successfully', 'success');
+          closeUserModal();
+          loadUsers();
+        }
+      } catch (error) {
+        showMessage('Failed to ban user', 'error');
+      }
+    }
+    
+    async function unbanUser() {
+      if (!confirm('Are you sure you want to unban this user?')) return;
+      
+      try {
+        const response = await fetch(`/api/admin/users/${selectedUser.id}/unban`, {
+          method: 'POST'
+        });
+        
+        if (response.ok) {
+          showMessage('User unbanned successfully', 'success');
+          closeUserModal();
+          loadUsers();
+        }
+      } catch (error) {
+        showMessage('Failed to unban user', 'error');
+      }
+    }
+    
+    async function warnUser() {
+      if (!confirm('Are you sure you want to send a warning to this user?')) return;
+      
+      const reason = prompt('Enter warning message:');
+      if (!reason) return;
+      
+      try {
+        const response = await fetch(`/api/admin/users/${selectedUser.id}/warn`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason })
+        });
+        
+        if (response.ok) {
+          showMessage('Warning sent to user', 'success');
+          viewUserDetails(selectedUser.id); // Reload to show new warning
+        }
+      } catch (error) {
+        showMessage('Failed to warn user', 'error');
+      }
+    }
+    
+    async function logoutUser() {
+      if (!confirm('Are you sure you want to force logout this user from all sessions? They will need to sign in again to access their account.')) return;
+      
+      try {
+        const response = await fetch(`/api/admin/users/${selectedUser.id}/logout`, {
+          method: 'POST'
+        });
+        
+        if (response.ok) {
+          showMessage('User logged out from all sessions', 'success');
+        }
+      } catch (error) {
+        showMessage('Failed to logout user', 'error');
+      }
+    }
+    
+    async function toggleAdminStatus() {
+      const action = selectedUser.is_admin ? 'remove admin privileges from' : 'grant admin privileges to';
+      if (!confirm(`Are you sure you want to ${action} this user?`)) return;
+      
+      try {
+        const response = await fetch(`/api/admin/users/${selectedUser.id}/admin`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_admin: !selectedUser.is_admin })
+        });
+        
+        if (response.ok) {
+          showMessage(`Admin status ${selectedUser.is_admin ? 'removed' : 'granted'}`, 'success');
+          closeUserModal();
+          loadUsers();
+        }
+      } catch (error) {
+        showMessage('Failed to update admin status', 'error');
+      }
+    }
+    
+    function viewUserPois() {
+      if (!confirm(`View all POIs created by ${selectedUser.name}?`)) return;
+      sessionStorage.setItem('viewUserPois', selectedUser.id);
+      window.location.href = '/';
+    }
+    
+    // XP Adjustment functions
+    function showXPAdjustment() {
+      if (!selectedUser) return;
+      
+      document.getElementById('xp-user-avatar').src = selectedUser.custom_avatar || selectedUser.picture;
+      document.getElementById('xp-user-name').textContent = selectedUser.display_name || selectedUser.name;
+      document.getElementById('xp-current').textContent = selectedUser.xp || 0;
+      document.getElementById('xp-new-value').value = selectedUser.xp || 0;
+      document.getElementById('xp-reason').value = '';
+      
+      document.getElementById('xp-adjustment-modal').style.display = 'block';
+    }
+    
+    function closeXPModal() {
+      document.getElementById('xp-adjustment-modal').style.display = 'none';
+    }
+    
+    async function updateUserXP() {
+      const newXP = parseInt(document.getElementById('xp-new-value').value);
+      const reason = document.getElementById('xp-reason').value;
+      
+      if (isNaN(newXP) || newXP < 0) {
+        showMessage('Please enter a valid XP value', 'error');
+        return;
+      }
+      
+      const currentXP = selectedUser.xp || 0;
+      if (newXP === currentXP) {
+        showMessage('XP value unchanged', 'error');
+        return;
+      }
+      
+      const xpChange = newXP - currentXP;
+      const changeText = xpChange > 0 ? `+${xpChange}` : `${xpChange}`;
+      
+      if (!confirm(`Are you sure you want to change ${selectedUser.name}'s XP from ${currentXP} to ${newXP} (${changeText})?`)) return;
+      
+      try {
+        const response = await fetch(`/api/admin/users/${selectedUser.id}/xp`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ xp: newXP, reason })
+        });
+        
+        if (response.ok) {
+          showMessage('XP updated successfully', 'success');
+          closeXPModal();
+          // Refresh user details to show new XP
+          viewUserDetails(selectedUser.id);
+        } else {
+          const data = await response.json();
+          showMessage(data.error || 'Failed to update XP', 'error');
+        }
+      } catch (error) {
+        showMessage('Failed to update XP', 'error');
+      }
+    }
+    
+    // Update close modal handler
+    window.onclick = function(event) {
+      const voteModal = document.getElementById('vote-inspect-modal');
+      const userModal = document.getElementById('user-detail-modal');
+      const xpModal = document.getElementById('xp-adjustment-modal');
+      
+      if (event.target === voteModal) {
+        closeVoteModal();
+      } else if (event.target === userModal) {
+        closeUserModal();
+      } else if (event.target === xpModal) {
+        closeXPModal();
+      }
+    }
+
+    // Profile customization functions
+    async function handleAvatarUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      // Validate file size
+      if (file.size > 5 * 1024 * 1024) {
+        showMessage('File size must be less than 5MB', 'error');
+        return;
+      }
+      
+      // Show loading
+      document.getElementById('avatar-loading').style.display = 'flex';
+      
+      const formData = new FormData();
+      formData.append('avatar', file);
+      
+      try {
+        // Get CSRF token
+        const token = await window.csrfHelper.getToken();
+        
+        const response = await fetch('/api/user/profile/avatar', {
+          method: 'POST',
+          headers: {
+            'X-CSRF-Token': token
+          },
+          body: formData
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          
+          // Update all avatar displays
+          const newAvatarUrl = data.avatarUrl;
+          document.getElementById('user-avatar').src = newAvatarUrl;
+          document.getElementById('preview-avatar').src = newAvatarUrl;
+          
+          // Update current user data
+          currentUser.custom_avatar = newAvatarUrl;
+          currentUser.picture = newAvatarUrl;
+          
+          // Force reload the images to ensure they display
+          document.getElementById('user-avatar').style.display = 'none';
+          document.getElementById('user-avatar').offsetHeight; // Force reflow
+          document.getElementById('user-avatar').style.display = '';
+          
+          document.getElementById('preview-avatar').style.display = 'none';
+          document.getElementById('preview-avatar').offsetHeight; // Force reflow
+          document.getElementById('preview-avatar').style.display = '';
+          
+          // Show reset button
+          document.getElementById('reset-avatar-btn').style.display = 'inline-block';
+          
+          showMessage('Profile picture updated successfully', 'success');
+        } else {
+          const error = await response.json();
+          showMessage(error.error || 'Failed to upload image', 'error');
+        }
+      } catch (error) {
+        showMessage('Failed to upload image', 'error');
+      } finally {
+        // Hide loading
+        document.getElementById('avatar-loading').style.display = 'none';
+        // Reset file input
+        document.getElementById('avatar-upload').value = '';
+      }
+    }
+    
+    async function resetAvatar() {
+      if (!confirm('Reset to your Google profile picture?')) return;
+      
+      try {
+        const response = await window.csrfHelper.fetchWithCSRF('/api/user/profile/avatar', {
+          method: 'DELETE'
+        });
+        
+        if (response.ok) {
+          // Fetch user profile to get original Google picture
+          const profileResponse = await fetch('/api/user/profile');
+          const profile = await profileResponse.json();
+          
+          // Revert to Google picture
+          const googlePicture = profile.picture;
+          document.getElementById('user-avatar').src = googlePicture;
+          document.getElementById('preview-avatar').src = googlePicture;
+          
+          // Update current user data
+          currentUser.custom_avatar = null;
+          
+          // Hide reset button
+          document.getElementById('reset-avatar-btn').style.display = 'none';
+          
+          showMessage('Profile picture reset successfully', 'success');
+        }
+      } catch (error) {
+        showMessage('Failed to reset profile picture', 'error');
+      }
+    }
+    
+    async function updateNickname() {
+      const nickname = document.getElementById('nickname-input').value.trim();
+      const errorEl = document.getElementById('nickname-error');
+      
+      // Clear previous error
+      errorEl.style.display = 'none';
+      errorEl.textContent = '';
+      
+      // Client-side validation
+      if (nickname) {
+        if (nickname.length < 3) {
+          errorEl.textContent = 'Nickname must be at least 3 characters long';
+          errorEl.style.display = 'block';
+          return;
+        }
+        
+        if (nickname.length > 50) {
+          errorEl.textContent = 'Nickname must be 50 characters or less';
+          errorEl.style.display = 'block';
+          return;
+        }
+        
+        if (!/^[a-zA-Z0-9_\-\s]+$/.test(nickname)) {
+          errorEl.textContent = 'Nickname can only contain letters, numbers, spaces, underscores, and hyphens';
+          errorEl.style.display = 'block';
+          return;
+        }
+      }
+      
+      try {
+        const response = await window.csrfHelper.fetchWithCSRF('/api/user/profile/nickname', {
+          method: 'PUT',
+          body: { nickname }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          
+          // Update display name
+          const newDisplayName = nickname || currentUser.name;
+          document.getElementById('user-name').textContent = newDisplayName;
+          
+          // Update current user data
+          currentUser.nickname = nickname;
+          currentUser.displayName = newDisplayName;
+          
+          showMessage('Display name updated successfully', 'success');
+          errorEl.style.display = 'none';
+        } else {
+          const error = await response.json();
+          errorEl.textContent = error.error || 'Failed to update nickname';
+          errorEl.style.display = 'block';
+        }
+      } catch (error) {
+        errorEl.textContent = 'Failed to update nickname';
+        errorEl.style.display = 'block';
+      }
+    }
+
+    // Helper functions for safe DOM manipulation
+    function createTextCell(text) {
+      const cell = document.createElement('td');
+      cell.textContent = text;
+      return cell;
+    }
+    
+    function createImageCell(src, alt) {
+      const cell = document.createElement('td');
+      cell.style.textAlign = 'center';
+      const img = document.createElement('img');
+      img.src = src;
+      img.alt = alt;
+      img.style.width = '32px';
+      img.style.height = '32px';
+      img.style.borderRadius = '50%';
+      cell.appendChild(img);
+      return cell;
+    }
+    
+    function createXPCell(xp) {
+      const cell = document.createElement('td');
+      cell.style.color = '#FFD700';
+      cell.style.fontWeight = 'bold';
+      cell.textContent = xp;
+      return cell;
+    }
+    
+    function createHTMLCell(html) {
+      const cell = document.createElement('td');
+      cell.innerHTML = html; // This is safe because statusBadge is generated by our code
+      return cell;
+    }
+    
+    function createButtonCell(userId) {
+      const cell = document.createElement('td');
+      const button = document.createElement('button');
+      button.className = 'small-btn info-btn';
+      button.onclick = () => viewUserDetails(userId);
+      const span = document.createElement('span');
+      span.className = 'btn-icon';
+      span.textContent = '👁️';
+      button.appendChild(span);
+      button.appendChild(document.createTextNode('Details'));
+      cell.appendChild(button);
+      return cell;
+    }
+
+    // Initialize
+    checkAuth();
+  </script>
+</body>
+</html>

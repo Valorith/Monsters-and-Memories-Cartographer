@@ -48,14 +48,44 @@
             </option>
           </select>
         </div>
+        <div v-if="user && user.isAdmin" class="admin-toggle">
+          <button @click="toggleAdmin" class="admin-toggle-button" :class="{ active: isAdmin }">
+            <span class="admin-icon">👑</span>
+            <span class="admin-text">Admin Mode</span>
+            <span class="toggle-indicator" :class="{ on: isAdmin }"></span>
+          </button>
+        </div>
         <div v-if="isAdmin" class="admin-indicator" title="Admin Mode Active">
           <span class="admin-dot"></span>
-          <span class="admin-text">Admin</span>
+          <span class="admin-text">Active</span>
+        </div>
+        <div class="user-controls">
+          <button v-if="!isAuthenticated" @click="loginWithGoogle" class="login-button">
+            Sign In
+          </button>
+          <div v-else class="user-dropdown-container">
+            <button @click="toggleUserDropdown" class="user-button">
+              <img v-if="user && user.picture" :src="user.picture" :alt="user.displayName || user.name" class="user-avatar" />
+              <span v-else class="user-initials">{{ user && user.displayName ? user.displayName[0] : (user && user.name ? user.name[0] : '?') }}</span>
+            </button>
+            <div v-if="showUserDropdown" class="user-dropdown-menu">
+              <a href="/account" class="dropdown-item">
+                <span class="dropdown-icon">👤</span>
+                Account
+              </a>
+              <button @click="handleLogout" class="dropdown-item">
+                <span class="dropdown-icon">🚪</span>
+                Logout
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </header>
     
-    <div class="map-container" ref="mapContainer" @click="handleMapClick" @contextmenu.prevent="handleRightClick">
+    <XPBar :user="user" v-if="isAuthenticated" />
+    
+    <div class="map-container" ref="mapContainer" @click="handleMapClick" @contextmenu.prevent="handleRightClick" @click.capture="hideContextMenu">
       <canvas 
         ref="mapCanvas"
         class="map-canvas"
@@ -75,17 +105,6 @@
         <p>Loading map...</p>
       </div>
       
-      <POIPopup
-        v-if="selectedPOI"
-        :poi="selectedPOI"
-        :visible="!!selectedPOI"
-        :position="popupPosition"
-        :isAdmin="isAdmin"
-        :isLeftSide="popupIsLeftSide"
-        @close="selectedPOI = null"
-        @delete="deletePOI"
-        @confirmUpdate="handlePOIUpdate"
-      />
       
       <AdminPanel
         :isAdmin="isAdmin"
@@ -118,8 +137,45 @@
       </div>
     </div>
     
+    <!-- POI Popup -->
+    <POIPopup
+      v-if="selectedPOI"
+      :poi="selectedPOI"
+      :visible="!!selectedPOI"
+      :position="popupPosition"
+      :isAdmin="isAdmin"
+      :isLeftSide="popupIsLeftSide"
+      :currentUserId="user?.id"
+      @close="selectedPOI = null"
+      @delete="deletePOI"
+      @confirmUpdate="handlePOIUpdate"
+      @publish="publishCustomPOI"
+    />
+    
     <!-- Toast Container -->
     <ToastContainer />
+    
+    <!-- Context Menu -->
+    <ContextMenu
+      :visible="contextMenuVisible"
+      :position="contextMenuPosition"
+      :isAuthenticated="isAuthenticated"
+      :customPoi="contextMenuPOI"
+      @close="hideContextMenu"
+      @create-custom-poi="createCustomPOI"
+      @edit-custom-poi="editCustomPOI"
+      @delete-custom-poi="deleteCustomPOI"
+    />
+    
+    <!-- Custom POI Dialog -->
+    <CustomPOIDialog
+      :visible="customPOIDialogVisible"
+      :poi="selectedCustomPOI"
+      :mapId="maps[selectedMapIndex]?.id"
+      :position="customPOIPosition"
+      @save="saveCustomPOI"
+      @cancel="customPOIDialogVisible = false"
+    />
     
     <!-- Admin Popup -->
     <AdminPopup
@@ -165,6 +221,28 @@
         <span>{{ zoomPercent }}%</span>
       </div>
     </div>
+    
+    <!-- Context Menu for Custom POIs -->
+    <ContextMenu
+      :visible="contextMenuVisible"
+      :position="contextMenuPosition"
+      :isAuthenticated="isAuthenticated"
+      :customPoi="contextMenuPOI"
+      @create-custom-poi="createCustomPOI"
+      @edit-custom-poi="editCustomPOI"
+      @delete-custom-poi="deleteCustomPOI"
+      @close="hideContextMenu"
+    />
+    
+    <!-- Custom POI Dialog -->
+    <CustomPOIDialog
+      :visible="customPOIDialogVisible"
+      :poi="selectedCustomPOI"
+      :mapId="maps[selectedMapIndex]?.id"
+      :position="customPOIPosition"
+      @save="saveCustomPOI"
+      @cancel="customPOIDialogVisible = false"
+    />
   </div>
 </template>
 
@@ -179,7 +257,12 @@ import AdminPopup from './components/AdminPopup.vue'
 import MapManager from './components/MapManager.vue'
 import ToastContainer from './components/ToastContainer.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
+import ContextMenu from './components/ContextMenu.vue'
+import CustomPOIDialog from './components/CustomPOIDialog.vue'
+import XPBar from './components/XPBar.vue'
 import { useToast } from './composables/useToast'
+import { useAuth } from './composables/useAuth'
+import { useCSRF } from './composables/useCSRF'
 
 // Helper function to get map filename from path
 function getMapFilename(path) {
@@ -194,13 +277,17 @@ export default {
     AdminPopup,
     MapManager,
     ToastContainer,
-    ConfirmDialog
+    ConfirmDialog,
+    ContextMenu,
+    CustomPOIDialog,
+    XPBar
   },
   setup() {
     const mapCanvas = ref(null)
     const mapContainer = ref(null)
     const selectedMapIndex = ref(0)
     const isLoading = ref(false)
+    // Admin mode state - only visual, actual permissions are always checked server-side
     const isAdmin = ref(false)
     const selectedPOI = ref(null)
     const popupPosition = ref({ x: 0, y: 0 })
@@ -227,6 +314,10 @@ export default {
     const potentialDragItem = ref(null) // Track item clicked without Alt for drag hint
     const dragHintShown = ref(false) // Prevent multiple hints
     
+    // Highlighted POI
+    const highlightedPOI = ref(null)
+    const highlightStartTime = ref(0)
+    
     // Toast and dialog
     const { success, error, warning, info } = useToast()
     const confirmDialog = ref({
@@ -238,6 +329,29 @@ export default {
       onConfirm: () => {},
       onCancel: () => {}
     })
+    
+    // Authentication
+    const { user, isAuthenticated, isAdmin: isUserAdmin, adminModeEnabled, checkAuthStatus } = useAuth()
+    const { fetchWithCSRF, initCSRF } = useCSRF()
+    
+    // Sync admin mode state from server
+    watch(adminModeEnabled, (newValue) => {
+      if (isUserAdmin.value) {
+        isAdmin.value = newValue
+      }
+    }, { immediate: true })
+    
+    // Custom POI state
+    const contextMenuVisible = ref(false)
+    const contextMenuPosition = ref({ x: 0, y: 0 })
+    const customPOIDialogVisible = ref(false)
+    const customPOIPosition = ref(null)
+    const selectedCustomPOI = ref(null)
+    const customPOIs = ref([])
+    const contextMenuPOI = ref(null)
+    
+    // User dropdown state
+    const showUserDropdown = ref(false)
     
     const {
       scale,
@@ -346,14 +460,14 @@ export default {
     const expandedGroups = ref(new Set())
     
     const groupPOIsWhenZoomedOut = (pois) => {
-      // Only group when significantly zoomed out
-      if (scale.value > 0.5) {
+      // Start grouping when moderately zoomed out (increased from 0.5 to 0.8)
+      if (scale.value > 0.8) {
         expandedGroups.value.clear() // Clear expanded groups when zoomed in
         return pois
       }
       
-      // Calculate grouping distance based on zoom level
-      const groupingDistance = 50 / scale.value // Larger distance when more zoomed out
+      // Calculate grouping distance based on zoom level (adjusted for earlier grouping)
+      const groupingDistance = 60 / scale.value // Larger distance when more zoomed out
       
       const groups = []
       const processedPOIs = new Set()
@@ -402,6 +516,8 @@ export default {
             group.forEach(p => {
               groups.push({
                 ...p,
+                originalX: p.x,  // Preserve original position
+                originalY: p.y,
                 x: centerX + Math.cos(angle) * radius,
                 y: centerY + Math.sin(angle) * radius,
                 isInExpandedGroup: true,
@@ -418,13 +534,16 @@ export default {
               
               groups.push({
                 ...representativePOI,
+                originalX: representativePOI.x,  // Preserve original position
+                originalY: representativePOI.y,
                 x: centerX + Math.cos(offsetAngle) * offsetDistance,
                 y: centerY + Math.sin(offsetAngle) * offsetDistance,
                 isGrouped: true,
                 groupSize: group.length,
                 groupTypes: typeMap.size,
                 groupId: groupId,
-                groupedPOIs: group // Include all POIs in the group for tooltip
+                groupedPOIs: group, // Include all POIs in the group for tooltip
+                showGroupBadge: offset === 0 // Only show badge on the first POI of the group
               })
               offset++
             })
@@ -438,6 +557,9 @@ export default {
       
       return groups
     }
+    
+    // Store the current grouped POIs for consistent access
+    let currentGroupedPOIs = []
     
     const render = () => {
       baseRender()
@@ -486,15 +608,23 @@ export default {
         })
       }
       
-      // Group POIs when zoomed out
-      const poisToDraw = groupPOIsWhenZoomedOut(currentMapData.value.pois)
+      // Combine regular POIs and custom POIs for unified grouping
+      const allPOIs = [...currentMapData.value.pois, ...customPOIs.value]
       
-      // Draw POIs
-      poisToDraw.forEach(poi => {
+      // Group all POIs when zoomed out and store for click detection
+      currentGroupedPOIs = groupPOIsWhenZoomedOut(allPOIs)
+      
+      // Draw all POIs (both regular and custom)
+      currentGroupedPOIs.forEach(poi => {
         const isDragging = draggedItem.value && draggedItem.value.id === poi.id
         const isPending = pendingChange.value && pendingChange.value.item.id === poi.id
         drawPOI(ctx.value, poi, isDragging || isPending)
       })
+      
+      // Draw highlight effect for navigated POI
+      if (highlightedPOI.value) {
+        drawHighlightEffect(ctx.value, highlightedPOI.value)
+      }
       
       // Draw pending items
       if (pendingPOI.value) {
@@ -639,6 +769,9 @@ export default {
           }
         }
         
+        // Load custom POIs for this map
+        await loadCustomPOIs()
+        
         reset(mapCanvas.value)
         render()
       } catch (err) {
@@ -709,18 +842,23 @@ export default {
           return
         }
         
-        // Check for POI clicks
-        const clickedPOI = currentMapData.value.pois.find(poi =>
+        // Check for POI clicks - only allow deletion of regular POIs (not custom POIs)
+        const clickedPOI = currentGroupedPOIs.find(poi =>
           isPOIHit(poi, imagePos.x, imagePos.y)
         )
         
         if (clickedPOI) {
-          showConfirm('Delete POI', `Delete POI "${clickedPOI.name}"?`, 'Delete', 'Cancel').then(confirmed => {
-            if (confirmed) {
-              deletePOI(clickedPOI.id)
-            }
-          })
-          return
+          // Check if it's a regular POI (admin can only delete regular POIs via this method)
+          const isRegularPOI = currentMapData.value.pois.some(poi => poi.id === clickedPOI.id)
+          
+          if (isRegularPOI) {
+            showConfirm('Delete POI', `Delete POI "${clickedPOI.name}"?`, 'Delete', 'Cancel').then(confirmed => {
+              if (confirmed) {
+                deletePOI(clickedPOI.id)
+              }
+            })
+            return
+          }
         }
         
         return
@@ -731,8 +869,8 @@ export default {
         return
       }
       
-      // First check for POI clicks (in case a POI is also a connector point)
-      const clickedPOI = currentMapData.value.pois.find(poi =>
+      // Check for POI clicks using the same grouped POIs that were rendered
+      const clickedPOI = currentGroupedPOIs.find(poi =>
         isPOIHit(poi, imagePos.x, imagePos.y)
       )
       
@@ -921,7 +1059,7 @@ export default {
         selectedPOI.value = clickedPOI
         const canvasPos = imageToCanvas(clickedPOI.x, clickedPOI.y)
         let offsetX = 40 // Distance from POI center
-        const offsetY = -20 // Slight upward offset
+        const offsetY = -40 // Adjusted to align popup tail with POI center
         
         // Check if popup would go off the right edge
         const popupWidth = 300
@@ -1022,20 +1160,29 @@ export default {
         return
       }
       
-      // Check for POI clicks (works in both admin and normal mode)
+      // Check for POI clicks (works in both admin and normal mode, and for both regular and custom POIs)
       // We already checked above, so use the existing clickedPOI if found
       if (clickedPOI && !isConnectorPOI) {
         selectedPOI.value = clickedPOI
         const canvasPos = imageToCanvas(clickedPOI.x, clickedPOI.y)
-        let offsetX = 40 // Distance from POI center
-        const offsetY = -20 // Slight upward offset
+        
+        // Calculate offset based on the POI's icon size (matching drawPOI logic)
+        const baseSize = clickedPOI.icon_size || 24
+        const minSize = 20
+        const maxSize = 48
+        const inverseScale = Math.max(0.8, Math.min(1.5, 1 / Math.sqrt(scale.value)))
+        const iconScale = clickedPOI.iconScale || 1
+        const iconSize = Math.max(minSize, Math.min(maxSize, baseSize * inverseScale * iconScale))
+        
+        let offsetX = iconSize / 2 + 20 // Distance from POI edge
+        const offsetY = -35 // Move popup higher to better align with POI icon
         
         // Check if popup would go off the right edge
         const popupWidth = 300
         const screenX = canvasPos.x + rect.left + offsetX
         
         if (screenX + popupWidth > window.innerWidth - 20) {
-          offsetX = -popupWidth - 40
+          offsetX = -(iconSize / 2 + popupWidth + 20)
           popupIsLeftSide.value = true
         } else {
           popupIsLeftSide.value = false
@@ -1055,12 +1202,33 @@ export default {
     }
     
     const handleRightClick = (e) => {
-      if (!isAdmin.value) return
+      e.preventDefault()
       
       const rect = mapCanvas.value.getBoundingClientRect()
       const canvasX = e.clientX - rect.left
       const canvasY = e.clientY - rect.top
       const imagePos = canvasToImage(canvasX, canvasY)
+      
+      // Show context menu for authenticated users
+      if (isAuthenticated.value && !isAdmin.value) {
+        // Check if clicking on any POI (regular or custom) - only allow editing own custom POIs
+        const clickedPOI = currentGroupedPOIs.find(poi =>
+          isPOIHit(poi, imagePos.x, imagePos.y)
+        )
+        
+        // Only show context menu for custom POIs owned by the user
+        const clickedCustomPOI = clickedPOI && customPOIs.value.find(customPOI => 
+          customPOI.id === clickedPOI.id
+        )
+        
+        contextMenuPOI.value = clickedCustomPOI
+        contextMenuPosition.value = { x: e.clientX, y: e.clientY }
+        customPOIPosition.value = imagePos
+        contextMenuVisible.value = true
+        return
+      }
+      
+      if (!isAdmin.value) return
       
       // Check if right-clicking on an existing connector
       const clickedConnector = currentMapData.value.connectors?.find(conn =>
@@ -1101,7 +1269,7 @@ export default {
         return
       }
       
-      const clickedPOI = currentMapData.value.pois.find(poi =>
+      const clickedPOI = currentGroupedPOIs.find(poi =>
         isPOIHit(poi, imagePos.x, imagePos.y)
       )
       
@@ -1209,30 +1377,46 @@ export default {
     }
     
     const handleMouseDown = (e) => {
-      // Check if we're in admin mode and Alt key is held for dragging
-      if (isAdmin.value && e.altKey && !e.shiftKey) {
+      // Check if Alt key is held for dragging
+      if (e.altKey && !e.shiftKey) {
         const rect = mapCanvas.value.getBoundingClientRect()
         const canvasX = e.clientX - rect.left
         const canvasY = e.clientY - rect.top
         const imagePos = canvasToImage(canvasX, canvasY)
         
-        // Check for POI hit
-        const clickedPOI = currentMapData.value.pois.find(poi =>
+        // Check for POI hit using the grouped POIs
+        const clickedPOI = currentGroupedPOIs.find(poi =>
           isPOIHit(poi, imagePos.x, imagePos.y)
         )
         
         if (clickedPOI) {
-          draggedItem.value = clickedPOI
-          dragItemType.value = 'poi'
-          dragOffset.value = {
-            x: imagePos.x - clickedPOI.x,
-            y: imagePos.y - clickedPOI.y
+          // Check if it's a custom POI the user can drag
+          const isCustomPOI = customPOIs.value.some(customPOI => 
+            customPOI.id === clickedPOI.id &&
+            customPOI.user_id === user.value?.id &&
+            customPOI.status !== 'pending'
+          )
+          
+          // Check if it's a regular POI and user is admin
+          const isRegularPOI = currentMapData.value.pois.some(poi => poi.id === clickedPOI.id)
+          
+          if (isCustomPOI || (isAdmin.value && isRegularPOI)) {
+            // Use original position if available (for grouped POIs)
+            const poiX = clickedPOI.originalX !== undefined ? clickedPOI.originalX : clickedPOI.x
+            const poiY = clickedPOI.originalY !== undefined ? clickedPOI.originalY : clickedPOI.y
+            
+            draggedItem.value = clickedPOI
+            dragItemType.value = isCustomPOI ? 'customPoi' : 'poi'
+            dragOffset.value = {
+              x: imagePos.x - poiX,
+              y: imagePos.y - poiY
+            }
+            originalPosition.value = {
+              x: poiX,
+              y: poiY
+            }
+            return
           }
-          originalPosition.value = {
-            x: clickedPOI.x,
-            y: clickedPOI.y
-          }
-          return
         }
         
         // Check for connection hit
@@ -1284,7 +1468,7 @@ export default {
           const imagePos = canvasToImage(canvasX, canvasY)
           
           // Check if clicking on any draggable item
-          const clickedPOI = currentMapData.value.pois.find(poi =>
+          const clickedPOI = currentGroupedPOIs.find(poi =>
             isPOIHit(poi, imagePos.x, imagePos.y)
           )
           const clickedConnection = currentMapData.value.connections.find(conn =>
@@ -1321,8 +1505,8 @@ export default {
         return
       }
       
-      // Update hovered items
-      hoveredPOI.value = currentMapData.value.pois.find(poi =>
+      // Update hovered items using the grouped POIs
+      hoveredPOI.value = currentGroupedPOIs.find(poi =>
         isPOIHit(poi, imagePos.x, imagePos.y)
       )
       
@@ -1678,6 +1862,62 @@ export default {
       ctx.restore()
     }
     
+    const drawHighlightEffect = (ctx, poi) => {
+      const canvasPos = imageToCanvas(poi.x, poi.y)
+      const currentTime = Date.now()
+      const elapsed = currentTime - highlightStartTime.value
+      const pulseDuration = 500 // Duration of each pulse in ms
+      const totalDuration = pulseDuration * 5 // 5 pulses
+      
+      // Stop after 5 pulses
+      if (elapsed > totalDuration) {
+        highlightedPOI.value = null
+        return
+      }
+      
+      // Calculate pulse progress (0 to 1 for each pulse)
+      const pulseProgress = (elapsed % pulseDuration) / pulseDuration
+      
+      ctx.save()
+      ctx.translate(canvasPos.x, canvasPos.y)
+      
+      // Use sine wave for smooth pulsing
+      const pulseScale = Math.sin(pulseProgress * Math.PI)
+      
+      // Create a glowing circle effect
+      const baseRadius = 25
+      const maxRadius = 40
+      const radius = baseRadius + (maxRadius - baseRadius) * pulseScale
+      const opacity = 0.3 + 0.7 * pulseScale
+      
+      // Outer glow
+      const gradient = ctx.createRadialGradient(0, 0, radius * 0.5, 0, 0, radius * 1.5)
+      gradient.addColorStop(0, `rgba(255, 215, 0, ${opacity * 0.8})`)
+      gradient.addColorStop(0.5, `rgba(255, 215, 0, ${opacity * 0.4})`)
+      gradient.addColorStop(1, `rgba(255, 215, 0, 0)`)
+      
+      ctx.beginPath()
+      ctx.arc(0, 0, radius * 1.5, 0, Math.PI * 2)
+      ctx.fillStyle = gradient
+      ctx.fill()
+      
+      // Main circle
+      ctx.beginPath()
+      ctx.arc(0, 0, radius, 0, Math.PI * 2)
+      ctx.strokeStyle = `rgba(255, 215, 0, ${opacity})`
+      ctx.lineWidth = 3
+      ctx.stroke()
+      
+      // Inner bright circle
+      ctx.beginPath()
+      ctx.arc(0, 0, radius * 0.7, 0, Math.PI * 2)
+      ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.6})`
+      ctx.lineWidth = 2
+      ctx.stroke()
+      
+      ctx.restore()
+    }
+    
     const drawConnectorArrow = (ctx, fromConnector, toConnector) => {
       const fromPos = imageToCanvas(fromConnector.x, fromConnector.y)
       const toPos = imageToCanvas(toConnector.x, toConnector.y)
@@ -1860,52 +2100,39 @@ export default {
     }
     
     const toggleAdmin = async () => {
-      if (!isAdmin.value) {
-        const password = prompt('Enter admin password:')
-        if (!password) return
+      // Only allow admin users to toggle admin mode
+      if (!user.value || !user.value.isAdmin) {
+        error('Admin access required')
+        return
+      }
+      
+      try {
+        // Toggle admin mode on server (secure)
+        const response = await fetch('/api/admin/toggle-mode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        })
         
-        // First try client-side password (for development)
-        const expectedPassword = import.meta.env.VITE_ADMIN_PASSWORD
-        
-        if (expectedPassword) {
-          // Development mode - check password client-side
-          if (password === expectedPassword) {
-            isAdmin.value = true
-            localStorage.setItem('isAdmin', 'true')
+        if (response.ok) {
+          const data = await response.json()
+          isAdmin.value = data.adminModeEnabled
+          
+          if (isAdmin.value) {
             success('Admin mode activated')
           } else {
-            error('Incorrect password')
+            // Clean up any pending admin operations
+            pendingPOI.value = null
+            pendingConnection.value = null
+            pendingConnector.value = null
+            pendingConnectorPair.value = { first: null, second: null }
+            info('Admin mode deactivated')
           }
         } else {
-          // Production mode - verify with server
-          try {
-            const response = await fetch('/api/admin/verify', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ password })
-            })
-            
-            const result = await response.json()
-            
-            if (response.ok && result.valid) {
-              isAdmin.value = true
-              localStorage.setItem('isAdmin', 'true')
-              success('Admin mode activated')
-            } else {
-              error('Incorrect password')
-            }
-          } catch (err) {
-            error('Failed to verify admin password')
-            console.error('Admin verification error:', err)
-          }
+          error('Failed to toggle admin mode')
         }
-      } else {
-        isAdmin.value = false
-        localStorage.removeItem('isAdmin')
-        pendingPOI.value = null
-        pendingConnection.value = null
-        pendingConnector.value = null
-        info('Admin mode deactivated')
+      } catch (err) {
+        error('Failed to toggle admin mode')
+        console.error('Admin toggle error:', err)
       }
     }
     
@@ -2199,6 +2426,45 @@ export default {
     }
     
     const deletePOI = async (poiId) => {
+      // Check if this is a custom POI
+      const customPoi = customPOIs.value.find(p => p.id === poiId)
+      
+      if (customPoi) {
+        // Handle custom POI deletion
+        const confirmed = await showConfirm(
+          'Delete Custom POI',
+          `Delete custom POI "${customPoi.name || 'Unnamed'}"? This will also remove it from anyone you shared it with.`,
+          'Delete',
+          'Cancel'
+        )
+        
+        if (!confirmed) return
+        
+        try {
+          const response = await fetchWithCSRF(`/api/custom-pois/${poiId}`, {
+            method: 'DELETE'
+          })
+          
+          if (response.ok) {
+            success('Custom POI deleted')
+            await loadCustomPOIs()
+            
+            // Clear selected POI if it's the one being deleted
+            if (selectedPOI.value && selectedPOI.value.id === poiId) {
+              selectedPOI.value = null
+            }
+            render()
+          } else {
+            error('Failed to delete custom POI')
+          }
+        } catch (err) {
+          console.error('Failed to delete custom POI:', err)
+          error('Failed to delete custom POI')
+        }
+        return
+      }
+      
+      // Handle regular POI deletion
       const map = maps.value[selectedMapIndex.value]
       
       if (!map.id || !dbMapData.value[map.id]) {
@@ -2208,6 +2474,16 @@ export default {
       
       try {
         const poi = dbMapData.value[map.id].pois.find(p => p.id === poiId)
+        
+        // Show confirmation dialog
+        const confirmed = await showConfirm(
+          'Delete POI',
+          `Delete POI "${poi?.name || 'Unnamed'}"? This action cannot be undone.`,
+          'Delete',
+          'Cancel'
+        )
+        
+        if (!confirmed) return
         
         await poisAPI.delete(poiId)
         
@@ -2401,7 +2677,7 @@ export default {
         selectedPOI.value = item
         const canvasPos = imageToCanvas(item.x, item.y)
         let offsetX = 40
-        const offsetY = -20
+        const offsetY = -35
         
         const popupWidth = 300
         const screenX = canvasPos.x + rect.left + offsetX
@@ -2590,6 +2866,7 @@ export default {
       
       const map = maps.value[selectedMapIndex.value]
       const itemType = pendingChange.value.type === 'poi' ? 'POI' : 
+                      pendingChange.value.type === 'customPoi' ? 'Custom POI' :
                       pendingChange.value.type === 'connection' ? 'Connection' : 'Connector'
       const itemName = pendingChange.value.item.name || pendingChange.value.item.label
       
@@ -2607,6 +2884,33 @@ export default {
             x: Math.round(pendingChange.value.newPosition.x),
             y: Math.round(pendingChange.value.newPosition.y)
           })
+        } else if (pendingChange.value.type === 'customPoi') {
+          // Update custom POI position
+          const response = await fetch(`/api/custom-pois/${pendingChange.value.item.id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              ...pendingChange.value.item,
+              x: Math.round(pendingChange.value.newPosition.x),
+              y: Math.round(pendingChange.value.newPosition.y)
+            })
+          })
+          
+          if (!response.ok) {
+            throw new Error('Failed to update custom POI position')
+          }
+          
+          // Update local state
+          const index = customPOIs.value.findIndex(p => p.id === pendingChange.value.item.id)
+          if (index !== -1) {
+            customPOIs.value[index] = {
+              ...customPOIs.value[index],
+              x: Math.round(pendingChange.value.newPosition.x),
+              y: Math.round(pendingChange.value.newPosition.y)
+            }
+          }
         } else if (pendingChange.value.type === 'connector') {
           // Update connector position in database
           const connector = pendingChange.value.item
@@ -2930,23 +3234,258 @@ export default {
       animationFrameId = requestAnimationFrame(animate)
     }
     
-    onMounted(async () => {
-      // Check for persisted admin mode
-      if (localStorage.getItem('isAdmin') === 'true') {
-        isAdmin.value = true
+    const loginWithGoogle = () => {
+      window.location.href = '/auth/google';
+    }
+    
+    // User dropdown methods
+    const toggleUserDropdown = () => {
+      showUserDropdown.value = !showUserDropdown.value
+    }
+    
+    const handleLogout = async () => {
+      try {
+        const response = await fetch('/api/auth/logout', {
+          method: 'POST'
+        })
+        
+        if (response.ok) {
+          window.location.href = '/'
+        }
+      } catch (error) {
+        console.error('Error logging out:', error)
       }
+    }
+    
+    // Close dropdown when clicking outside
+    const closeUserDropdown = () => {
+      showUserDropdown.value = false
+    }
+    
+    // Custom POI methods
+    const loadCustomPOIs = async () => {
+      if (!isAuthenticated.value || !maps.value[selectedMapIndex.value]?.id) return
+      
+      try {
+        const response = await fetch(`/api/maps/${maps.value[selectedMapIndex.value].id}/custom-pois`)
+        if (response.ok) {
+          const pois = await response.json()
+          // Mark POIs as custom for proper identification
+          customPOIs.value = pois.map(poi => ({ ...poi, is_custom: true }))
+          render() // Re-render to show custom POIs
+        }
+      } catch (error) {
+        console.error('Error loading custom POIs:', error)
+      }
+    }
+    
+    const createCustomPOI = () => {
+      selectedCustomPOI.value = null
+      customPOIDialogVisible.value = true
+    }
+    
+    const editCustomPOI = (poi) => {
+      selectedCustomPOI.value = poi
+      customPOIDialogVisible.value = true
+    }
+    
+    const publishCustomPOI = async (poiId) => {
+      const poi = customPOIs.value.find(p => p.id === poiId)
+      if (!poi) return
+      
+      const confirmed = await showConfirm(
+        'Publish POI',
+        `Submit "${poi.name}" for community approval? Once published, it cannot be edited.`,
+        'Publish',
+        'Cancel'
+      )
+      
+      if (!confirmed) return
+      
+      try {
+        const response = await fetchWithCSRF(`/api/custom-pois/${poiId}/publish`, {
+          method: 'POST'
+        })
+        
+        if (response.ok) {
+          success('POI submitted for community approval')
+          await loadCustomPOIs() // Refresh to get updated status
+          
+          // Update the selected POI status if it's still open
+          if (selectedPOI.value && selectedPOI.value.id === poiId) {
+            selectedPOI.value = { 
+              ...selectedPOI.value, 
+              status: 'pending',
+              vote_score: 1,  // Creator's automatic upvote
+              upvotes: 1,
+              downvotes: 0
+            }
+          }
+        } else {
+          const data = await response.json()
+          error(data.error || 'Failed to publish POI')
+        }
+      } catch (err) {
+        console.error('Error publishing POI:', err)
+        error('Failed to publish POI')
+      }
+    }
+    
+    const deleteCustomPOI = async (poi) => {
+      if (!confirm('Delete this custom POI? This will also remove it from anyone you shared it with.')) {
+        return
+      }
+      
+      try {
+        const response = await fetch(`/api/custom-pois/${poi.id}`, {
+          method: 'DELETE'
+        })
+        
+        if (response.ok) {
+          success('Custom POI deleted')
+          await loadCustomPOIs()
+        } else {
+          error('Failed to delete custom POI')
+        }
+      } catch (err) {
+        error('Failed to delete custom POI')
+      }
+    }
+    
+    const saveCustomPOI = async (data) => {
+      try {
+        const url = selectedCustomPOI.value 
+          ? `/api/custom-pois/${selectedCustomPOI.value.id}`
+          : '/api/custom-pois'
+        
+        const method = selectedCustomPOI.value ? 'PUT' : 'POST'
+        
+        const response = await fetchWithCSRF(url, {
+          method,
+          body: data
+        })
+        
+        if (response.ok) {
+          success(selectedCustomPOI.value ? 'Custom POI updated' : 'Custom POI created')
+          customPOIDialogVisible.value = false
+          await loadCustomPOIs()
+        } else {
+          error('Failed to save custom POI')
+        }
+      } catch (err) {
+        error('Failed to save custom POI')
+      }
+    }
+    
+    // Load custom POIs when map changes
+    watch(() => maps.value[selectedMapIndex.value]?.id, () => {
+      if (isAuthenticated.value) {
+        loadCustomPOIs()
+      }
+    })
+    
+    // Watch for user changes to ensure non-admins can't have admin mode
+    watch(user, (newUser) => {
+      if (!newUser || !newUser.isAdmin) {
+        isAdmin.value = false
+      }
+    })
+    
+    // Hide context menu when clicking elsewhere
+    const hideContextMenu = () => {
+      contextMenuVisible.value = false
+    }
+    
+    // XP polling for real-time updates
+    let xpPollingInterval = null
+    
+    const pollForXPUpdates = async () => {
+      if (!isAuthenticated.value) return
+      
+      try {
+        const response = await fetch('/api/auth/status')
+        if (response.ok) {
+          const data = await response.json()
+          if (data.authenticated && data.user.xp !== user.value?.xp) {
+            // Update user object with new XP
+            user.value = { ...user.value, xp: data.user.xp }
+          }
+        }
+      } catch (error) {
+        console.error('Error polling for XP updates:', error)
+      }
+    }
+    
+    onMounted(async () => {
+      // Check authentication status
+      await checkAuthStatus()
+      
+      // Initialize CSRF token if authenticated
+      if (isAuthenticated.value) {
+        await initCSRF()
+      }
+      
+      // Admin mode state is now handled by the watcher on adminModeEnabled
       
       // Load maps from database
       maps.value = await loadMapsFromDatabase()
+      
+      // Start XP polling if authenticated
+      if (isAuthenticated.value) {
+        xpPollingInterval = setInterval(pollForXPUpdates, 30000) // Poll every 30 seconds
+      }
       
       initCanvas(mapCanvas.value)
       resizeCanvas()
       window.addEventListener('resize', resizeCanvas)
       window.addEventListener('keydown', handleKeyboardShortcut)
       
-      // Load the first map if available
-      if (maps.value.length > 0) {
-        await loadSelectedMap()
+      // Close user dropdown when clicking outside
+      document.addEventListener('click', (e) => {
+        const dropdown = document.querySelector('.user-dropdown-container')
+        if (dropdown && !dropdown.contains(e.target)) {
+          closeUserDropdown()
+        }
+      })
+      
+      // Check if we need to highlight a custom POI
+      const highlightData = sessionStorage.getItem('highlightCustomPoi')
+      if (highlightData) {
+        const { id, mapId, x, y } = JSON.parse(highlightData)
+        sessionStorage.removeItem('highlightCustomPoi')
+        
+        // Find and select the map
+        const mapIndex = maps.value.findIndex(m => m.id === mapId)
+        if (mapIndex !== -1) {
+          selectedMapIndex.value = mapIndex
+          await loadSelectedMap()
+          
+          // Wait for map to be ready then set up highlight
+          nextTick(() => {
+            // Center view on the POI
+            if (image.value) {
+              // Calculate center position
+              const centerX = mapCanvas.value.width / 2
+              const centerY = mapCanvas.value.height / 2
+              
+              // Calculate offset to center the POI
+              offsetX.value = centerX - (x * scale.value)
+              offsetY.value = centerY - (y * scale.value)
+              
+              // Set up the highlight with a small delay to ensure rendering is ready
+              setTimeout(() => {
+                highlightedPOI.value = { id, x, y }
+                highlightStartTime.value = Date.now()
+                render()
+              }, 100)
+            }
+          })
+        }
+      } else {
+        // Load the first map if available
+        if (maps.value.length > 0) {
+          await loadSelectedMap()
+        }
       }
       
       // Start animation loop for glowing effects
@@ -2958,6 +3497,9 @@ export default {
       window.removeEventListener('keydown', handleKeyboardShortcut)
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId)
+      }
+      if (xpPollingInterval) {
+        clearInterval(xpPollingInterval)
       }
     })
     
@@ -3017,7 +3559,31 @@ export default {
       handleMapManagerToast,
       deleteConnection,
       confirmPendingChange,
-      cancelPendingChange
+      cancelPendingChange,
+      // Auth related
+      user,
+      isAuthenticated,
+      loginWithGoogle,
+      showUserDropdown,
+      toggleUserDropdown,
+      handleLogout,
+      // Custom POI related
+      contextMenuVisible,
+      contextMenuPosition,
+      customPOIDialogVisible,
+      customPOIPosition,
+      selectedCustomPOI,
+      customPOIs,
+      contextMenuPOI,
+      hideContextMenu,
+      createCustomPOI,
+      editCustomPOI,
+      deleteCustomPOI,
+      publishCustomPOI,
+      saveCustomPOI,
+      // Highlight
+      highlightedPOI,
+      highlightStartTime
     }
   }
 }
@@ -3058,6 +3624,73 @@ export default {
 .admin-text {
   color: #4a7c59;
   font-weight: 500;
+}
+
+.admin-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.admin-toggle-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #3a3a3a;
+  border: 1px solid #555;
+  border-radius: 6px;
+  color: #ccc;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.admin-toggle-button:hover {
+  background: #444;
+  border-color: #666;
+  color: #fff;
+}
+
+.admin-toggle-button.active {
+  background: rgba(74, 124, 89, 0.2);
+  border-color: rgba(74, 124, 89, 0.6);
+  color: #4a7c59;
+}
+
+.admin-icon {
+  font-size: 1.1rem;
+}
+
+.toggle-indicator {
+  width: 36px;
+  height: 20px;
+  background: #555;
+  border-radius: 10px;
+  position: relative;
+  transition: background 0.2s ease;
+  margin-left: 0.5rem;
+}
+
+.toggle-indicator::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  background: white;
+  border-radius: 50%;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-indicator.on {
+  background: #4a7c59;
+}
+
+.toggle-indicator.on::after {
+  transform: translateX(16px);
 }
 
 .map-canvas.admin-cursor {
@@ -3123,5 +3756,109 @@ export default {
 
 .cancel-btn:hover {
   background: #777;
+}
+
+/* User controls */
+.user-controls {
+  display: flex;
+  align-items: center;
+}
+
+.login-button {
+  background: #4a7c59;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.login-button:hover {
+  background: #3a6249;
+}
+
+.user-dropdown-container {
+  position: relative;
+}
+
+.user-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  transition: box-shadow 0.2s;
+  text-decoration: none;
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+}
+
+.user-button:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.user-avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.user-initials {
+  width: 100%;
+  height: 100%;
+  background: #4a7c59;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 500;
+  font-size: 1rem;
+}
+
+.user-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 160px;
+  overflow: hidden;
+  z-index: 1000;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  text-decoration: none;
+  color: #333;
+  font-size: 14px;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.dropdown-item:hover {
+  background-color: #f5f5f5;
+}
+
+.dropdown-item:not(:last-child) {
+  border-bottom: 1px solid #eee;
+}
+
+.dropdown-icon {
+  font-size: 16px;
 }
 </style>

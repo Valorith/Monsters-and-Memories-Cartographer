@@ -93,9 +93,9 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     const isHovered = hoveredPOI.value?.id === poi.id
     
     // Calculate icon size - moderate scaling when zoomed out
-    const baseSize = 24
+    const baseSize = poi.icon_size || 24  // Use custom POI icon_size if available
     const minSize = 20
-    const maxSize = 36
+    const maxSize = 48  // Increased max size to accommodate larger custom POIs
     // More subtle inverse relationship with zoom
     const inverseScale = Math.max(0.8, Math.min(1.5, 1 / Math.sqrt(scale.value)))
     const iconScale = poi.iconScale || 1
@@ -147,8 +147,8 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     ctx.fillStyle = isHovered ? colors.secondary : colors.primary
     ctx.fillText(displayIcon, 0, 0)
     
-    // Draw group indicator if this is a grouped POI
-    if (poi.isGrouped && poi.groupSize > 1) {
+    // Draw group indicator if this is a grouped POI and it should show the badge
+    if (poi.isGrouped && poi.groupSize > 1 && (poi.showGroupBadge !== false)) {
       // Optional: Show hover area for debugging (uncomment to see the expanded hit area)
       // if (isHovered) {
       //   const hitRadius = iconSize / 2 * 1.5 // Same calculation as isPOIHit

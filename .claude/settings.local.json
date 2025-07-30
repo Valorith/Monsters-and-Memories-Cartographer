@@ -35,7 +35,9 @@
       "Bash(npm run dev:*)",
       "Bash(pkill:*)",
       "Bash(npx vite:*)",
-      "Bash(wget:*)"
+      "Bash(wget:*)",
+      "Bash(find:*)",
+      "Bash(ss:*)"
     ],
     "deny": []
   }
