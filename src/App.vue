@@ -3338,13 +3338,26 @@ export default {
     
     // Handle avatar loading error by falling back to Google avatar
     const handleAvatarError = async (event) => {
+      console.error('Avatar failed to load:', event.target.src)
+      
+      // Don't retry if we're already trying the Google picture
+      if (event.target.src.includes('/api/user/google-picture')) {
+        event.target.style.display = 'none'
+        return
+      }
+      
       // First try to get the original Google picture from the database
       try {
         const response = await fetch('/api/user/google-picture')
         if (response.ok) {
           const data = await response.json()
-          if (data.picture) {
+          if (data.picture && event.target.src !== data.picture) {
             event.target.src = data.picture
+            
+            // Update the user object to prevent retry loops
+            if (user.value) {
+              user.value.picture = data.picture
+            }
             return
           }
         }
