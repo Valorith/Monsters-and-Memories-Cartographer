@@ -3193,14 +3193,16 @@
     }
     
     async function resetAvatar() {
-      if (!confirm('Reset to your Google profile picture?')) return;
+      if (!confirm('Reset to your Google profile picture? This will permanently delete all your custom avatars.')) return;
       
       try {
-        const response = await window.csrfHelper.fetchWithCSRF('/api/user/profile/avatar', {
-          method: 'DELETE'
+        const response = await window.csrfHelper.fetchWithCSRF('/api/user/profile/avatar/reset', {
+          method: 'POST'
         });
         
         if (response.ok) {
+          const data = await response.json();
+          
           // Fetch user profile to get original Google picture
           const profileResponse = await fetch('/api/user/profile');
           const profile = await profileResponse.json();
@@ -3212,11 +3214,15 @@
           
           // Update current user data
           currentUser.custom_avatar = null;
+          currentUser.avatar_filename = null;
           
           // Hide reset button
           document.getElementById('reset-avatar-btn').style.display = 'none';
           
-          showMessage('Profile picture reset successfully', 'success');
+          showMessage(`Profile picture reset successfully. ${data.filesDeleted} avatar file(s) deleted.`, 'success');
+        } else {
+          const error = await response.json();
+          showMessage(error.error || 'Failed to reset profile picture', 'error');
         }
       } catch (error) {
         showMessage('Failed to reset profile picture', 'error');

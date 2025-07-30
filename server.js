@@ -15,7 +15,7 @@ import rateLimit from 'express-rate-limit';
 import Tokens from 'csrf';
 import cookieParser from 'cookie-parser';
 import compression from 'compression';
-import { scheduleAvatarCleanup, cleanupOrphanedAvatars } from './src/utils/avatar-cleanup.js';
+import { scheduleAvatarCleanup, cleanupOrphanedAvatars, deleteAllUserAvatars } from './src/utils/avatar-cleanup.js';
 import { mapsCache, leaderboardCache, userStatsCache, cacheMiddleware, etagMiddleware } from './src/utils/cache.js';
 import { optimizeImage, getExtensionForFormat } from './src/utils/image-optimizer.js';
 
@@ -1174,7 +1174,18 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
   }
 
   try {
-    // Optimize the image
+    // Determine output format based on input to avoid format mismatches
+    const mimeToFormat = {
+      'image/jpeg': 'jpeg',
+      'image/png': 'png',
+      'image/gif': 'gif',
+      'image/webp': 'webp'
+    };
+    const outputFormat = mimeToFormat[req.file.mimetype] || 'jpeg';
+    
+    console.log(`Avatar upload: Processing ${req.file.mimetype} as ${outputFormat} format`);
+    
+    // Optimize the image - use same format as input to avoid mismatches
     const optimized = await optimizeImage(req.file.buffer, {
       maxWidth: 200,
       maxHeight: 200,
@@ -1182,7 +1193,7 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
       fit: 'cover',
       position: 'center',
       preserveAnimation: true,
-      outputFormat: 'auto'
+      outputFormat: outputFormat // Keep the same format as input
     });
     
     let processedBuffer = optimized.buffer;
@@ -1194,6 +1205,7 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
     
     // Fall back to original if optimization fails
     if (!processedBuffer || processedBuffer.length === 0) {
+      console.warn('Avatar optimization failed, using original buffer');
       processedBuffer = req.file.buffer;
       const mimeToExt = {
         'image/jpeg': 'jpg',
@@ -1204,10 +1216,12 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
       fileExtension = mimeToExt[req.file.mimetype] || 'jpg';
     }
 
-    // Generate unique filename
+    // Generate unique filename with the actual format we'll be saving
     const filename = `${req.user.id}_${Date.now()}.${fileExtension}`;
     const avatarsDir = join(__dirname, 'public', 'avatars');
     const filepath = join(avatarsDir, filename);
+    
+    console.log(`Avatar upload: Generated filename ${filename} for format ${optimized.format}`);
     
     // Ensure avatars directory exists
     await fs.mkdir(avatarsDir, { recursive: true });
@@ -1219,15 +1233,8 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
     );
     const oldAvatarFilename = currentUser.rows[0]?.avatar_filename;
     
-    // IMPORTANT: Update database FIRST to prevent race condition with cleanup
-    // This ensures the filename is in the database before the file exists on disk
-    await pool.query(
-      'UPDATE users SET avatar_filename = $1, avatar_version = COALESCE(avatar_version, 1) + 1, avatar_updated_at = CURRENT_TIMESTAMP, avatar_missing_count = 0 WHERE id = $2',
-      [filename, req.user.id]
-    );
-    
+    // First, save the file to disk to ensure it's actually written
     try {
-      // Now save file to disk
       await fs.writeFile(filepath, processedBuffer);
       
       // Verify file was written successfully
@@ -1237,18 +1244,26 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
         throw new Error('Written file is empty');
       }
       
+      console.log(`Avatar file saved successfully: ${filename} (${stats.size} bytes)`);
+      
+      // NOW update database with the confirmed filename
+      await pool.query(
+        'UPDATE users SET avatar_filename = $1, avatar_version = COALESCE(avatar_version, 1) + 1, avatar_updated_at = CURRENT_TIMESTAMP, avatar_missing_count = 0 WHERE id = $2',
+        [filename, req.user.id]
+      );
+      
+      console.log(`Database updated with avatar filename: ${filename}`);
+      
       // Success - delete old avatar file if exists
-      if (oldAvatarFilename) {
+      if (oldAvatarFilename && oldAvatarFilename !== filename) {
         const oldFilepath = join(__dirname, 'public', 'avatars', oldAvatarFilename);
-        fs.unlink(oldFilepath).catch(() => {}); // Ignore errors if file doesn't exist
+        fs.unlink(oldFilepath).catch(err => {
+          console.log(`Failed to delete old avatar ${oldAvatarFilename}:`, err.message);
+        });
       }
     } catch (fileError) {
-      // File save failed - rollback database update
+      // File save failed - don't update database
       console.error('Avatar file save failed:', fileError);
-      await pool.query(
-        'UPDATE users SET avatar_filename = $1 WHERE id = $2',
-        [oldAvatarFilename, req.user.id]
-      );
       return res.status(500).json({ error: 'Failed to save avatar file' });
     }
 
@@ -1484,6 +1499,54 @@ app.post('/api/user/profile/avatar/recover', validateCSRF, async (req, res) => {
   }
 });
 
+// Reset avatar to Google photo
+app.post('/api/user/profile/avatar/reset', validateCSRF, async (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  try {
+    // Delete all user's avatar files
+    const avatarsDir = join(__dirname, 'public', 'avatars');
+    const { found, deleted } = await deleteAllUserAvatars(avatarsDir, req.user.id);
+    
+    console.log(`Reset avatar for user ${req.user.id}: found ${found} files, deleted ${deleted}`);
+    
+    // Update database to remove avatar filename
+    await pool.query(
+      'UPDATE users SET avatar_filename = NULL, avatar_version = NULL, avatar_updated_at = NULL, avatar_missing_count = 0 WHERE id = $1',
+      [req.user.id]
+    );
+    
+    // Update session
+    req.user.avatar_filename = null;
+    req.user.avatar_version = null;
+    req.user.avatar_updated_at = null;
+    req.user.avatar_missing_count = 0;
+    
+    // Force session save
+    await new Promise((resolve, reject) => {
+      req.session.save((err) => {
+        if (err) {
+          console.error('Error saving session:', err);
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
+    
+    res.json({ 
+      success: true, 
+      message: 'Avatar reset to Google photo',
+      filesDeleted: deleted
+    });
+  } catch (error) {
+    console.error('Error resetting avatar:', error);
+    res.status(500).json({ error: 'Failed to reset avatar' });
+  }
+});
+
 // Get user's Google OAuth picture
 app.get('/api/user/google-picture', async (req, res) => {
   if (!req.isAuthenticated()) {
@@ -1504,6 +1567,96 @@ app.get('/api/user/google-picture', async (req, res) => {
   } catch (error) {
     console.error('Error fetching Google picture:', error);
     res.status(500).json({ error: 'Failed to fetch Google picture' });
+  }
+});
+
+// Diagnostic endpoint to fix avatar mismatches
+app.post('/api/user/profile/avatar/fix-mismatch', validateCSRF, async (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  try {
+    const avatarsDir = join(__dirname, 'public', 'avatars');
+    const files = await fs.readdir(avatarsDir);
+    
+    // Find all avatar files for this user
+    const userAvatarFiles = files.filter(f => 
+      f.match(new RegExp(`^${req.user.id}_\\d+\\.(jpg|jpeg|png|gif|webp)$`))
+    );
+    
+    console.log(`Found ${userAvatarFiles.length} avatar files for user ${req.user.id}:`, userAvatarFiles);
+    
+    // Get current database state
+    const dbResult = await pool.query(
+      'SELECT avatar_filename, avatar_version FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    
+    const dbFilename = dbResult.rows[0]?.avatar_filename;
+    console.log('Database avatar filename:', dbFilename);
+    
+    if (userAvatarFiles.length === 0) {
+      // No files found, clear database
+      await pool.query(
+        'UPDATE users SET avatar_filename = NULL, avatar_version = NULL, avatar_missing_count = 0 WHERE id = $1',
+        [req.user.id]
+      );
+      return res.json({ 
+        message: 'No avatar files found, cleared database',
+        filesFound: [],
+        dbFilename,
+        action: 'cleared'
+      });
+    }
+    
+    // Find the newest file by timestamp
+    const fileInfos = userAvatarFiles.map(f => {
+      const match = f.match(/^(\d+)_(\d+)\.(jpg|jpeg|png|gif|webp)$/);
+      return {
+        filename: f,
+        timestamp: parseInt(match[2])
+      };
+    }).sort((a, b) => b.timestamp - a.timestamp);
+    
+    const newestFile = fileInfos[0].filename;
+    
+    // Update database to use the newest file
+    await pool.query(
+      'UPDATE users SET avatar_filename = $1, avatar_version = COALESCE(avatar_version, 0) + 1, avatar_missing_count = 0 WHERE id = $2',
+      [newestFile, req.user.id]
+    );
+    
+    // Delete older files
+    const filesToDelete = fileInfos.slice(1).map(f => f.filename);
+    for (const file of filesToDelete) {
+      await fs.unlink(join(avatarsDir, file)).catch(err => 
+        console.error(`Failed to delete old avatar ${file}:`, err)
+      );
+    }
+    
+    // Update session
+    req.user.avatar_filename = newestFile;
+    req.user.avatar_version = (req.user.avatar_version || 0) + 1;
+    
+    await new Promise((resolve, reject) => {
+      req.session.save((err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+    
+    res.json({
+      message: 'Avatar mismatch fixed',
+      filesFound: userAvatarFiles,
+      dbFilename,
+      selectedFile: newestFile,
+      deletedFiles: filesToDelete,
+      action: 'updated'
+    });
+  } catch (error) {
+    console.error('Error fixing avatar mismatch:', error);
+    res.status(500).json({ error: 'Failed to fix avatar mismatch' });
   }
 });
 
