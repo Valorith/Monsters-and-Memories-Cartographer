@@ -43,7 +43,7 @@
           <div v-for="(player, index) in leaderboardData" :key="player.id" 
                class="leaderboard-item" :class="{ 'current-user': player.id === user.id }">
             <div class="rank">{{ index + 1 }}</div>
-            <img v-if="player.avatar" :src="player.avatar" :alt="player.display_name" class="player-avatar" />
+            <img v-if="player.avatar" :src="player.avatar" :alt="player.display_name" class="player-avatar" @error="handleLeaderboardAvatarError($event, player)" />
             <div v-else class="player-avatar-placeholder">{{ player.display_name[0] }}</div>
             <div class="player-info">
               <div class="player-name">{{ player.display_name }}</div>
@@ -217,6 +217,13 @@ export default {
       document.removeEventListener('click', handleClickOutside);
     });
 
+    // Handle avatar loading errors in leaderboard
+    const handleLeaderboardAvatarError = (event, player) => {
+      // Hide the broken image
+      event.target.style.display = 'none';
+      // The placeholder with initials will show instead
+    };
+
     return {
       currentLevel,
       animatedProgress,
@@ -228,7 +235,8 @@ export default {
       leaderboardData,
       loadingLeaderboard,
       leaderboardError,
-      toggleLeaderboard
+      toggleLeaderboard,
+      handleLeaderboardAvatarError
     };
   }
 };

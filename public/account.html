@@ -844,11 +844,11 @@
 
     <div class="account-container" id="account-content" style="display: none;">
       <div class="account-sidebar">
-        <button class="nav-item active" onclick="showTab('profile')">👤 Profile</button>
-        <button class="nav-item" onclick="showTab('preferences')">⚙️ Preferences</button>
-        <button class="nav-item" onclick="showTab('privacy')">🔒 Privacy & Security</button>
-        <button class="nav-item" onclick="showTab('custom-pois')">📍 Custom POIs</button>
-        <button class="nav-item" id="admin-tab-btn" style="display: none;" onclick="showTab('admin')">👑 Admin</button>
+        <button class="nav-item active">👤 Profile</button>
+        <button class="nav-item">⚙️ Preferences</button>
+        <button class="nav-item">🔒 Privacy & Security</button>
+        <button class="nav-item">📍 Custom POIs</button>
+        <button class="nav-item" id="admin-tab-btn" style="display: none;">👑 Admin</button>
       </div>
 
       <div class="account-content">
@@ -953,7 +953,7 @@
                       📷 Upload New Picture
                     </label>
                     <input type="file" id="avatar-upload" accept="image/*" style="display: none;" onchange="handleAvatarUpload(event)">
-                    <button id="reset-avatar-btn" class="btn secondary-btn btn-sm" onclick="resetAvatar()" style="display: none;">
+                    <button id="reset-avatar-btn" class="btn secondary-btn btn-sm" style="display: none;">
                       ↩️ Reset to Google Picture
                     </button>
                   </div>
@@ -974,7 +974,7 @@
                 <input type="text" id="nickname-input" placeholder="Enter nickname (optional)" maxlength="50" 
                        style="flex: 1; padding: 0.5rem; border: 1px solid #555; border-radius: 4px; 
                               background: #2d2d2d; color: #e0e0e0;">
-                <button class="btn btn-sm" onclick="updateNickname()">Save</button>
+                <button class="btn btn-sm" id="save-nickname-btn">Save</button>
               </div>
               <p style="color: #666; margin-top: 0.5rem; font-size: 0.85rem;">
                 Leave empty to use your real name. 3-50 characters, letters, numbers, spaces, underscores, and hyphens only.
@@ -1002,13 +1002,13 @@
           <div class="preference-section">
             <h3>Data & Privacy</h3>
             <p>Your data is stored securely and is never shared with third parties.</p>
-            <button class="btn danger-btn" onclick="deleteAccount()">Delete Account</button>
+            <button class="btn danger-btn" id="delete-account-btn">Delete Account</button>
           </div>
           
           <div class="preference-section">
             <h3>Active Sessions</h3>
             <p>Manage your active login sessions across devices.</p>
-            <button class="btn secondary-btn" onclick="logoutAll()">Log Out All Devices</button>
+            <button class="btn secondary-btn" id="logout-all-btn">Log Out All Devices</button>
           </div>
         </div>
 
@@ -1041,9 +1041,9 @@
             
             <!-- My POIs Pagination -->
             <div id="my-pois-pagination" class="pagination" style="display: none;">
-              <button class="pagination-btn" onclick="changeMyPoisPage(-1)" id="my-pois-prev">Previous</button>
+              <button class="pagination-btn" id="my-pois-prev">Previous</button>
               <span class="pagination-info" id="my-pois-page-info">Page 1 of 1</span>
-              <button class="pagination-btn" onclick="changeMyPoisPage(1)" id="my-pois-next">Next</button>
+              <button class="pagination-btn" id="my-pois-next">Next</button>
             </div>
             
             <!-- Shared POIs Section -->
@@ -1066,9 +1066,9 @@
               
               <!-- Shared POIs Pagination -->
               <div id="shared-pois-pagination" class="pagination" style="display: none;">
-                <button class="pagination-btn" onclick="changeSharedPoisPage(-1)" id="shared-pois-prev">Previous</button>
+                <button class="pagination-btn" id="shared-pois-prev">Previous</button>
                 <span class="pagination-info" id="shared-pois-page-info">Page 1 of 1</span>
-                <button class="pagination-btn" onclick="changeSharedPoisPage(1)" id="shared-pois-next">Next</button>
+                <button class="pagination-btn" id="shared-pois-next">Next</button>
               </div>
             </div>
             
@@ -1098,9 +1098,9 @@
               
               <!-- Pending POIs Pagination -->
               <div id="pending-pois-pagination" class="pagination" style="display: none;">
-                <button class="pagination-btn" onclick="changePendingPoisPage(-1)" id="pending-pois-prev">Previous</button>
+                <button class="pagination-btn" id="pending-pois-prev">Previous</button>
                 <span class="pagination-info" id="pending-pois-page-info">Page 1 of 1</span>
-                <button class="pagination-btn" onclick="changePendingPoisPage(1)" id="pending-pois-next">Next</button>
+                <button class="pagination-btn" id="pending-pois-next">Next</button>
               </div>
             </div>
           </div>
@@ -1167,9 +1167,9 @@
               
               <!-- Users Pagination -->
               <div id="users-pagination" class="pagination" style="display: none;">
-                <button class="pagination-btn" onclick="changeUsersPage(-1)" id="users-prev">Previous</button>
+                <button class="pagination-btn" id="users-prev">Previous</button>
                 <span class="pagination-info" id="users-page-info">Page 1 of 1</span>
-                <button class="pagination-btn" onclick="changeUsersPage(1)" id="users-next">Next</button>
+                <button class="pagination-btn" data-action="changeUsersPage" data-args="1" id="users-next">Next</button>
               </div>
             </div>
           </div>
@@ -1195,7 +1195,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h2>Vote Details</h2>
-        <button class="close-btn" onclick="closeVoteModal()">&times;</button>
+        <button class="close-btn" data-action="closeVoteModal">&times;</button>
       </div>
       <div class="modal-body">
         <h3 id="inspect-poi-name"></h3>
@@ -1219,7 +1219,7 @@
     <div class="modal-content" style="max-width: 500px;">
       <div class="modal-header">
         <h2>Adjust Experience Points</h2>
-        <button class="close-btn" onclick="closeXPModal()">&times;</button>
+        <button class="close-btn" data-action="closeXPModal">&times;</button>
       </div>
       <div class="modal-body">
         <div style="text-align: center; margin-bottom: 1.5rem;">
@@ -1237,8 +1237,8 @@
         </div>
         
         <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
-          <button class="btn secondary-btn" onclick="closeXPModal()">Cancel</button>
-          <button class="btn" onclick="updateUserXP()" style="background: #FFD700; color: #2a1810;">Update XP</button>
+          <button class="btn secondary-btn" data-action="closeXPModal">Cancel</button>
+          <button class="btn" data-action="updateUserXP" style="background: #FFD700; color: #2a1810;">Update XP</button>
         </div>
       </div>
     </div>
@@ -1249,7 +1249,7 @@
     <div class="modal-content" style="max-width: 800px;">
       <div class="modal-header">
         <h2>User Details</h2>
-        <button class="close-btn" onclick="closeUserModal()">&times;</button>
+        <button class="close-btn" data-action="closeUserModal">&times;</button>
       </div>
       <div class="modal-body">
         <div style="display: flex; gap: 2rem; margin-bottom: 2rem;">
@@ -1272,7 +1272,7 @@
                 <strong>XP:</strong> 
                 <span style="display: flex; align-items: center; gap: 0.5rem;">
                   <span id="detail-user-xp" style="color: #FFD700; font-weight: bold;"></span>
-                  <button class="small-btn" onclick="showXPAdjustment()" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; background: #FFD700; color: #2a1810;">
+                  <button class="small-btn" data-action="showXPAdjustment" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; background: #FFD700; color: #2a1810;">
                     <span class="btn-icon">✏️</span>Edit
                   </button>
                 </span>
@@ -1293,22 +1293,22 @@
             <div style="background: #2d2d2d; padding: 1rem; border-radius: 8px;">
               <h4 style="color: #FFD700; margin-top: 0;">Admin Actions</h4>
               <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
-                <button id="ban-user-btn" class="small-btn danger-btn" onclick="banUser()">
+                <button id="ban-user-btn" class="small-btn danger-btn" data-action="banUser">
                   <span class="btn-icon">🚫</span>Ban User
                 </button>
-                <button id="unban-user-btn" class="small-btn success-btn" onclick="unbanUser()" style="display: none;">
+                <button id="unban-user-btn" class="small-btn success-btn" data-action="unbanUser" style="display: none;">
                   <span class="btn-icon">✅</span>Unban User
                 </button>
-                <button class="small-btn warning-btn" onclick="warnUser()">
+                <button class="small-btn warning-btn" data-action="warnUser">
                   <span class="btn-icon">⚠️</span>Warn User
                 </button>
-                <button class="small-btn secondary-btn" onclick="logoutUser()">
+                <button class="small-btn secondary-btn" data-action="logoutUser">
                   <span class="btn-icon">🚪</span>Force Logout
                 </button>
-                <button class="small-btn info-btn" onclick="viewUserPois()">
+                <button class="small-btn info-btn" data-action="viewUserPois">
                   <span class="btn-icon">📍</span>View POIs
                 </button>
-                <button id="toggle-admin-btn" class="small-btn" onclick="toggleAdminStatus()">
+                <button id="toggle-admin-btn" class="small-btn" data-action="toggleAdminStatus">
                   <span class="btn-icon">👑</span><span id="toggle-admin-text">Make Admin</span>
                 </button>
               </div>
@@ -1461,17 +1461,32 @@
       document.getElementById('user-name').textContent = displayName;
       document.getElementById('user-email').textContent = currentUser.email;
       
-      // Use custom avatar or Google picture
-      const avatarUrl = currentUser.custom_avatar || currentUser.picture;
-      document.getElementById('user-avatar').src = avatarUrl;
-      document.getElementById('user-avatar').alt = displayName;
+      // Use avatarUrl from server (which already handles the fallback)
+      const avatarUrl = currentUser.avatarUrl || currentUser.picture;
+      const userAvatar = document.getElementById('user-avatar');
+      userAvatar.src = avatarUrl;
+      userAvatar.alt = displayName;
+      
+      // Add error handler for avatar fallback
+      userAvatar.onerror = function() {
+        // Try the Google picture as fallback
+        if (currentUser.picture && this.src !== currentUser.picture) {
+          this.src = currentUser.picture;
+        } else {
+          // Hide the image if no fallback available
+          this.style.display = 'none';
+        }
+      };
       
       // Initialize preferences tab
-      document.getElementById('preview-avatar').src = avatarUrl;
+      const previewAvatar = document.getElementById('preview-avatar');
+      previewAvatar.src = avatarUrl;
+      previewAvatar.onerror = userAvatar.onerror;
+      
       document.getElementById('nickname-input').value = currentUser.nickname || '';
       
-      // Show/hide reset avatar button
-      if (currentUser.custom_avatar) {
+      // Show/hide reset avatar button based on avatar_filename
+      if (currentUser.avatar_filename) {
         document.getElementById('reset-avatar-btn').style.display = 'inline-block';
       }
       
@@ -1917,18 +1932,18 @@
       
       // Primary actions group
       actions += '<div class="action-group">';
-      actions += `<button onclick="goToPoi(${poi.id}, ${poi.map_id}, ${poi.x}, ${poi.y})" class="small-btn info-btn"><span class="btn-icon">👁️</span>View</button>`;
+      actions += `<button data-action="goToPoi" data-args="${poi.id}, ${poi.map_id}, ${poi.x}, ${poi.y}" class="small-btn info-btn"><span class="btn-icon">👁️</span>View</button>`;
       
       if (poi.status === 'private' || poi.status === 'rejected') {
-        actions += `<button onclick="publishPoi(${poi.id})" class="small-btn warning-btn"><span class="btn-icon">📢</span>Publish</button>`;
+        actions += `<button data-action="publishPoi" data-args="${poi.id}" class="small-btn warning-btn"><span class="btn-icon">📢</span>Publish</button>`;
       }
       actions += '</div>';
       
       // Secondary actions group
       if (poi.status !== 'published') {
         actions += '<div class="action-group">';
-        actions += `<button onclick="sharePoi(${poi.id})" class="small-btn secondary-btn"><span class="btn-icon">🔗</span>Share</button>`;
-        actions += `<button onclick="deletePoi(${poi.id})" class="small-btn danger-btn"><span class="btn-icon">🗑️</span>Delete</button>`;
+        actions += `<button data-action="sharePoi" data-args="${poi.id}" class="small-btn secondary-btn"><span class="btn-icon">🔗</span>Share</button>`;
+        actions += `<button data-action="deletePoi" data-args="${poi.id}" class="small-btn danger-btn"><span class="btn-icon">🗑️</span>Delete</button>`;
         actions += '</div>';
       }
       
@@ -2175,8 +2190,8 @@
       
       return `
         <div class="vote-buttons">
-          <button class="vote-btn upvote ${upvoteClass}" onclick="votePoi(${poi.id}, 1, ${isCreator})" title="Upvote">👍</button>
-          <button class="vote-btn downvote ${downvoteClass}" onclick="votePoi(${poi.id}, -1, ${isCreator})" title="${poi.is_creator ? 'Withdraw from voting' : 'Downvote'}">👎</button>
+          <button class="vote-btn upvote ${upvoteClass}" data-action="votePoi" data-args="${poi.id}, 1, ${isCreator}" title="Upvote">👍</button>
+          <button class="vote-btn downvote ${downvoteClass}" data-action="votePoi" data-args="${poi.id}, -1, ${isCreator}" title="${poi.is_creator ? 'Withdraw from voting' : 'Downvote'}">👎</button>
         </div>
       `;
     }
@@ -3018,6 +3033,124 @@
       cell.appendChild(button);
       return cell;
     }
+
+    // Setup event listeners after DOM is loaded
+    document.addEventListener('DOMContentLoaded', function() {
+      // Handle all data-action elements
+      document.addEventListener('click', function(e) {
+        const action = e.target.getAttribute('data-action');
+        if (action) {
+          e.preventDefault();
+          const args = e.target.getAttribute('data-args');
+          
+          // Call the appropriate function
+          if (window[action]) {
+            if (args) {
+              // Parse arguments and call function
+              try {
+                // Handle simple arguments like numbers or strings
+                if (args.match(/^-?\d+$/)) {
+                  window[action](parseInt(args));
+                } else if (args.match(/^'.*'$/) || args.match(/^".*"$/)) {
+                  window[action](args.slice(1, -1));
+                } else {
+                  window[action](args);
+                }
+              } catch (error) {
+                console.error('Error calling function:', action, error);
+              }
+            } else {
+              window[action]();
+            }
+          }
+        }
+      });
+      
+      // Tab navigation
+      document.querySelectorAll('.nav-item').forEach(button => {
+        const tabName = button.textContent.includes('Profile') ? 'profile' :
+                       button.textContent.includes('Preferences') ? 'preferences' :
+                       button.textContent.includes('Privacy') ? 'privacy' :
+                       button.textContent.includes('Custom POIs') ? 'custom-pois' :
+                       button.textContent.includes('Admin') ? 'admin' : null;
+        
+        if (tabName) {
+          button.addEventListener('click', () => showTab(tabName));
+        }
+      });
+      
+      // Preferences tab buttons
+      const resetAvatarBtn = document.getElementById('reset-avatar-btn');
+      if (resetAvatarBtn) {
+        resetAvatarBtn.addEventListener('click', resetAvatar);
+      }
+      
+      // Save nickname button
+      const saveNicknameBtn = document.getElementById('save-nickname-btn');
+      if (saveNicknameBtn) {
+        saveNicknameBtn.addEventListener('click', updateNickname);
+      }
+      
+      // Privacy tab buttons
+      const deleteAccountBtn = document.getElementById('delete-account-btn');
+      if (deleteAccountBtn) {
+        deleteAccountBtn.addEventListener('click', deleteAccount);
+      }
+      
+      const logoutAllBtn = document.getElementById('logout-all-btn');
+      if (logoutAllBtn) {
+        logoutAllBtn.addEventListener('click', logoutAll);
+      }
+      
+      // Pagination buttons
+      const myPoisPrev = document.getElementById('my-pois-prev');
+      if (myPoisPrev) {
+        myPoisPrev.addEventListener('click', () => changeMyPoisPage(-1));
+      }
+      
+      const myPoisNext = document.getElementById('my-pois-next');
+      if (myPoisNext) {
+        myPoisNext.addEventListener('click', () => changeMyPoisPage(1));
+      }
+      
+      const sharedPoisPrev = document.getElementById('shared-pois-prev');
+      if (sharedPoisPrev) {
+        sharedPoisPrev.addEventListener('click', () => changeSharedPoisPage(-1));
+      }
+      
+      const sharedPoisNext = document.getElementById('shared-pois-next');
+      if (sharedPoisNext) {
+        sharedPoisNext.addEventListener('click', () => changeSharedPoisPage(1));
+      }
+      
+      // Admin search button
+      const adminSearchBtn = document.querySelector('.admin-controls button');
+      if (adminSearchBtn && adminSearchBtn.textContent === 'Search') {
+        adminSearchBtn.addEventListener('click', searchUsers);
+      }
+      
+      // Pending POIs pagination
+      const pendingPoisPrev = document.getElementById('pending-pois-prev');
+      if (pendingPoisPrev) {
+        pendingPoisPrev.addEventListener('click', () => changePendingPoisPage(-1));
+      }
+      
+      const pendingPoisNext = document.getElementById('pending-pois-next');
+      if (pendingPoisNext) {
+        pendingPoisNext.addEventListener('click', () => changePendingPoisPage(1));
+      }
+      
+      // Users pagination
+      const usersPrev = document.getElementById('users-prev');
+      if (usersPrev) {
+        usersPrev.addEventListener('click', () => changeUsersPage(-1));
+      }
+      
+      const usersNext = document.getElementById('users-next');
+      if (usersNext) {
+        usersNext.addEventListener('click', () => changeUsersPage(1));
+      }
+    });
 
     // Initialize
     checkAuth();
