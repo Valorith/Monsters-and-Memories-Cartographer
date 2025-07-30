@@ -460,6 +460,7 @@ export default {
     const expandedGroups = ref(new Set())
     
     const groupPOIsWhenZoomedOut = (pois) => {
+      
       // Start grouping when moderately zoomed out (increased from 0.5 to 0.8)
       if (scale.value > 0.8) {
         expandedGroups.value.clear() // Clear expanded groups when zoomed in
@@ -496,9 +497,18 @@ export default {
           const typeMap = new Map()
           group.forEach(p => {
             const type = p.type || 'other'
-            if (!typeMap.has(type) || p.id === poi.id) {
+            // Always include custom POIs in the type map
+            if (!typeMap.has(type) || p.id === poi.id || p.is_custom) {
               typeMap.set(type, p)
             }
+          })
+          
+          // Ensure all custom POIs are represented
+          const customPOIsInGroup = group.filter(p => p.is_custom)
+          customPOIsInGroup.forEach(customPOI => {
+            // Give custom POIs unique type keys to ensure they're not dropped
+            const customType = `custom_${customPOI.id}`
+            typeMap.set(customType, customPOI)
           })
           
           // Calculate center position for the group
@@ -554,6 +564,7 @@ export default {
           groups.push(poi)
         }
       })
+      
       
       return groups
     }
@@ -641,10 +652,30 @@ export default {
       // Group all POIs when zoomed out and store for click detection
       currentGroupedPOIs = groupPOIsWhenZoomedOut(allPOIs)
       
+      
       // Draw all POIs - regular POIs first, then custom POIs on top
       // This ensures custom POIs are always visible
       const regularPOIs = currentGroupedPOIs.filter(poi => !poi.is_custom)
       const customPOIsToRender = currentGroupedPOIs.filter(poi => poi.is_custom)
+      
+      // Debug logging for custom POIs
+      if (scale.value < 0.5 && customPOIs.value.length > 0) {
+        console.log('Custom POIs rendering debug:', {
+          scale: scale.value,
+          customPOIsOriginal: customPOIs.value.length,
+          allPOIs: allPOIs.filter(p => p.is_custom).length,
+          currentGroupedPOIs: currentGroupedPOIs.filter(p => p.is_custom).length,
+          customPOIsToRender: customPOIsToRender.length
+        })
+        
+        // Log first custom POI details
+        if (customPOIs.value[0]) {
+          console.log('First custom POI:', customPOIs.value[0])
+        }
+        if (customPOIsToRender[0]) {
+          console.log('First custom POI to render:', customPOIsToRender[0])
+        }
+      }
       
       // Draw regular POIs first
       regularPOIs.forEach(poi => {

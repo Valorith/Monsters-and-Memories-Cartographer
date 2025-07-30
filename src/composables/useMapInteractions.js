@@ -145,15 +145,6 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     
     // Glow effect removed per user request
     
-    // Debug: Check if custom POI rendering is happening at low zoom
-    if (poi.is_custom && scale.value < 0.5) {
-      // Draw a visible debug circle to confirm rendering is happening
-      ctx.fillStyle = 'red'
-      ctx.beginPath()
-      ctx.arc(0, 0, 20, 0, Math.PI * 2)
-      ctx.fill()
-    }
-    
     // Draw icon with outline for visibility
     ctx.font = `bold ${iconSize}px sans-serif`
     ctx.textAlign = 'center'
