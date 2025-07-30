@@ -1767,12 +1767,7 @@
           
           // Actions cell
           const actionCell = document.createElement('td');
-          const actions = getPoiActions(poi);
-          if (window.safeHTML) {
-            actionCell.innerHTML = window.safeHTML(actions);
-          } else {
-            actionCell.innerHTML = actions; // Safe - our generated HTML
-          }
+          actionCell.appendChild(createPoiActionButtons(poi));
           row.appendChild(actionCell);
           
           tbody.appendChild(row);
@@ -1967,28 +1962,83 @@
       }
     }
     
-    function getPoiActions(poi) {
-      let actions = '<div class="action-buttons">';
+    function createPoiActionButtons(poi) {
+      const container = document.createElement('div');
+      container.className = 'action-buttons';
       
       // Primary actions group
-      actions += '<div class="action-group">';
-      actions += `<button data-action="goToPoi" data-args="${poi.id}, ${poi.map_id}, ${poi.x}, ${poi.y}" class="small-btn info-btn"><span class="btn-icon">👁️</span>View</button>`;
+      const primaryGroup = document.createElement('div');
+      primaryGroup.className = 'action-group';
       
+      // View button
+      const viewBtn = document.createElement('button');
+      viewBtn.className = 'small-btn info-btn';
+      viewBtn.setAttribute('data-action', 'goToPoi');
+      viewBtn.setAttribute('data-args', `${poi.id}, ${poi.map_id}, ${poi.x}, ${poi.y}`);
+      
+      const viewIcon = document.createElement('span');
+      viewIcon.className = 'btn-icon';
+      viewIcon.textContent = '👁️';
+      viewBtn.appendChild(viewIcon);
+      viewBtn.appendChild(document.createTextNode('View'));
+      
+      primaryGroup.appendChild(viewBtn);
+      
+      // Publish button (if applicable)
       if (poi.status === 'private' || poi.status === 'rejected') {
-        actions += `<button data-action="publishPoi" data-args="${poi.id}" class="small-btn warning-btn"><span class="btn-icon">📢</span>Publish</button>`;
+        const publishBtn = document.createElement('button');
+        publishBtn.className = 'small-btn warning-btn';
+        publishBtn.setAttribute('data-action', 'publishPoi');
+        publishBtn.setAttribute('data-args', poi.id.toString());
+        
+        const publishIcon = document.createElement('span');
+        publishIcon.className = 'btn-icon';
+        publishIcon.textContent = '📢';
+        publishBtn.appendChild(publishIcon);
+        publishBtn.appendChild(document.createTextNode('Publish'));
+        
+        primaryGroup.appendChild(publishBtn);
       }
-      actions += '</div>';
       
-      // Secondary actions group
+      container.appendChild(primaryGroup);
+      
+      // Secondary actions group (if not published)
       if (poi.status !== 'published') {
-        actions += '<div class="action-group">';
-        actions += `<button data-action="sharePoi" data-args="${poi.id}" class="small-btn secondary-btn"><span class="btn-icon">🔗</span>Share</button>`;
-        actions += `<button data-action="deletePoi" data-args="${poi.id}" class="small-btn danger-btn"><span class="btn-icon">🗑️</span>Delete</button>`;
-        actions += '</div>';
+        const secondaryGroup = document.createElement('div');
+        secondaryGroup.className = 'action-group';
+        
+        // Share button
+        const shareBtn = document.createElement('button');
+        shareBtn.className = 'small-btn secondary-btn';
+        shareBtn.setAttribute('data-action', 'sharePoi');
+        shareBtn.setAttribute('data-args', poi.id.toString());
+        
+        const shareIcon = document.createElement('span');
+        shareIcon.className = 'btn-icon';
+        shareIcon.textContent = '🔗';
+        shareBtn.appendChild(shareIcon);
+        shareBtn.appendChild(document.createTextNode('Share'));
+        
+        secondaryGroup.appendChild(shareBtn);
+        
+        // Delete button
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'small-btn danger-btn';
+        deleteBtn.setAttribute('data-action', 'deletePoi');
+        deleteBtn.setAttribute('data-args', poi.id.toString());
+        
+        const deleteIcon = document.createElement('span');
+        deleteIcon.className = 'btn-icon';
+        deleteIcon.textContent = '🗑️';
+        deleteBtn.appendChild(deleteIcon);
+        deleteBtn.appendChild(document.createTextNode('Delete'));
+        
+        secondaryGroup.appendChild(deleteBtn);
+        
+        container.appendChild(secondaryGroup);
       }
       
-      actions += '</div>';
-      return actions;
+      return container;
     }
     
     // Publish POI function
