@@ -899,14 +899,45 @@ app.get('/api/auth/status', async (req, res) => {
       const avatarPath = join(__dirname, 'public', 'avatars', req.user.avatar_filename);
       const fileExists = await fs.access(avatarPath).then(() => true).catch(() => false);
       
-      if (fileExists) {
-        avatarUrl = `/avatars/${req.user.avatar_filename}?v=${req.user.avatar_version || 1}`;
+      // Also check if a file with a different extension exists (handle format mismatches)
+      let actualFilename = req.user.avatar_filename;
+      if (!fileExists) {
+        const baseFilename = req.user.avatar_filename.replace(/\.[^.]+$/, '');
+        const avatarsDir = join(__dirname, 'public', 'avatars');
+        const possibleExtensions = ['jpg', 'png', 'gif', 'webp'];
+        
+        for (const ext of possibleExtensions) {
+          const testFilename = `${baseFilename}.${ext}`;
+          const testPath = join(avatarsDir, testFilename);
+          if (await fs.access(testPath).then(() => true).catch(() => false)) {
+            console.log(`Avatar mismatch detected: DB has ${req.user.avatar_filename} but found ${testFilename}`);
+            actualFilename = testFilename;
+            // Update database to match actual file
+            pool.query(
+              'UPDATE users SET avatar_filename = $1 WHERE id = $2',
+              [testFilename, req.user.id]
+            ).catch(err => console.error('Error updating avatar filename:', err));
+            break;
+          }
+        }
+      }
+      
+      const finalFileExists = actualFilename !== req.user.avatar_filename || fileExists;
+      
+      if (finalFileExists && actualFilename) {
+        avatarUrl = `/avatars/${actualFilename}?v=${req.user.avatar_version || 1}`;
         console.log('Serving custom avatar:', {
           userId: req.user.id,
-          filename: req.user.avatar_filename,
+          filename: actualFilename,
           version: req.user.avatar_version,
-          url: avatarUrl
+          url: avatarUrl,
+          mismatchFixed: actualFilename !== req.user.avatar_filename
         });
+        
+        // Update session if filename changed
+        if (actualFilename !== req.user.avatar_filename) {
+          req.user.avatar_filename = actualFilename;
+        }
         
         // Reset missing count if it was previously set
         if (req.user.avatar_missing_count > 0) {
@@ -1198,6 +1229,8 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
     
     let processedBuffer = optimized.buffer;
     let fileExtension = getExtensionForFormat(optimized.format);
+    
+    console.log(`Avatar format mapping: requested=${outputFormat}, returned=${optimized.format}, extension=${fileExtension}`);
     
     if (optimized.metadata && optimized.metadata.originalSize) {
       console.log(`Avatar optimization: ${optimized.metadata.originalSize} bytes -> ${optimized.metadata.optimizedSize} bytes (${optimized.metadata.compressionRatio || 'N/A'} reduction)`);
