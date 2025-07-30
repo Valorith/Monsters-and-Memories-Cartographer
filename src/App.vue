@@ -467,11 +467,6 @@ export default {
         return pois
       }
       
-      // Debug: Log when grouping starts affecting custom POIs
-      const customPOICount = pois.filter(p => p.is_custom).length
-      if (customPOICount > 0) {
-        console.log(`Grouping at scale ${scale.value} (${Math.round(scale.value * 100)}%) with ${customPOICount} custom POIs`)
-      }
       
       // Calculate grouping distance based on zoom level (adjusted for earlier grouping)
       const groupingDistance = 60 / scale.value // Larger distance when more zoomed out
@@ -481,6 +476,7 @@ export default {
       
       pois.forEach(poi => {
         if (processedPOIs.has(poi.id)) return
+        
         
         // Find all POIs within grouping distance
         const nearbyPOIs = pois.filter(otherPOI => {
@@ -571,10 +567,6 @@ export default {
           processedPOIs.add(poi.id)
           groups.push(poi)
           
-          // Debug: Log when custom POI is added as single
-          if (poi.is_custom) {
-            console.log(`Custom POI "${poi.name}" added as single (not grouped)`)
-          }
         }
       })
       
@@ -646,18 +638,26 @@ export default {
         }
       })
       
-      // Add custom POIs, but skip if there's already a POI at that location
+      // Add custom POIs with prefixed IDs to avoid collisions
       customPOIs.value.forEach(poi => {
         const key = `${poi.x},${poi.y}`
+        // Prefix custom POI IDs to ensure uniqueness
+        const customPOI = {
+          ...poi,
+          id: `custom_${poi.id}`,  // Prefix ID to prevent collisions
+          originalId: poi.id,       // Keep original ID for API calls
+          is_custom: true          // Ensure flag is set
+        }
+        
         if (!poiLocations.has(key)) {
-          poiLocations.set(key, poi)
-          allPOIs.push(poi)
+          poiLocations.set(key, customPOI)
+          allPOIs.push(customPOI)
         } else {
           // If custom POI is at same location as regular POI, prefer custom POI
           const existingIndex = allPOIs.findIndex(p => p.x === poi.x && p.y === poi.y)
           if (existingIndex !== -1) {
-            allPOIs[existingIndex] = poi
-            poiLocations.set(key, poi)
+            allPOIs[existingIndex] = customPOI
+            poiLocations.set(key, customPOI)
           }
         }
       })
@@ -671,30 +671,6 @@ export default {
       const regularPOIs = currentGroupedPOIs.filter(poi => !poi.is_custom)
       const customPOIsToRender = currentGroupedPOIs.filter(poi => poi.is_custom)
       
-      // Debug logging for custom POIs - changed to trigger at the problem threshold
-      if (scale.value < 0.85 && customPOIs.value.length > 0) {
-        console.log('Custom POIs rendering debug:', {
-          scale: scale.value,
-          scalePercent: Math.round(scale.value * 100) + '%',
-          customPOIsOriginal: customPOIs.value.length,
-          allPOIs: allPOIs.filter(p => p.is_custom).length,
-          currentGroupedPOIs: currentGroupedPOIs.filter(p => p.is_custom).length,
-          customPOIsToRender: customPOIsToRender.length
-        })
-        
-        // Log first custom POI details
-        if (customPOIs.value[0]) {
-          console.log('First custom POI:', {
-            ...customPOIs.value[0],
-            hasIsCustomFlag: customPOIs.value[0].is_custom
-          })
-        }
-        if (customPOIsToRender[0]) {
-          console.log('First custom POI to render:', customPOIsToRender[0])
-        } else if (customPOIs.value.length > 0 && customPOIsToRender.length === 0) {
-          console.error('Custom POIs exist but none are being rendered!')
-        }
-      }
       
       // Draw regular POIs first
       regularPOIs.forEach(poi => {
@@ -1306,8 +1282,11 @@ export default {
         )
         
         // Only show context menu for custom POIs owned by the user
+        const actualClickedId = clickedPOI && clickedPOI.id.toString().startsWith('custom_') ? 
+          parseInt(clickedPOI.id.toString().replace('custom_', '')) : 
+          (clickedPOI ? clickedPOI.id : null)
         const clickedCustomPOI = clickedPOI && customPOIs.value.find(customPOI => 
-          customPOI.id === clickedPOI.id
+          customPOI.id === actualClickedId
         )
         
         contextMenuPOI.value = clickedCustomPOI
@@ -1480,8 +1459,11 @@ export default {
         
         if (clickedPOI) {
           // Check if it's a custom POI the user can drag
+          const actualClickedId = clickedPOI.id.toString().startsWith('custom_') ? 
+            parseInt(clickedPOI.id.toString().replace('custom_', '')) : 
+            clickedPOI.id
           const isCustomPOI = customPOIs.value.some(customPOI => 
-            customPOI.id === clickedPOI.id &&
+            customPOI.id === actualClickedId &&
             customPOI.user_id === user.value?.id &&
             customPOI.status !== 'pending'
           )
@@ -2515,8 +2497,11 @@ export default {
     }
     
     const deletePOI = async (poiId) => {
-      // Check if this is a custom POI
-      const customPoi = customPOIs.value.find(p => p.id === poiId)
+      // Check if this is a custom POI (handle both prefixed and unprefixed IDs)
+      const actualId = poiId.toString().startsWith('custom_') ? 
+        parseInt(poiId.toString().replace('custom_', '')) : 
+        poiId
+      const customPoi = customPOIs.value.find(p => p.id === actualId)
       
       if (customPoi) {
         // Handle custom POI deletion
@@ -2530,7 +2515,7 @@ export default {
         if (!confirmed) return
         
         try {
-          const response = await fetchWithCSRF(`/api/custom-pois/${poiId}`, {
+          const response = await fetchWithCSRF(`/api/custom-pois/${actualId}`, {
             method: 'DELETE'
           })
           

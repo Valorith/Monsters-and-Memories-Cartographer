@@ -37,7 +37,8 @@
       "Bash(npx vite:*)",
       "Bash(wget:*)",
       "Bash(find:*)",
-      "Bash(ss:*)"
+      "Bash(ss:*)",
+      "Bash(echo:*)"
     ],
     "deny": []
   }
