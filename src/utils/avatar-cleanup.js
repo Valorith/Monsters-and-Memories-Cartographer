@@ -22,7 +22,7 @@ export async function cleanupOrphanedAvatars(avatarsDir) {
     // Read all files in avatars directory
     const files = await fs.readdir(avatarsDir);
     const avatarFiles = files.filter(f => 
-      f.match(/^\d+_\d+\.(jpg|jpeg|png|gif|webp)$/) && f !== '.gitkeep'
+      f.match(/^(dev_|prod_)?\d+_\d+\.(jpg|jpeg|png|gif|webp)$/) && f !== '.gitkeep'
     );
     
     console.log(`Found ${avatarFiles.length} avatar files on disk`);
@@ -30,7 +30,7 @@ export async function cleanupOrphanedAvatars(avatarsDir) {
     // Group files by user ID
     const filesByUser = new Map();
     for (const file of avatarFiles) {
-      const match = file.match(/^(\d+)_(\d+)\.(jpg|jpeg|png|gif|webp)$/);
+      const match = file.match(/^(?:dev_|prod_)?(\d+)_(\d+)\.(jpg|jpeg|png|gif|webp)$/);
       if (match) {
         const userId = parseInt(match[1]);
         const timestamp = parseInt(match[2]);
@@ -52,9 +52,30 @@ export async function cleanupOrphanedAvatars(avatarsDir) {
         // User has no avatar in DB, all files are orphaned
         filesToDelete.push(...userFiles.map(f => f.file));
       } else {
-        // User has an avatar, delete all except the current one
+        // User has an avatar, keep the current one and the latest from each environment
+        const envGroups = new Map();
+        
+        // Group files by environment
         for (const fileInfo of userFiles) {
-          if (fileInfo.file !== currentAvatar) {
+          const envMatch = fileInfo.file.match(/^(dev_|prod_)?/);
+          const env = envMatch?.[1] || 'legacy';
+          
+          if (!envGroups.has(env)) {
+            envGroups.set(env, []);
+          }
+          envGroups.get(env).push(fileInfo);
+        }
+        
+        // Keep only the latest file from each environment
+        const filesToKeep = new Set([currentAvatar]);
+        for (const [env, files] of envGroups) {
+          const latest = files.sort((a, b) => b.timestamp - a.timestamp)[0];
+          filesToKeep.add(latest.file);
+        }
+        
+        // Delete all others
+        for (const fileInfo of userFiles) {
+          if (!filesToKeep.has(fileInfo.file)) {
             filesToDelete.push(fileInfo.file);
           }
         }
@@ -90,7 +111,7 @@ export async function deleteAllUserAvatars(avatarsDir, userId) {
   try {
     const files = await fs.readdir(avatarsDir);
     const userAvatarFiles = files.filter(f => 
-      f.match(new RegExp(`^${userId}_\\d+\\.(jpg|jpeg|png|gif|webp)$`))
+      f.match(new RegExp(`^(?:dev_|prod_)?${userId}_\\d+\\.(jpg|jpeg|png|gif|webp)$`))
     );
     
     console.log(`Found ${userAvatarFiles.length} avatar files for user ${userId}`);

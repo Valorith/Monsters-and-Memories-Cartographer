@@ -899,26 +899,35 @@ app.get('/api/auth/status', async (req, res) => {
       const avatarPath = join(__dirname, 'public', 'avatars', req.user.avatar_filename);
       const fileExists = await fs.access(avatarPath).then(() => true).catch(() => false);
       
-      // Also check if a file with a different extension exists (handle format mismatches)
+      // Also check if a file with a different extension or environment prefix exists
       let actualFilename = req.user.avatar_filename;
       if (!fileExists) {
-        const baseFilename = req.user.avatar_filename.replace(/\.[^.]+$/, '');
         const avatarsDir = join(__dirname, 'public', 'avatars');
         const possibleExtensions = ['jpg', 'png', 'gif', 'webp'];
         
-        for (const ext of possibleExtensions) {
-          const testFilename = `${baseFilename}.${ext}`;
-          const testPath = join(avatarsDir, testFilename);
-          if (await fs.access(testPath).then(() => true).catch(() => false)) {
-            console.log(`Avatar mismatch detected: DB has ${req.user.avatar_filename} but found ${testFilename}`);
-            actualFilename = testFilename;
-            // Update database to match actual file
-            console.log(`[AVATAR AUTOCORRECT] Updating DB from ${req.user.avatar_filename} to ${testFilename}`);
-            pool.query(
-              'UPDATE users SET avatar_filename = $1, avatar_missing_count = 0, avatar_missing_count_dev = 0 WHERE id = $2',
-              [testFilename, req.user.id]
-            ).catch(err => console.error('[AVATAR AUTOCORRECT] Error updating avatar filename:', err));
-            break;
+        // Extract user ID and timestamp from filename
+        const filenameMatch = req.user.avatar_filename.match(/^(?:dev_|prod_)?(\d+)_(\d+)\.[^.]+$/);
+        if (filenameMatch) {
+          const [, userId, timestamp] = filenameMatch;
+          
+          // Check for files with different extensions or environment prefixes
+          for (const prefix of ['dev_', 'prod_', '']) {
+            for (const ext of possibleExtensions) {
+              const testFilename = `${prefix}${userId}_${timestamp}.${ext}`;
+              const testPath = join(avatarsDir, testFilename);
+              if (await fs.access(testPath).then(() => true).catch(() => false)) {
+                console.log(`Avatar mismatch detected: DB has ${req.user.avatar_filename} but found ${testFilename}`);
+                actualFilename = testFilename;
+                // Update database to match actual file
+                console.log(`[AVATAR AUTOCORRECT] Updating DB from ${req.user.avatar_filename} to ${testFilename}`);
+                pool.query(
+                  'UPDATE users SET avatar_filename = $1, avatar_missing_count = 0, avatar_missing_count_dev = 0 WHERE id = $2',
+                  [testFilename, req.user.id]
+                ).catch(err => console.error('[AVATAR AUTOCORRECT] Error updating avatar filename:', err));
+                break;
+              }
+            }
+            if (actualFilename !== req.user.avatar_filename) break;
           }
         }
       }
@@ -1293,12 +1302,14 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
       fileExtension = mimeToExt[req.file.mimetype] || 'jpg';
     }
 
-    // Generate unique filename with the actual format we'll be saving
-    const filename = `${req.user.id}_${Date.now()}.${fileExtension}`;
+    // Generate unique filename with environment prefix
+    const isDevelopment = process.env.NODE_ENV !== 'production';
+    const envPrefix = isDevelopment ? 'dev' : 'prod';
+    const filename = `${envPrefix}_${req.user.id}_${Date.now()}.${fileExtension}`;
     const avatarsDir = join(__dirname, 'public', 'avatars');
     const filepath = join(avatarsDir, filename);
     
-    console.log(`Avatar upload: Generated filename ${filename} for format ${optimized.format}`);
+    console.log(`Avatar upload: Generated filename ${filename} for format ${optimized.format} in ${envPrefix} environment`);
     
     // Ensure avatars directory exists
     await fs.mkdir(avatarsDir, { recursive: true });
@@ -1339,12 +1350,21 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
       
       console.log(`[AVATAR UPDATE] Database updated successfully with avatar filename: ${filename}`);
       
-      // Success - delete old avatar file if exists
+      // Success - delete old avatar file if exists and is from the same environment
       if (oldAvatarFilename && oldAvatarFilename !== filename) {
-        const oldFilepath = join(__dirname, 'public', 'avatars', oldAvatarFilename);
-        fs.unlink(oldFilepath).catch(err => {
-          console.log(`Failed to delete old avatar ${oldAvatarFilename}:`, err.message);
-        });
+        // Only delete if it's from the same environment
+        const oldEnvMatch = oldAvatarFilename.match(/^(dev_|prod_)?/);
+        const newEnvMatch = filename.match(/^(dev_|prod_)?/);
+        const sameEnvironment = (oldEnvMatch?.[1] || '') === (newEnvMatch?.[1] || '');
+        
+        if (sameEnvironment) {
+          const oldFilepath = join(__dirname, 'public', 'avatars', oldAvatarFilename);
+          fs.unlink(oldFilepath).catch(err => {
+            console.log(`Failed to delete old avatar ${oldAvatarFilename}:`, err.message);
+          });
+        } else {
+          console.log(`Keeping old avatar ${oldAvatarFilename} from different environment`);
+        }
       }
     } catch (fileError) {
       // File save failed - don't update database
@@ -1665,9 +1685,9 @@ app.post('/api/user/profile/avatar/fix-mismatch', validateCSRF, async (req, res)
     const avatarsDir = join(__dirname, 'public', 'avatars');
     const files = await fs.readdir(avatarsDir);
     
-    // Find all avatar files for this user
+    // Find all avatar files for this user (with or without environment prefix)
     const userAvatarFiles = files.filter(f => 
-      f.match(new RegExp(`^${req.user.id}_\\d+\\.(jpg|jpeg|png|gif|webp)$`))
+      f.match(new RegExp(`^(?:dev_|prod_)?${req.user.id}_\\d+\\.(jpg|jpeg|png|gif|webp)$`))
     );
     
     console.log(`Found ${userAvatarFiles.length} avatar files for user ${req.user.id}:`, userAvatarFiles);
@@ -1697,7 +1717,7 @@ app.post('/api/user/profile/avatar/fix-mismatch', validateCSRF, async (req, res)
     
     // Find the newest file by timestamp
     const fileInfos = userAvatarFiles.map(f => {
-      const match = f.match(/^(\d+)_(\d+)\.(jpg|jpeg|png|gif|webp)$/);
+      const match = f.match(/^(?:dev_|prod_)?(\d+)_(\d+)\.(jpg|jpeg|png|gif|webp)$/);
       return {
         filename: f,
         timestamp: parseInt(match[2])
