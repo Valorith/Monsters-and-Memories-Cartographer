@@ -2067,7 +2067,7 @@
         pageItems.forEach(poi => {
           const row = document.createElement('tr');
           row.className = 'poi-data-row';
-          const voteButtons = getVoteButtons(poi);
+          const voteButtonsElement = createVoteButtons(poi);
           
           // Build row using DOM methods for safety
           // Icon cell
@@ -2094,11 +2094,7 @@
           
           // Vote buttons cell
           const voteBtnCell = document.createElement('td');
-          if (window.safeHTML) {
-            voteBtnCell.innerHTML = window.safeHTML(voteButtons);
-          } else {
-            voteBtnCell.innerHTML = voteButtons; // Safe - our generated HTML
-          }
+          voteBtnCell.appendChild(voteButtonsElement);
           row.appendChild(voteBtnCell);
           
           // Actions cell
@@ -2197,17 +2193,29 @@
       }
     }
     
-    function getVoteButtons(poi) {
-      const upvoteClass = poi.user_vote === 1 ? 'active' : '';
-      const downvoteClass = poi.user_vote === -1 ? 'active' : '';
-      const isCreator = poi.is_creator ? 'true' : 'false';
+    function createVoteButtons(poi) {
+      const container = document.createElement('div');
+      container.className = 'vote-buttons';
       
-      return `
-        <div class="vote-buttons">
-          <button class="vote-btn upvote ${upvoteClass}" data-action="votePoi" data-args="${poi.id},1,${isCreator}" title="Upvote">👍</button>
-          <button class="vote-btn downvote ${downvoteClass}" data-action="votePoi" data-args="${poi.id},-1,${isCreator}" title="${poi.is_creator ? 'Withdraw from voting' : 'Downvote'}">👎</button>
-        </div>
-      `;
+      // Upvote button
+      const upvoteBtn = document.createElement('button');
+      upvoteBtn.className = 'vote-btn upvote' + (poi.user_vote === 1 ? ' active' : '');
+      upvoteBtn.setAttribute('data-action', 'votePoi');
+      upvoteBtn.setAttribute('data-args', `${poi.id},1,${poi.is_creator ? 'true' : 'false'}`);
+      upvoteBtn.setAttribute('title', 'Upvote');
+      upvoteBtn.textContent = '👍';
+      container.appendChild(upvoteBtn);
+      
+      // Downvote button
+      const downvoteBtn = document.createElement('button');
+      downvoteBtn.className = 'vote-btn downvote' + (poi.user_vote === -1 ? ' active' : '');
+      downvoteBtn.setAttribute('data-action', 'votePoi');
+      downvoteBtn.setAttribute('data-args', `${poi.id},-1,${poi.is_creator ? 'true' : 'false'}`);
+      downvoteBtn.setAttribute('title', poi.is_creator ? 'Withdraw from voting' : 'Downvote');
+      downvoteBtn.textContent = '👎';
+      container.appendChild(downvoteBtn);
+      
+      return container;
     }
     
     async function votePoi(poiId, vote, isCreator = false) {
