@@ -1464,17 +1464,17 @@
       document.getElementById('user-name').textContent = displayName;
       document.getElementById('user-email').textContent = currentUser.email;
       
-      // Use avatarUrl from server (which already handles the fallback)
-      const avatarUrl = currentUser.avatarUrl || currentUser.picture;
+      // Use picture from server (auth/status already returns the correct avatar URL)
       const userAvatar = document.getElementById('user-avatar');
-      userAvatar.src = avatarUrl;
+      userAvatar.src = currentUser.picture;
       userAvatar.alt = displayName;
       
       // Add error handler for avatar fallback
       userAvatar.onerror = function() {
-        // Try the Google picture as fallback
-        if (currentUser.picture && this.src !== currentUser.picture) {
-          this.src = currentUser.picture;
+        // If custom avatar fails, try the original OAuth picture
+        if (currentUser.avatarUrl && currentUser.avatarUrl !== currentUser.picture && this.src !== currentUser.avatarUrl) {
+          // First try avatarUrl if different from picture
+          this.src = currentUser.avatarUrl;
         } else {
           // Hide the image if no fallback available
           this.style.display = 'none';
@@ -1483,7 +1483,7 @@
       
       // Initialize preferences tab
       const previewAvatar = document.getElementById('preview-avatar');
-      previewAvatar.src = avatarUrl;
+      previewAvatar.src = currentUser.picture;
       previewAvatar.onerror = userAvatar.onerror;
       
       document.getElementById('nickname-input').value = currentUser.nickname || '';
