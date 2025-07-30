@@ -1232,6 +1232,29 @@ app.get('/api/user/profile', async (req, res) => {
   }
 });
 
+// Get user's Google OAuth picture
+app.get('/api/user/google-picture', async (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  try {
+    const result = await pool.query(
+      'SELECT picture FROM users WHERE id = $1',
+      [req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({ picture: result.rows[0].picture });
+  } catch (error) {
+    console.error('Error fetching Google picture:', error);
+    res.status(500).json({ error: 'Failed to fetch Google picture' });
+  }
+});
+
 // Get top 10 players by XP - cached for 2 minutes
 app.get('/api/leaderboard/top10', 
   cacheMiddleware(leaderboardCache, 'top10', 2 * 60 * 1000), // 2 minutes
@@ -2576,12 +2599,12 @@ app.get('/api/admin/db-health', async (req, res) => {
 
 // Share page
 app.get('/share/:shareCode', (req, res) => {
-  res.sendFile(join(__dirname, 'share.html'));
+  res.sendFile(join(__dirname, 'public', 'share.html'));
 });
 
 // Serve account page
 app.get('/account', (req, res) => {
-  res.sendFile(join(__dirname, 'account.html'));
+  res.sendFile(join(__dirname, 'public', 'account.html'));
 });
 
 // Handle all other routes by serving index.html (for Vue Router)

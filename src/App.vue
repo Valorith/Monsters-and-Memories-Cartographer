@@ -65,7 +65,7 @@
           </button>
           <div v-else class="user-dropdown-container">
             <button @click="toggleUserDropdown" class="user-button">
-              <img v-if="user && user.picture" :src="user.picture" :alt="user.displayName || user.name" class="user-avatar" />
+              <img v-if="user && user.picture" :src="user.picture" :alt="user.displayName || user.name" class="user-avatar" @error="handleAvatarError" />
               <span v-else class="user-initials">{{ user && user.displayName ? user.displayName[0] : (user && user.name ? user.name[0] : '?') }}</span>
             </button>
             <div v-if="showUserDropdown" class="user-dropdown-menu">
@@ -3262,6 +3262,26 @@ export default {
       showUserDropdown.value = false
     }
     
+    // Handle avatar loading error by falling back to Google avatar
+    const handleAvatarError = async (event) => {
+      // First try to get the original Google picture from the database
+      try {
+        const response = await fetch('/api/user/google-picture')
+        if (response.ok) {
+          const data = await response.json()
+          if (data.picture) {
+            event.target.src = data.picture
+            return
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching Google picture:', error)
+      }
+      
+      // If that fails, hide the image and show initials
+      event.target.style.display = 'none'
+    }
+    
     // Custom POI methods
     const loadCustomPOIs = async () => {
       if (!isAuthenticated.value || !maps.value[selectedMapIndex.value]?.id) return
@@ -3567,6 +3587,7 @@ export default {
       showUserDropdown,
       toggleUserDropdown,
       handleLogout,
+      handleAvatarError,
       // Custom POI related
       contextMenuVisible,
       contextMenuPosition,
