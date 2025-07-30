@@ -148,10 +148,22 @@ export async function optimizeImage(inputBuffer, options = {}) {
           optimizedBuffer = await sharpInstance.toBuffer();
       }
     }
+    
+    // Verify the actual output format
+    let actualFormat = format;
+    try {
+      const outputMetadata = await sharp(optimizedBuffer).metadata();
+      if (outputMetadata.format && outputMetadata.format !== format) {
+        console.warn(`Sharp changed format from ${format} to ${outputMetadata.format}`);
+        actualFormat = outputMetadata.format;
+      }
+    } catch (err) {
+      console.warn('Could not verify output format:', err.message);
+    }
 
     return {
       buffer: optimizedBuffer,
-      format,
+      format: actualFormat,
       metadata: {
         originalSize: inputBuffer.length,
         optimizedSize: optimizedBuffer.length,

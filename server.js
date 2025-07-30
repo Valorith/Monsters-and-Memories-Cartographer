@@ -1258,40 +1258,48 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
   recentAvatarUploads.set(req.user.id, now);
 
   try {
-    // Determine output format based on input to avoid format mismatches
-    const mimeToFormat = {
-      'image/jpeg': 'jpeg',
-      'image/png': 'png',
-      'image/gif': 'gif',
-      'image/webp': 'webp'
-    };
-    const outputFormat = mimeToFormat[req.file.mimetype] || 'jpeg';
+    // Try to optimize the image
+    let processedBuffer;
+    let fileExtension;
+    let saveFormat;
     
-    console.log(`Avatar upload: Processing ${req.file.mimetype} as ${outputFormat} format`);
-    
-    // Optimize the image - use same format as input to avoid mismatches
-    const optimized = await optimizeImage(req.file.buffer, {
-      maxWidth: 200,
-      maxHeight: 200,
-      quality: 85,
-      fit: 'cover',
-      position: 'center',
-      preserveAnimation: true,
-      outputFormat: outputFormat // Keep the same format as input
-    });
-    
-    let processedBuffer = optimized.buffer;
-    let fileExtension = getExtensionForFormat(optimized.format);
-    
-    console.log(`Avatar format mapping: requested=${outputFormat}, returned=${optimized.format}, extension=${fileExtension}`);
-    
-    if (optimized.metadata && optimized.metadata.originalSize) {
-      console.log(`Avatar optimization: ${optimized.metadata.originalSize} bytes -> ${optimized.metadata.optimizedSize} bytes (${optimized.metadata.compressionRatio || 'N/A'} reduction)`);
-    }
-    
-    // Fall back to original if optimization fails
-    if (!processedBuffer || processedBuffer.length === 0) {
-      console.warn('Avatar optimization failed, using original buffer');
+    try {
+      // Attempt optimization
+      const optimized = await optimizeImage(req.file.buffer, {
+        maxWidth: 200,
+        maxHeight: 200,
+        quality: 85,
+        fit: 'cover',
+        position: 'center',
+        preserveAnimation: false,
+        outputFormat: 'jpeg' // Prefer JPEG for avatars
+      });
+      
+      processedBuffer = optimized.buffer;
+      saveFormat = optimized.format;
+      fileExtension = getExtensionForFormat(optimized.format);
+      
+      console.log(`[AVATAR] Optimization successful: format=${optimized.format}, extension=${fileExtension}, size=${processedBuffer.length}`);
+      
+      // Double-check the actual format by reading the buffer
+      if (sharp) {
+        try {
+          const verifyMetadata = await sharp(processedBuffer).metadata();
+          if (verifyMetadata.format) {
+            const verifiedExtension = getExtensionForFormat(verifyMetadata.format);
+            if (verifiedExtension !== fileExtension) {
+              console.warn(`[AVATAR] Format verification: expected ${fileExtension}, actual ${verifiedExtension}`);
+              fileExtension = verifiedExtension;
+              saveFormat = verifyMetadata.format;
+            }
+          }
+        } catch (verifyError) {
+          console.warn('[AVATAR] Could not verify format:', verifyError.message);
+        }
+      }
+    } catch (optimizeError) {
+      console.warn('[AVATAR] Optimization failed, using original:', optimizeError.message);
+      // Use original file
       processedBuffer = req.file.buffer;
       const mimeToExt = {
         'image/jpeg': 'jpg',
@@ -1300,6 +1308,7 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
         'image/webp': 'webp'
       };
       fileExtension = mimeToExt[req.file.mimetype] || 'jpg';
+      saveFormat = req.file.mimetype.replace('image/', '');
     }
 
     // Generate unique filename with environment prefix
@@ -1309,7 +1318,7 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
     const avatarsDir = join(__dirname, 'public', 'avatars');
     const filepath = join(avatarsDir, filename);
     
-    console.log(`Avatar upload: Generated filename ${filename} for format ${optimized.format} in ${envPrefix} environment`);
+    console.log(`[AVATAR] Upload: Generated filename ${filename} with verified extension ${fileExtension} (format: ${saveFormat}) in ${envPrefix} environment`);
     
     // Ensure avatars directory exists
     await fs.mkdir(avatarsDir, { recursive: true });
@@ -1320,6 +1329,9 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
       [req.user.id]
     );
     const oldAvatarFilename = currentUser.rows[0]?.avatar_filename;
+    
+    // Variable to track final filename after format verification
+    let finalFilename = filename;
     
     // First, save the file to disk to ensure it's actually written
     try {
@@ -1332,7 +1344,7 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
         throw new Error('Written file is empty');
       }
       
-      console.log(`Avatar file saved successfully: ${filename} (${stats.size} bytes)`);
+      console.log(`[AVATAR] File saved successfully: ${filename} (${stats.size} bytes)`);
       
       // Double-check file exists before updating database
       const finalCheck = await fs.access(filepath).then(() => true).catch(() => false);
@@ -1341,20 +1353,42 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
         return res.status(500).json({ error: 'File verification failed' });
       }
       
+      // Final format verification on the saved file
+      if (sharp) {
+        try {
+          const savedFileBuffer = await fs.readFile(filepath);
+          const savedMetadata = await sharp(savedFileBuffer).metadata();
+          const savedExtension = getExtensionForFormat(savedMetadata.format);
+          
+          if (savedExtension !== fileExtension) {
+            console.warn(`[AVATAR] Saved file format differs! Expected: ${fileExtension}, Actual: ${savedExtension}`);
+            // Rename the file to match actual format
+            const correctedFilename = filename.replace(`.${fileExtension}`, `.${savedExtension}`);
+            const correctedPath = join(avatarsDir, correctedFilename);
+            
+            await fs.rename(filepath, correctedPath);
+            finalFilename = correctedFilename;
+            console.log(`[AVATAR] Renamed file to match actual format: ${finalFilename}`);
+          }
+        } catch (verifyErr) {
+          console.warn('[AVATAR] Could not verify saved file format:', verifyErr.message);
+        }
+      }
+      
       // NOW update database with the confirmed filename
-      console.log(`[AVATAR UPDATE] About to update DB for user ${req.user.id} with filename: ${filename}`);
+      console.log(`[AVATAR UPDATE] About to update DB for user ${req.user.id} with filename: ${finalFilename}`);
       await pool.query(
         'UPDATE users SET avatar_filename = $1, avatar_version = COALESCE(avatar_version, 1) + 1, avatar_updated_at = CURRENT_TIMESTAMP, avatar_missing_count = 0, avatar_missing_count_dev = 0 WHERE id = $2',
-        [filename, req.user.id]
+        [finalFilename, req.user.id]
       );
       
-      console.log(`[AVATAR UPDATE] Database updated successfully with avatar filename: ${filename}`);
+      console.log(`[AVATAR UPDATE] Database updated successfully with avatar filename: ${finalFilename}`);
       
       // Success - delete old avatar file if exists and is from the same environment
-      if (oldAvatarFilename && oldAvatarFilename !== filename) {
+      if (oldAvatarFilename && oldAvatarFilename !== finalFilename) {
         // Only delete if it's from the same environment
         const oldEnvMatch = oldAvatarFilename.match(/^(dev_|prod_)?/);
-        const newEnvMatch = filename.match(/^(dev_|prod_)?/);
+        const newEnvMatch = finalFilename.match(/^(dev_|prod_)?/);
         const sameEnvironment = (oldEnvMatch?.[1] || '') === (newEnvMatch?.[1] || '');
         
         if (sameEnvironment) {
@@ -1399,12 +1433,12 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
     await new Promise(resolve => setTimeout(resolve, 100));
     
     // Build the full avatar URL to return
-    const avatarUrl = `/avatars/${filename}?v=${updatedUser.rows[0].avatar_version || 1}`;
+    const avatarUrl = `/avatars/${finalFilename}?v=${updatedUser.rows[0].avatar_version || 1}`;
     
     // Log successful upload
-    console.log('Avatar uploaded successfully:', {
+    console.log('[AVATAR] Upload completed successfully:', {
       userId: req.user.id,
-      filename,
+      filename: finalFilename,
       version: updatedUser.rows[0].avatar_version,
       size: processedBuffer.length
     });
@@ -1412,7 +1446,7 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
     res.json({ 
       success: true, 
       avatarUrl,
-      filename,
+      filename: finalFilename,
       version: updatedUser.rows[0].avatar_version,
       size: processedBuffer.length
     });
