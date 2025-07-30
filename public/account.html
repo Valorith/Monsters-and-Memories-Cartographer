@@ -1329,8 +1329,7 @@
     let preferences = {};
     
     // Use the global CSRF helper from csrf-helper.js
-    const fetchWithCSRF = window.csrfHelper.fetchWithCSRF;
-    const getCSRFToken = window.csrfHelper.getToken;
+    // Note: fetchWithCSRF and getCSRFToken are available via window.csrfHelper
 
     // Helper functions for safe table cell creation
     function createTextCell(text) {
@@ -1613,7 +1612,7 @@
 
     async function logoutAll() {
       try {
-        const response = await fetchWithCSRF('/api/auth/logout-all', {
+        const response = await window.csrfHelper.fetchWithCSRF('/api/auth/logout-all', {
           method: 'POST'
         });
         
@@ -1855,7 +1854,7 @@
 
     async function sharePoi(poiId) {
       try {
-        const response = await fetchWithCSRF(`/api/custom-pois/${poiId}/share`, {
+        const response = await window.csrfHelper.fetchWithCSRF(`/api/custom-pois/${poiId}/share`, {
           method: 'POST'
         });
         
@@ -1882,7 +1881,7 @@
       }
       
       try {
-        const response = await fetchWithCSRF(`/api/custom-pois/${poiId}`, {
+        const response = await window.csrfHelper.fetchWithCSRF(`/api/custom-pois/${poiId}`, {
           method: 'DELETE'
         });
         
@@ -1902,7 +1901,7 @@
       }
       
       try {
-        const response = await fetchWithCSRF(`/api/custom-pois/${poiId}/unshare`, {
+        const response = await window.csrfHelper.fetchWithCSRF(`/api/custom-pois/${poiId}/unshare`, {
           method: 'DELETE'
         });
         
@@ -1962,7 +1961,7 @@
       }
       
       try {
-        const response = await fetchWithCSRF(`/api/custom-pois/${poiId}/publish`, {
+        const response = await window.csrfHelper.fetchWithCSRF(`/api/custom-pois/${poiId}/publish`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -2209,7 +2208,7 @@
       }
       
       try {
-        const response = await fetchWithCSRF(`/api/pending-pois/${poiId}/vote`, {
+        const response = await window.csrfHelper.fetchWithCSRF(`/api/pending-pois/${poiId}/vote`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -2243,7 +2242,7 @@
       }
       
       try {
-        const response = await fetchWithCSRF(`/api/pending-pois/${poiId}/force-publish`, {
+        const response = await window.csrfHelper.fetchWithCSRF(`/api/pending-pois/${poiId}/force-publish`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -2269,7 +2268,7 @@
       }
       
       try {
-        const response = await fetchWithCSRF(`/api/pending-pois/${poiId}/force-reject`, {
+        const response = await window.csrfHelper.fetchWithCSRF(`/api/pending-pois/${poiId}/force-reject`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -2450,7 +2449,7 @@
       }
       
       try {
-        const response = await fetchWithCSRF(`/api/admin/xp-config/${key}`, {
+        const response = await window.csrfHelper.fetchWithCSRF(`/api/admin/xp-config/${key}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json'
@@ -2660,7 +2659,7 @@
       if (!reason) return;
       
       try {
-        const response = await fetchWithCSRF(`/api/admin/users/${selectedUser.id}/ban`, {
+        const response = await window.csrfHelper.fetchWithCSRF(`/api/admin/users/${selectedUser.id}/ban`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ reason })
@@ -2680,7 +2679,7 @@
       if (!confirm('Are you sure you want to unban this user?')) return;
       
       try {
-        const response = await fetchWithCSRF(`/api/admin/users/${selectedUser.id}/unban`, {
+        const response = await window.csrfHelper.fetchWithCSRF(`/api/admin/users/${selectedUser.id}/unban`, {
           method: 'POST'
         });
         
@@ -2701,7 +2700,7 @@
       if (!reason) return;
       
       try {
-        const response = await fetchWithCSRF(`/api/admin/users/${selectedUser.id}/warn`, {
+        const response = await window.csrfHelper.fetchWithCSRF(`/api/admin/users/${selectedUser.id}/warn`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ reason })
@@ -2720,7 +2719,7 @@
       if (!confirm('Are you sure you want to force logout this user from all sessions? They will need to sign in again to access their account.')) return;
       
       try {
-        const response = await fetchWithCSRF(`/api/admin/users/${selectedUser.id}/logout`, {
+        const response = await window.csrfHelper.fetchWithCSRF(`/api/admin/users/${selectedUser.id}/logout`, {
           method: 'POST'
         });
         
@@ -2737,7 +2736,7 @@
       if (!confirm(`Are you sure you want to ${action} this user?`)) return;
       
       try {
-        const response = await fetchWithCSRF(`/api/admin/users/${selectedUser.id}/admin`, {
+        const response = await window.csrfHelper.fetchWithCSRF(`/api/admin/users/${selectedUser.id}/admin`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ is_admin: !selectedUser.is_admin })
@@ -2797,7 +2796,7 @@
       if (!confirm(`Are you sure you want to change ${selectedUser.name}'s XP from ${currentXP} to ${newXP} (${changeText})?`)) return;
       
       try {
-        const response = await fetchWithCSRF(`/api/admin/users/${selectedUser.id}/xp`, {
+        const response = await window.csrfHelper.fetchWithCSRF(`/api/admin/users/${selectedUser.id}/xp`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ xp: newXP, reason })
@@ -2851,7 +2850,7 @@
       
       try {
         // Get CSRF token
-        const response = await fetchWithCSRF('/api/user/profile/avatar', {
+        const response = await window.csrfHelper.fetchWithCSRF('/api/user/profile/avatar', {
           method: 'POST',
           body: formData
         });
