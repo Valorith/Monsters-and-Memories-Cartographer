@@ -1327,31 +1327,10 @@
   <script>
     let currentUser = null;
     let preferences = {};
-    let csrfToken = null;
     
-    // Get CSRF token
-    async function getCSRFToken() {
-      if (!csrfToken) {
-        try {
-          const response = await fetch('/api/csrf-token');
-          const data = await response.json();
-          csrfToken = data.csrfToken;
-        } catch (error) {
-          console.error('Error getting CSRF token:', error);
-        }
-      }
-      return csrfToken;
-    }
-    
-    // Helper function for fetch with CSRF token
-    async function fetchWithCSRF(url, options = {}) {
-      const token = await getCSRFToken();
-      if (!options.headers) {
-        options.headers = {};
-      }
-      options.headers['X-CSRF-Token'] = token;
-      return fetch(url, options);
-    }
+    // Use the global CSRF helper from csrf-helper.js
+    const fetchWithCSRF = window.csrfHelper.fetchWithCSRF;
+    const getCSRFToken = window.csrfHelper.getToken;
 
     // Helper functions for safe table cell creation
     function createTextCell(text) {
