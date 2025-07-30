@@ -2599,12 +2599,12 @@ app.get('/api/admin/db-health', async (req, res) => {
 
 // Share page
 app.get('/share/:shareCode', (req, res) => {
-  res.sendFile(join(__dirname, 'public', 'share.html'));
+  res.sendFile(join(__dirname, 'dist', 'share.html'));
 });
 
 // Serve account page
 app.get('/account', (req, res) => {
-  res.sendFile(join(__dirname, 'public', 'account.html'));
+  res.sendFile(join(__dirname, 'dist', 'account.html'));
 });
 
 // Handle all other routes by serving index.html (for Vue Router)

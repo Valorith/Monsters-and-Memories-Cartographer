@@ -3245,7 +3245,7 @@ export default {
     
     const handleLogout = async () => {
       try {
-        const response = await fetch('/api/auth/logout', {
+        const response = await fetchWithCSRF('/api/auth/logout', {
           method: 'POST'
         })
         
