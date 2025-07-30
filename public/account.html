@@ -3043,6 +3043,27 @@
       return cell;
     }
 
+    // Expose POI action functions to window for event delegation
+    window.goToPoi = goToPoi;
+    window.sharePoi = sharePoi;
+    window.deletePoi = deletePoi;
+    window.publishPoi = publishPoi;
+    window.votePoi = votePoi;
+    
+    // Expose modal and admin functions to window for event delegation
+    window.closeVoteModal = closeVoteModal;
+    window.closeXPModal = closeXPModal;
+    window.updateUserXP = updateUserXP;
+    window.closeUserModal = closeUserModal;
+    window.showXPAdjustment = showXPAdjustment;
+    window.banUser = banUser;
+    window.unbanUser = unbanUser;
+    window.warnUser = warnUser;
+    window.logoutUser = logoutUser;
+    window.viewUserPois = viewUserPois;
+    window.toggleAdminStatus = toggleAdminStatus;
+    window.changeUsersPage = changeUsersPage;
+    
     // Setup event listeners after DOM is loaded
     document.addEventListener('DOMContentLoaded', function() {
       // Handle all data-action elements

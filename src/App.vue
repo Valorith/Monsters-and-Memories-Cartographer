@@ -2179,7 +2179,7 @@ export default {
       
       try {
         // Toggle admin mode on server (secure)
-        const response = await fetch('/api/admin/toggle-mode', {
+        const response = await fetchWithCSRF('/api/admin/toggle-mode', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' }
         })
@@ -2524,7 +2524,7 @@ export default {
             await loadCustomPOIs()
             
             // Clear selected POI if it's the one being deleted
-            if (selectedPOI.value && selectedPOI.value.id === poiId) {
+            if (selectedPOI.value && (selectedPOI.value.id === actualId || selectedPOI.value.id === `custom_${actualId}`)) {
               selectedPOI.value = null
             }
             render()
@@ -3384,7 +3384,11 @@ export default {
     }
     
     const publishCustomPOI = async (poiId) => {
-      const poi = customPOIs.value.find(p => p.id === poiId)
+      // Handle both prefixed and unprefixed IDs
+      const actualId = poiId.toString().startsWith('custom_') ? 
+        parseInt(poiId.toString().replace('custom_', '')) : 
+        poiId
+      const poi = customPOIs.value.find(p => p.id === actualId)
       if (!poi) return
       
       const confirmed = await showConfirm(
@@ -3397,7 +3401,7 @@ export default {
       if (!confirmed) return
       
       try {
-        const response = await fetchWithCSRF(`/api/custom-pois/${poiId}/publish`, {
+        const response = await fetchWithCSRF(`/api/custom-pois/${actualId}/publish`, {
           method: 'POST'
         })
         
