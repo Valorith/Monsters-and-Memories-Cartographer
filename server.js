@@ -2606,12 +2606,20 @@ app.get('/api/admin/db-health', async (req, res) => {
 
 // Share page
 app.get('/share/:shareCode', (req, res) => {
-  res.sendFile(join(__dirname, 'dist', 'share.html'));
+  // In development, serve from public; in production, serve from dist
+  const sharePath = process.env.NODE_ENV === 'production' 
+    ? join(__dirname, 'dist', 'share.html')
+    : join(__dirname, 'public', 'share.html');
+  res.sendFile(sharePath);
 });
 
 // Serve account page
 app.get('/account', (req, res) => {
-  res.sendFile(join(__dirname, 'dist', 'account.html'));
+  // In development, serve from public; in production, serve from dist
+  const accountPath = process.env.NODE_ENV === 'production' 
+    ? join(__dirname, 'dist', 'account.html')
+    : join(__dirname, 'public', 'account.html');
+  res.sendFile(accountPath);
 });
 
 // Handle all other routes by serving index.html (for Vue Router)

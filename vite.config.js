@@ -24,6 +24,20 @@ export default defineConfig({
           console.error('Error copying HTML files:', error)
         }
       }
+    },
+    {
+      name: 'serve-html-files',
+      configureServer(server) {
+        // Serve account.html for /account route
+        server.middlewares.use((req, res, next) => {
+          if (req.url === '/account') {
+            req.url = '/account.html'
+          } else if (req.url === '/share') {
+            req.url = '/share.html'
+          }
+          next()
+        })
+      }
     }
   ],
   server: {
@@ -34,6 +48,14 @@ export default defineConfig({
         changeOrigin: true
       },
       '/auth': {
+        target: 'http://localhost:4173',
+        changeOrigin: true
+      },
+      '/avatars': {
+        target: 'http://localhost:4173',
+        changeOrigin: true
+      },
+      '/maps': {
         target: 'http://localhost:4173',
         changeOrigin: true
       }

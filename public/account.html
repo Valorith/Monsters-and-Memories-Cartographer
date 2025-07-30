@@ -2204,8 +2204,8 @@
       
       return `
         <div class="vote-buttons">
-          <button class="vote-btn upvote ${upvoteClass}" data-action="votePoi" data-args="${poi.id}, 1, ${isCreator}" title="Upvote">👍</button>
-          <button class="vote-btn downvote ${downvoteClass}" data-action="votePoi" data-args="${poi.id}, -1, ${isCreator}" title="${poi.is_creator ? 'Withdraw from voting' : 'Downvote'}">👎</button>
+          <button class="vote-btn upvote ${upvoteClass}" data-action="votePoi" data-args="${poi.id},1,${isCreator}" title="Upvote">👍</button>
+          <button class="vote-btn downvote ${downvoteClass}" data-action="votePoi" data-args="${poi.id},-1,${isCreator}" title="${poi.is_creator ? 'Withdraw from voting' : 'Downvote'}">👎</button>
         </div>
       `;
     }
