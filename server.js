@@ -1096,10 +1096,12 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
       outputFormat: 'auto'
     });
     
-    const processedBuffer = optimized.buffer;
-    const fileExtension = getExtensionForFormat(optimized.format);
+    let processedBuffer = optimized.buffer;
+    let fileExtension = getExtensionForFormat(optimized.format);
     
-    console.log(`Avatar optimization: ${optimized.metadata.originalSize} bytes -> ${optimized.metadata.optimizedSize} bytes (${optimized.metadata.compressionRatio} reduction)`);
+    if (optimized.metadata && optimized.metadata.originalSize) {
+      console.log(`Avatar optimization: ${optimized.metadata.originalSize} bytes -> ${optimized.metadata.optimizedSize} bytes (${optimized.metadata.compressionRatio || 'N/A'} reduction)`);
+    }
     
     // Fall back to original if optimization fails
     if (!processedBuffer || processedBuffer.length === 0) {
@@ -1115,7 +1117,11 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
 
     // Generate unique filename
     const filename = `${req.user.id}_${Date.now()}.${fileExtension}`;
-    const filepath = join(__dirname, 'public', 'avatars', filename);
+    const avatarsDir = join(__dirname, 'public', 'avatars');
+    const filepath = join(avatarsDir, filename);
+    
+    // Ensure avatars directory exists
+    await fs.mkdir(avatarsDir, { recursive: true });
     
     // Save file to disk
     await fs.writeFile(filepath, processedBuffer);
