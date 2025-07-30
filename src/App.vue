@@ -3347,7 +3347,31 @@ export default {
         return
       }
       
-      // First try to get the original Google picture from the database
+      // Check if this is a missing custom avatar
+      if (user.value?.avatarState?.hasCustomAvatar && user.value?.avatarState?.avatarMissing) {
+        console.log('Custom avatar is missing, attempting recovery...')
+        
+        // Try to recover the avatar
+        try {
+          const { fetchWithCSRF } = useCSRF()
+          const recoverResponse = await fetchWithCSRF('/api/user/profile/avatar/recover', {
+            method: 'POST'
+          })
+          
+          if (recoverResponse.ok) {
+            console.log('Avatar recovery initiated, refreshing auth status...')
+            // Wait a moment for file to be written
+            setTimeout(() => {
+              checkAuthStatus()
+            }, 500)
+            return
+          }
+        } catch (error) {
+          console.error('Avatar recovery failed:', error)
+        }
+      }
+      
+      // Fall back to Google picture
       try {
         const response = await fetch('/api/user/google-picture')
         if (response.ok) {
@@ -3361,10 +3385,7 @@ export default {
               user.value.picture = data.picture
             }
             
-            // Refresh auth status to get the correct avatar URL
-            setTimeout(() => {
-              checkAuthStatus()
-            }, 1000)
+            // Don't immediately refresh auth status to avoid loops
             return
           }
         }

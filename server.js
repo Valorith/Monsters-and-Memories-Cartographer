@@ -34,6 +34,24 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Ensure avatars directory exists
+const ensureAvatarsDirectory = async () => {
+  const avatarsDir = join(__dirname, 'public', 'avatars');
+  try {
+    await fs.mkdir(avatarsDir, { recursive: true });
+    console.log('✅ Avatars directory ready:', avatarsDir);
+    
+    // Check if directory is writable
+    const testFile = join(avatarsDir, '.write-test');
+    await fs.writeFile(testFile, 'test');
+    await fs.unlink(testFile);
+    console.log('✅ Avatars directory is writable');
+  } catch (error) {
+    console.error('❌ Error with avatars directory:', error);
+    console.error('   Avatar uploads may fail. Please ensure the directory is writable.');
+  }
+};
+
 // Environment variable validation
 const validateEnvironment = () => {
   const required = [];
@@ -874,6 +892,8 @@ app.get('/api/auth/status', async (req, res) => {
     
     // Build avatar URL if user has a custom avatar file
     let avatarUrl = req.user.picture; // Default to OAuth picture
+    let avatarMissing = false;
+    
     if (req.user.avatar_filename) {
       // Check if file exists
       const avatarPath = join(__dirname, 'public', 'avatars', req.user.avatar_filename);
@@ -887,20 +907,51 @@ app.get('/api/auth/status', async (req, res) => {
           version: req.user.avatar_version,
           url: avatarUrl
         });
+        
+        // Reset missing count if it was previously set
+        if (req.user.avatar_missing_count > 0) {
+          pool.query(
+            'UPDATE users SET avatar_missing_count = 0 WHERE id = $1',
+            [req.user.id]
+          ).catch(err => console.error('Error resetting avatar missing count:', err));
+        }
       } else {
-        console.error('Avatar file not found, using Google picture:', {
+        console.error('Avatar file not found, temporarily using Google picture:', {
           userId: req.user.id,
           filename: req.user.avatar_filename,
-          expectedPath: avatarPath
+          expectedPath: avatarPath,
+          timestamp: new Date().toISOString()
         });
-        // File doesn't exist, use Google picture and clear the avatar from database
+        
+        avatarMissing = true;
+        
+        // Don't immediately clear the avatar - it might be a temporary issue
+        // Only clear if file has been missing for multiple checks
         try {
-          await pool.query(
-            'UPDATE users SET avatar_filename = NULL, avatar_version = 0 WHERE id = $1',
+          // Check if we've tracked this missing file before
+          const missingCheck = await pool.query(
+            'SELECT avatar_missing_count FROM users WHERE id = $1',
             [req.user.id]
           );
+          
+          const missingCount = missingCheck.rows[0]?.avatar_missing_count || 0;
+          
+          if (missingCount >= 3) {
+            // File has been missing for multiple checks, clear it
+            console.error('Avatar missing for multiple checks, clearing from database');
+            await pool.query(
+              'UPDATE users SET avatar_filename = NULL, avatar_version = 0, avatar_missing_count = 0 WHERE id = $1',
+              [req.user.id]
+            );
+          } else {
+            // Increment missing count
+            await pool.query(
+              'UPDATE users SET avatar_missing_count = COALESCE(avatar_missing_count, 0) + 1 WHERE id = $1',
+              [req.user.id]
+            );
+          }
         } catch (updateError) {
-          console.error('Error clearing missing avatar from database:', updateError);
+          console.error('Error updating avatar missing count:', updateError);
         }
       }
     }
@@ -916,7 +967,13 @@ app.get('/api/auth/status', async (req, res) => {
         nickname: req.user.nickname,
         avatarUrl,
         isAdmin: req.user.is_admin,
-        xp: req.user.xp || 0
+        xp: req.user.xp || 0,
+        // Include avatar state for debugging
+        avatarState: {
+          hasCustomAvatar: !!req.user.avatar_filename,
+          avatarMissing,
+          missingCount: avatarMissing ? (req.user.avatar_missing_count || 0) : 0
+        }
       },
       // Include admin mode preference from session (secure)
       adminModeEnabled: req.session.adminModeEnabled || false
@@ -1182,8 +1239,9 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
     }
     
     // Update database with new filename and increment version for cache busting
+    // Also reset missing count since we have a new avatar
     await pool.query(
-      'UPDATE users SET avatar_filename = $1, avatar_version = COALESCE(avatar_version, 1) + 1, avatar_updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      'UPDATE users SET avatar_filename = $1, avatar_version = COALESCE(avatar_version, 1) + 1, avatar_updated_at = CURRENT_TIMESTAMP, avatar_missing_count = 0 WHERE id = $2',
       [filename, req.user.id]
     );
 
@@ -1354,6 +1412,68 @@ app.get('/api/user/profile', async (req, res) => {
   } catch (error) {
     console.error('Error fetching profile:', error);
     res.status(500).json({ error: 'Failed to fetch profile' });
+  }
+});
+
+// Recover missing avatar
+app.post('/api/user/profile/avatar/recover', validateCSRF, async (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  try {
+    // Check if user has an avatar filename but file is missing
+    const userResult = await pool.query(
+      'SELECT avatar_filename, picture FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    
+    const user = userResult.rows[0];
+    if (!user || !user.avatar_filename) {
+      return res.status(400).json({ error: 'No avatar to recover' });
+    }
+    
+    // Check if file exists
+    const avatarPath = join(__dirname, 'public', 'avatars', user.avatar_filename);
+    const fileExists = await fs.access(avatarPath).then(() => true).catch(() => false);
+    
+    if (fileExists) {
+      return res.json({ message: 'Avatar file exists, no recovery needed' });
+    }
+    
+    // Try to download and save Google picture as avatar
+    if (user.picture && user.picture.includes('googleusercontent.com')) {
+      try {
+        const response = await fetch(user.picture);
+        if (!response.ok) throw new Error('Failed to fetch Google picture');
+        
+        const buffer = Buffer.from(await response.arrayBuffer());
+        
+        // Create avatars directory if it doesn't exist
+        const avatarsDir = join(__dirname, 'public', 'avatars');
+        await fs.mkdir(avatarsDir, { recursive: true });
+        
+        // Save with existing filename
+        await fs.writeFile(avatarPath, buffer);
+        
+        // Reset missing count
+        await pool.query(
+          'UPDATE users SET avatar_missing_count = 0 WHERE id = $1',
+          [req.user.id]
+        );
+        
+        console.log('Avatar recovered from Google picture:', user.avatar_filename);
+        res.json({ success: true, message: 'Avatar recovered from Google picture' });
+      } catch (error) {
+        console.error('Failed to recover avatar from Google picture:', error);
+        res.status(500).json({ error: 'Failed to recover avatar' });
+      }
+    } else {
+      res.status(400).json({ error: 'No Google picture available for recovery' });
+    }
+  } catch (error) {
+    console.error('Error in avatar recovery:', error);
+    res.status(500).json({ error: 'Failed to recover avatar' });
   }
 });
 
@@ -2756,7 +2876,10 @@ app.get('*', (req, res) => {
 });
 
 // Initialize database and start server
-initializeDatabase().then(() => {
+initializeDatabase().then(async () => {
+  // Ensure avatars directory exists before starting
+  await ensureAvatarsDirectory();
+  
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
     

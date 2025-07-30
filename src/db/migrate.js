@@ -182,6 +182,14 @@ async function migrate() {
       console.log('Removed custom_avatar field from users table');
     }
     
+    // Add avatar missing count field
+    const avatarMissingCountPath = path.join(__dirname, 'add-avatar-missing-count.sql');
+    if (fs.existsSync(avatarMissingCountPath)) {
+      const avatarMissingCountSchema = fs.readFileSync(avatarMissingCountPath, 'utf8');
+      await pool.query(avatarMissingCountSchema);
+      console.log('Added avatar_missing_count field to users table');
+    }
+    
     console.log('Database migration completed successfully!');
     
     // Check tables after migration
