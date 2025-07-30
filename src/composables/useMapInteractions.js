@@ -92,6 +92,7 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     const canvasPos = imageToCanvas(poi.x, poi.y)
     const isHovered = hoveredPOI.value?.id === poi.id
     
+    
     // Calculate icon size - moderate scaling when zoomed out
     const baseSize = poi.icon_size || 24  // Use custom POI icon_size if available
     const minSize = 20
@@ -99,11 +100,23 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     // More subtle inverse relationship with zoom
     const inverseScale = Math.max(0.8, Math.min(1.5, 1 / Math.sqrt(scale.value)))
     const iconScale = poi.iconScale || 1
-    const iconSize = Math.max(minSize, Math.min(maxSize, baseSize * inverseScale * iconScale))
+    let iconSize = Math.max(minSize, Math.min(maxSize, baseSize * inverseScale * iconScale))
+    
+    // Ensure custom POIs remain visible at all zoom levels
+    if (poi.is_custom) {
+      // Always ensure minimum visibility for custom POIs
+      iconSize = Math.max(iconSize, 24)
+      
+      // When very zoomed out, make them even larger
+      if (scale.value < 0.5) {
+        iconSize = Math.max(iconSize * 1.2, 30)
+      }
+    }
     
     const colors = getPOIColors(poi.type)
     // Use custom icon if available, otherwise use the type-based icon
-    const displayIcon = poi.custom_icon || poi.icon || colors.icon
+    // For custom POIs, the icon field contains the emoji
+    const displayIcon = poi.is_custom ? (poi.icon || poi.custom_icon || '📍') : (poi.custom_icon || poi.icon || colors.icon)
     
     ctx.save()
     ctx.translate(canvasPos.x, canvasPos.y)
@@ -144,7 +157,12 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     ctx.strokeText(displayIcon, 0, 0)
     
     // Icon itself
-    ctx.fillStyle = isHovered ? colors.secondary : colors.primary
+    // For custom POIs, use a consistent color that's always visible
+    if (poi.is_custom) {
+      ctx.fillStyle = isHovered ? '#666666' : '#000000'
+    } else {
+      ctx.fillStyle = isHovered ? colors.secondary : colors.primary
+    }
     ctx.fillText(displayIcon, 0, 0)
     
     // Draw group indicator if this is a grouped POI and it should show the badge

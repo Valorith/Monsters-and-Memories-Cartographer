@@ -609,13 +609,52 @@ export default {
       }
       
       // Combine regular POIs and custom POIs for unified grouping
-      const allPOIs = [...currentMapData.value.pois, ...customPOIs.value]
+      // Filter out any duplicate POIs at the same location to prevent tooltip overlap
+      const allPOIs = []
+      const poiLocations = new Map()
+      
+      // Add regular POIs first
+      currentMapData.value.pois.forEach(poi => {
+        const key = `${poi.x},${poi.y}`
+        if (!poiLocations.has(key)) {
+          poiLocations.set(key, poi)
+          allPOIs.push(poi)
+        }
+      })
+      
+      // Add custom POIs, but skip if there's already a POI at that location
+      customPOIs.value.forEach(poi => {
+        const key = `${poi.x},${poi.y}`
+        if (!poiLocations.has(key)) {
+          poiLocations.set(key, poi)
+          allPOIs.push(poi)
+        } else {
+          // If custom POI is at same location as regular POI, prefer custom POI
+          const existingIndex = allPOIs.findIndex(p => p.x === poi.x && p.y === poi.y)
+          if (existingIndex !== -1) {
+            allPOIs[existingIndex] = poi
+            poiLocations.set(key, poi)
+          }
+        }
+      })
       
       // Group all POIs when zoomed out and store for click detection
       currentGroupedPOIs = groupPOIsWhenZoomedOut(allPOIs)
       
-      // Draw all POIs (both regular and custom)
-      currentGroupedPOIs.forEach(poi => {
+      // Draw all POIs - regular POIs first, then custom POIs on top
+      // This ensures custom POIs are always visible
+      const regularPOIs = currentGroupedPOIs.filter(poi => !poi.is_custom)
+      const customPOIsToRender = currentGroupedPOIs.filter(poi => poi.is_custom)
+      
+      // Draw regular POIs first
+      regularPOIs.forEach(poi => {
+        const isDragging = draggedItem.value && draggedItem.value.id === poi.id
+        const isPending = pendingChange.value && pendingChange.value.item.id === poi.id
+        drawPOI(ctx.value, poi, isDragging || isPending)
+      })
+      
+      // Draw custom POIs on top
+      customPOIsToRender.forEach(poi => {
         const isDragging = draggedItem.value && draggedItem.value.id === poi.id
         const isPending = pendingChange.value && pendingChange.value.item.id === poi.id
         drawPOI(ctx.value, poi, isDragging || isPending)
