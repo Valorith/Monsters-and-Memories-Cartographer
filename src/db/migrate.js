@@ -206,6 +206,14 @@ async function migrate() {
       console.log('Cleaned up old share system components');
     }
     
+    // Add avatar dev tracking for shared DB scenarios
+    const avatarDevTrackingPath = path.join(__dirname, 'add-avatar-dev-tracking.sql');
+    if (fs.existsSync(avatarDevTrackingPath)) {
+      const avatarDevTrackingSchema = fs.readFileSync(avatarDevTrackingPath, 'utf8');
+      await pool.query(avatarDevTrackingSchema);
+      console.log('Added avatar development environment tracking');
+    }
+    
     console.log('Database migration completed successfully!');
     
     // Check tables after migration

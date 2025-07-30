@@ -915,7 +915,7 @@ app.get('/api/auth/status', async (req, res) => {
             // Update database to match actual file
             console.log(`[AVATAR AUTOCORRECT] Updating DB from ${req.user.avatar_filename} to ${testFilename}`);
             pool.query(
-              'UPDATE users SET avatar_filename = $1 WHERE id = $2',
+              'UPDATE users SET avatar_filename = $1, avatar_missing_count = 0, avatar_missing_count_dev = 0 WHERE id = $2',
               [testFilename, req.user.id]
             ).catch(err => console.error('[AVATAR AUTOCORRECT] Error updating avatar filename:', err));
             break;
@@ -957,31 +957,52 @@ app.get('/api/auth/status', async (req, res) => {
         
         avatarMissing = true;
         
-        // Don't immediately clear the avatar - it might be a temporary issue
-        // Only clear if file has been missing for multiple checks
+        // Check if this might be a dev/prod mismatch
+        const isDevelopment = process.env.NODE_ENV !== 'production';
+        const environmentName = isDevelopment ? 'development' : 'production';
+        
+        console.log(`[AVATAR] Running in ${environmentName} mode`);
+        
+        // Don't immediately clear the avatar - it might be on another environment
+        // Only clear if file has been missing for multiple checks in the SAME environment
         try {
+          // Track missing counts per environment
+          const missingCountKey = isDevelopment ? 'avatar_missing_count_dev' : 'avatar_missing_count';
+          
           // Check if we've tracked this missing file before
           const missingCheck = await pool.query(
-            'SELECT avatar_missing_count FROM users WHERE id = $1',
+            `SELECT avatar_missing_count, 
+                    COALESCE(avatar_missing_count_dev, 0) as avatar_missing_count_dev 
+             FROM users WHERE id = $1`,
             [req.user.id]
           );
           
-          const missingCount = missingCheck.rows[0]?.avatar_missing_count || 0;
+          const missingCount = isDevelopment 
+            ? (missingCheck.rows[0]?.avatar_missing_count_dev || 0)
+            : (missingCheck.rows[0]?.avatar_missing_count || 0);
           
-          if (missingCount >= 10) {
-            // File has been missing for many checks, clear it
-            console.error('Avatar missing for 10+ checks, clearing from database');
+          if (missingCount >= 20) { // Increased threshold for shared DB scenario
+            // File has been missing for many checks in this environment
+            console.error(`Avatar missing for 20+ checks in ${environmentName}, clearing from database`);
             await pool.query(
-              'UPDATE users SET avatar_filename = NULL, avatar_version = 0, avatar_missing_count = 0 WHERE id = $1',
+              'UPDATE users SET avatar_filename = NULL, avatar_version = 0, avatar_missing_count = 0, avatar_missing_count_dev = 0 WHERE id = $1',
               [req.user.id]
             );
           } else {
-            // Increment missing count
-            console.log(`Avatar missing (count: ${missingCount + 1}/10) for user ${req.user.id}`);
-            await pool.query(
-              'UPDATE users SET avatar_missing_count = COALESCE(avatar_missing_count, 0) + 1 WHERE id = $1',
-              [req.user.id]
-            );
+            // Increment missing count for this environment only
+            console.log(`Avatar missing in ${environmentName} (count: ${missingCount + 1}/20) for user ${req.user.id}`);
+            
+            if (isDevelopment) {
+              await pool.query(
+                'UPDATE users SET avatar_missing_count_dev = COALESCE(avatar_missing_count_dev, 0) + 1 WHERE id = $1',
+                [req.user.id]
+              );
+            } else {
+              await pool.query(
+                'UPDATE users SET avatar_missing_count = COALESCE(avatar_missing_count, 0) + 1 WHERE id = $1',
+                [req.user.id]
+              );
+            }
           }
         } catch (updateError) {
           console.error('Error updating avatar missing count:', updateError);
@@ -1312,7 +1333,7 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
       // NOW update database with the confirmed filename
       console.log(`[AVATAR UPDATE] About to update DB for user ${req.user.id} with filename: ${filename}`);
       await pool.query(
-        'UPDATE users SET avatar_filename = $1, avatar_version = COALESCE(avatar_version, 1) + 1, avatar_updated_at = CURRENT_TIMESTAMP, avatar_missing_count = 0 WHERE id = $2',
+        'UPDATE users SET avatar_filename = $1, avatar_version = COALESCE(avatar_version, 1) + 1, avatar_updated_at = CURRENT_TIMESTAMP, avatar_missing_count = 0, avatar_missing_count_dev = 0 WHERE id = $2',
         [filename, req.user.id]
       );
       
@@ -1578,7 +1599,7 @@ app.post('/api/user/profile/avatar/reset', validateCSRF, async (req, res) => {
     
     // Update database to remove avatar filename
     await pool.query(
-      'UPDATE users SET avatar_filename = NULL, avatar_version = NULL, avatar_updated_at = NULL, avatar_missing_count = 0 WHERE id = $1',
+      'UPDATE users SET avatar_filename = NULL, avatar_version = NULL, avatar_updated_at = NULL, avatar_missing_count = 0, avatar_missing_count_dev = 0 WHERE id = $1',
       [req.user.id]
     );
     
@@ -1663,7 +1684,7 @@ app.post('/api/user/profile/avatar/fix-mismatch', validateCSRF, async (req, res)
     if (userAvatarFiles.length === 0) {
       // No files found, clear database
       await pool.query(
-        'UPDATE users SET avatar_filename = NULL, avatar_version = NULL, avatar_missing_count = 0 WHERE id = $1',
+        'UPDATE users SET avatar_filename = NULL, avatar_version = NULL, avatar_missing_count = 0, avatar_missing_count_dev = 0 WHERE id = $1',
         [req.user.id]
       );
       return res.json({ 
@@ -1687,7 +1708,7 @@ app.post('/api/user/profile/avatar/fix-mismatch', validateCSRF, async (req, res)
     
     // Update database to use the newest file
     await pool.query(
-      'UPDATE users SET avatar_filename = $1, avatar_version = COALESCE(avatar_version, 0) + 1, avatar_missing_count = 0 WHERE id = $2',
+      'UPDATE users SET avatar_filename = $1, avatar_version = COALESCE(avatar_version, 0) + 1, avatar_missing_count = 0, avatar_missing_count_dev = 0 WHERE id = $2',
       [newestFile, req.user.id]
     );
     
