@@ -3338,8 +3338,11 @@ export default {
     
     // Handle avatar loading error by falling back to Google avatar
     const handleAvatarError = async (event) => {
+      console.log('Avatar failed to load:', event.target.src)
+      
       // Don't retry if we're already trying the Google picture
-      if (event.target.src.includes('/api/user/google-picture')) {
+      if (event.target.src.includes('/api/user/google-picture') || 
+          event.target.src.includes('googleusercontent.com')) {
         event.target.style.display = 'none'
         return
       }
@@ -3350,12 +3353,18 @@ export default {
         if (response.ok) {
           const data = await response.json()
           if (data.picture && event.target.src !== data.picture) {
+            console.log('Falling back to Google picture:', data.picture)
             event.target.src = data.picture
             
             // Update the user object to prevent retry loops
             if (user.value) {
               user.value.picture = data.picture
             }
+            
+            // Refresh auth status to get the correct avatar URL
+            setTimeout(() => {
+              checkAuthStatus()
+            }, 1000)
             return
           }
         }
@@ -3549,6 +3558,11 @@ export default {
       window.addEventListener('resize', resizeCanvas)
       window.addEventListener('keydown', handleKeyboardShortcut)
       
+      // Listen for avatar updates from account page
+      window.addEventListener('avatar-updated', async () => {
+        await checkAuthStatus()
+      })
+      
       // Close user dropdown when clicking outside
       document.addEventListener('click', (e) => {
         const dropdown = document.querySelector('.user-dropdown-container')
@@ -3604,6 +3618,9 @@ export default {
     onUnmounted(() => {
       window.removeEventListener('resize', resizeCanvas)
       window.removeEventListener('keydown', handleKeyboardShortcut)
+      window.removeEventListener('avatar-updated', async () => {
+        await checkAuthStatus()
+      })
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId)
       }

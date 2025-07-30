@@ -19,6 +19,18 @@
       color: #e0e0e0;
     }
     
+    /* Avatar upload progress animation */
+    #upload-progress-bar {
+      background: linear-gradient(90deg, #4a7c59, #5fa772, #4a7c59);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+    
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    
     .account-header {
       background: #2d2d2d;
       color: white;
@@ -940,8 +952,12 @@
               <div style="display: flex; align-items: center; gap: 2rem;">
                 <div style="position: relative;">
                   <img id="preview-avatar" style="width: 100px; height: 100px; border-radius: 50%; border: 3px solid #4a7c59; object-fit: cover;">
-                  <div id="avatar-loading" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); border-radius: 50%; align-items: center; justify-content: center;">
-                    <div style="color: white;">Uploading...</div>
+                  <div id="avatar-loading" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); border-radius: 50%; align-items: center; justify-content: center; flex-direction: column;">
+                    <div style="color: white; font-size: 0.9rem; margin-bottom: 8px;">Uploading...</div>
+                    <div style="width: 80%; background: rgba(255,255,255,0.2); height: 6px; border-radius: 3px; overflow: hidden;">
+                      <div id="upload-progress-bar" style="width: 0%; height: 100%; background: #4a7c59; transition: width 0.3s ease;"></div>
+                    </div>
+                    <div id="upload-status" style="color: white; font-size: 0.8rem; margin-top: 8px;"></div>
                   </div>
                 </div>
                 <div style="flex: 1;">
@@ -2902,51 +2918,110 @@
       
       // Show loading
       document.getElementById('avatar-loading').style.display = 'flex';
+      document.getElementById('upload-progress-bar').style.width = '0%';
+      document.getElementById('upload-status').textContent = '';
       
       const formData = new FormData();
       formData.append('avatar', file);
       
       try {
-        // Get CSRF token
-        const response = await window.csrfHelper.fetchWithCSRF('/api/user/profile/avatar', {
-          method: 'POST',
-          body: formData
+        // Simulate upload progress
+        const progressBar = document.getElementById('upload-progress-bar');
+        const statusText = document.getElementById('upload-status');
+        
+        // Upload phase (0-60%)
+        progressBar.style.width = '20%';
+        statusText.textContent = 'Uploading...';
+        
+        const xhr = new XMLHttpRequest();
+        
+        // Track upload progress
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            const percentComplete = Math.round((e.loaded / e.total) * 60);
+            progressBar.style.width = percentComplete + '%';
+          }
         });
         
-        if (response.ok) {
-          const data = await response.json();
+        // Create a promise for the XHR request
+        const uploadPromise = new Promise((resolve, reject) => {
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve(JSON.parse(xhr.responseText));
+            } else {
+              reject(new Error(xhr.statusText));
+            }
+          };
+          xhr.onerror = () => reject(new Error('Network error'));
+        });
+        
+        // Get CSRF token first
+        const csrfResponse = await fetch('/api/csrf-token');
+        const csrfData = await csrfResponse.json();
+        
+        xhr.open('POST', '/api/user/profile/avatar');
+        xhr.setRequestHeader('X-CSRF-Token', csrfData.csrfToken);
+        xhr.send(formData);
+        
+        const data = await uploadPromise;
+        
+        // Processing phase (60-80%)
+        progressBar.style.width = '80%';
+        statusText.textContent = 'Processing image...';
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Verification phase (80-100%)
+        progressBar.style.width = '90%';
+        statusText.textContent = 'Verifying upload...';
+        
+        // Verify the uploaded avatar
+        const verifyResponse = await fetch('/api/user/profile/avatar/verify');
+        const verifyData = await verifyResponse.json();
+        
+        if (verifyData.verified) {
+          progressBar.style.width = '100%';
+          statusText.textContent = '✓ Upload verified!';
           
           // Update all avatar displays
           const newAvatarUrl = data.avatarUrl;
-          document.getElementById('user-avatar').src = newAvatarUrl;
-          document.getElementById('preview-avatar').src = newAvatarUrl;
+          
+          // Add timestamp to force reload
+          const timestampedUrl = newAvatarUrl + (newAvatarUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+          
+          document.getElementById('user-avatar').src = timestampedUrl;
+          document.getElementById('preview-avatar').src = timestampedUrl;
           
           // Update current user data
           currentUser.custom_avatar = newAvatarUrl;
           currentUser.picture = newAvatarUrl;
           
-          // Force reload the images to ensure they display
-          document.getElementById('user-avatar').style.display = 'none';
-          document.getElementById('user-avatar').offsetHeight; // Force reflow
-          document.getElementById('user-avatar').style.display = '';
-          
-          document.getElementById('preview-avatar').style.display = 'none';
-          document.getElementById('preview-avatar').offsetHeight; // Force reflow
-          document.getElementById('preview-avatar').style.display = '';
-          
           // Show reset button
           document.getElementById('reset-avatar-btn').style.display = 'inline-block';
           
-          showMessage('Profile picture updated successfully', 'success');
+          // Wait a moment to show completion
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          showMessage('Profile picture updated and verified successfully', 'success');
+          
+          // Trigger auth status refresh to update main app
+          window.dispatchEvent(new Event('avatar-updated'));
         } else {
-          const error = await response.json();
-          showMessage(error.error || 'Failed to upload image', 'error');
+          progressBar.style.width = '90%';
+          statusText.textContent = '✗ Verification failed';
+          showMessage('Avatar upload failed verification. Please try again.', 'error');
         }
       } catch (error) {
-        showMessage('Failed to upload image', 'error');
+        document.getElementById('upload-progress-bar').style.width = '0%';
+        document.getElementById('upload-status').textContent = '✗ Upload failed';
+        showMessage('Failed to upload image: ' + error.message, 'error');
       } finally {
-        // Hide loading
-        document.getElementById('avatar-loading').style.display = 'none';
+        // Hide loading after a delay
+        setTimeout(() => {
+          document.getElementById('avatar-loading').style.display = 'none';
+          document.getElementById('upload-progress-bar').style.width = '0%';
+          document.getElementById('upload-status').textContent = '';
+        }, 1500);
+        
         // Reset file input
         document.getElementById('avatar-upload').value = '';
       }

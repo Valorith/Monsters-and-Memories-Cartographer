@@ -327,11 +327,15 @@ const validateCSRF = (req, res, next) => {
 // Serve public directory for utility scripts
 app.use(express.static(join(__dirname, 'public')));
 
-// Serve avatars with caching headers
+// Serve avatars with proper caching headers
 app.use('/avatars', express.static(join(__dirname, 'public', 'avatars'), {
-  maxAge: '7d', // Cache avatars for 7 days
+  maxAge: '1h', // Reduced from 7d to prevent caching issues
   etag: true,
-  lastModified: true
+  lastModified: true,
+  setHeaders: (res, path) => {
+    // Allow caching but require revalidation
+    res.setHeader('Cache-Control', 'private, max-age=3600, must-revalidate');
+  }
 }));
 
 // Serve map images without compression to maintain quality
@@ -877,8 +881,15 @@ app.get('/api/auth/status', async (req, res) => {
       
       if (fileExists) {
         avatarUrl = `/avatars/${req.user.avatar_filename}?v=${req.user.avatar_version || 1}`;
+        console.log('Serving custom avatar:', {
+          userId: req.user.id,
+          filename: req.user.avatar_filename,
+          version: req.user.avatar_version,
+          url: avatarUrl
+        });
       } else {
         console.error('Avatar file not found, using Google picture:', {
+          userId: req.user.id,
           filename: req.user.avatar_filename,
           expectedPath: avatarPath
         });
@@ -1146,6 +1157,18 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
     // Save file to disk
     await fs.writeFile(filepath, processedBuffer);
     
+    // Verify file was written successfully
+    try {
+      await fs.access(filepath);
+      const stats = await fs.stat(filepath);
+      if (stats.size === 0) {
+        throw new Error('Written file is empty');
+      }
+    } catch (verifyError) {
+      console.error('Avatar file verification failed:', verifyError);
+      return res.status(500).json({ error: 'Failed to save avatar file' });
+    }
+    
     // Get current avatar to delete old file
     const currentUser = await pool.query(
       'SELECT avatar_filename FROM users WHERE id = $1',
@@ -1171,21 +1194,96 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
     );
     
     if (updatedUser.rows.length > 0) {
-      req.user = updatedUser.rows[0];
-      // Force session save
-      req.session.save((err) => {
-        if (err) {
-          console.error('Error saving session:', err);
-        }
+      // Update all user properties in session
+      Object.assign(req.user, updatedUser.rows[0]);
+      
+      // Force session save and wait for it to complete
+      await new Promise((resolve, reject) => {
+        req.session.save((err) => {
+          if (err) {
+            console.error('Error saving session:', err);
+            reject(err);
+          } else {
+            resolve();
+          }
+        });
       });
     }
 
-    // Return the URL to access the avatar
+    // Add a small delay to ensure file system operations complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Build the full avatar URL to return
     const avatarUrl = `/avatars/${filename}?v=${updatedUser.rows[0].avatar_version || 1}`;
-    res.json({ success: true, avatarUrl });
+    
+    // Log successful upload
+    console.log('Avatar uploaded successfully:', {
+      userId: req.user.id,
+      filename,
+      version: updatedUser.rows[0].avatar_version,
+      size: processedBuffer.length
+    });
+    
+    res.json({ 
+      success: true, 
+      avatarUrl,
+      filename,
+      version: updatedUser.rows[0].avatar_version,
+      size: processedBuffer.length
+    });
   } catch (error) {
     console.error('Error uploading avatar:', error);
     res.status(500).json({ error: 'Failed to upload avatar' });
+  }
+});
+
+// Verify avatar upload
+app.get('/api/user/profile/avatar/verify', async (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  try {
+    // Get user's avatar info from database
+    const result = await pool.query(
+      'SELECT avatar_filename, avatar_version FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    
+    if (!result.rows[0]?.avatar_filename) {
+      return res.json({ verified: false, reason: 'No avatar filename in database' });
+    }
+    
+    // Check if file exists
+    const avatarPath = join(__dirname, 'public', 'avatars', result.rows[0].avatar_filename);
+    
+    try {
+      const stats = await fs.stat(avatarPath);
+      
+      // Verify file exists and has content
+      if (stats.size > 0) {
+        // Try to read first few bytes to ensure it's accessible
+        const fileHandle = await fs.open(avatarPath, 'r');
+        const buffer = Buffer.alloc(10);
+        await fileHandle.read(buffer, 0, 10, 0);
+        await fileHandle.close();
+        
+        res.json({ 
+          verified: true,
+          filename: result.rows[0].avatar_filename,
+          size: stats.size,
+          version: result.rows[0].avatar_version
+        });
+      } else {
+        res.json({ verified: false, reason: 'File is empty' });
+      }
+    } catch (error) {
+      console.error('Avatar verification failed:', error);
+      res.json({ verified: false, reason: 'File not accessible' });
+    }
+  } catch (error) {
+    console.error('Error verifying avatar:', error);
+    res.status(500).json({ error: 'Failed to verify avatar' });
   }
 });
 
