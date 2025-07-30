@@ -2761,7 +2761,7 @@
           
           // Always use DOM manipulation for consistent rendering
           const cells = [
-            createImageCell(user.custom_avatar || user.picture, user.display_name || user.name),
+            createImageCell(user.custom_avatar, user.picture, user.display_name || user.name),
             createTextCell(user.display_name || user.name),
             createTextCell(user.email),
             createXPCell(user.xp || 0),
@@ -2811,13 +2811,14 @@
     
     function displayUserModal(user) {
       const detailAvatar = document.getElementById('detail-user-avatar');
-      const detailAvatarUrl = user.custom_avatar ? `/avatars/${user.custom_avatar}` : user.picture;
-      detailAvatar.src = detailAvatarUrl;
+      // custom_avatar already contains the full URL from the API
+      detailAvatar.src = user.custom_avatar || user.picture;
       
       // Add fallback to Google picture
       detailAvatar.onerror = function() {
         if (user.picture && this.src !== user.picture) {
           this.src = user.picture;
+          this.onerror = null; // Prevent infinite loop
         } else {
           this.style.display = 'none';
         }
@@ -3295,15 +3296,26 @@
       return cell;
     }
     
-    function createImageCell(src, alt) {
+    function createImageCell(avatarUrl, googleUrl, alt) {
       const cell = document.createElement('td');
       cell.style.textAlign = 'center';
       const img = document.createElement('img');
-      img.src = src;
+      img.src = avatarUrl || googleUrl;
       img.alt = alt;
       img.style.width = '32px';
       img.style.height = '32px';
       img.style.borderRadius = '50%';
+      img.style.objectFit = 'cover';
+      
+      // Add fallback to Google avatar on error
+      if (avatarUrl && googleUrl && avatarUrl !== googleUrl) {
+        img.onerror = function() {
+          console.log(`Avatar failed to load for ${alt}, falling back to Google picture`);
+          this.onerror = null; // Prevent infinite loop
+          this.src = googleUrl;
+        };
+      }
+      
       cell.appendChild(img);
       return cell;
     }

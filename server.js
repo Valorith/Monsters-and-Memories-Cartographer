@@ -913,10 +913,11 @@ app.get('/api/auth/status', async (req, res) => {
             console.log(`Avatar mismatch detected: DB has ${req.user.avatar_filename} but found ${testFilename}`);
             actualFilename = testFilename;
             // Update database to match actual file
+            console.log(`[AVATAR AUTOCORRECT] Updating DB from ${req.user.avatar_filename} to ${testFilename}`);
             pool.query(
               'UPDATE users SET avatar_filename = $1 WHERE id = $2',
               [testFilename, req.user.id]
-            ).catch(err => console.error('Error updating avatar filename:', err));
+            ).catch(err => console.error('[AVATAR AUTOCORRECT] Error updating avatar filename:', err));
             break;
           }
         }
@@ -1195,6 +1196,19 @@ app.put('/api/user/profile/nickname', validateCSRF, async (req, res) => {
 });
 
 // Upload profile picture
+// Track recent avatar uploads to prevent rapid updates
+const recentAvatarUploads = new Map();
+
+// Clean up old entries every minute
+setInterval(() => {
+  const now = Date.now();
+  for (const [userId, timestamp] of recentAvatarUploads.entries()) {
+    if (now - timestamp > 60000) { // Remove entries older than 1 minute
+      recentAvatarUploads.delete(userId);
+    }
+  }
+}, 60000);
+
 app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), async (req, res) => {
   if (!req.isAuthenticated()) {
     return res.status(401).json({ error: 'Not authenticated' });
@@ -1203,6 +1217,15 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
+
+  // Prevent rapid-fire uploads
+  const lastUpload = recentAvatarUploads.get(req.user.id);
+  const now = Date.now();
+  if (lastUpload && (now - lastUpload) < 5000) { // 5 second cooldown
+    console.warn(`[AVATAR UPLOAD] Rate limit hit for user ${req.user.id}`);
+    return res.status(429).json({ error: 'Please wait a few seconds before uploading another avatar' });
+  }
+  recentAvatarUploads.set(req.user.id, now);
 
   try {
     // Determine output format based on input to avoid format mismatches
@@ -1279,13 +1302,21 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
       
       console.log(`Avatar file saved successfully: ${filename} (${stats.size} bytes)`);
       
+      // Double-check file exists before updating database
+      const finalCheck = await fs.access(filepath).then(() => true).catch(() => false);
+      if (!finalCheck) {
+        console.error(`[AVATAR UPDATE] File verification failed for ${filename} - aborting DB update`);
+        return res.status(500).json({ error: 'File verification failed' });
+      }
+      
       // NOW update database with the confirmed filename
+      console.log(`[AVATAR UPDATE] About to update DB for user ${req.user.id} with filename: ${filename}`);
       await pool.query(
         'UPDATE users SET avatar_filename = $1, avatar_version = COALESCE(avatar_version, 1) + 1, avatar_updated_at = CURRENT_TIMESTAMP, avatar_missing_count = 0 WHERE id = $2',
         [filename, req.user.id]
       );
       
-      console.log(`Database updated with avatar filename: ${filename}`);
+      console.log(`[AVATAR UPDATE] Database updated successfully with avatar filename: ${filename}`);
       
       // Success - delete old avatar file if exists
       if (oldAvatarFilename && oldAvatarFilename !== filename) {
@@ -1912,7 +1943,15 @@ app.get('/api/admin/users', async (req, res) => {
       ORDER BY u.created_at DESC`
     );
     
-    res.json(usersResult.rows);
+    // Add custom_avatar URL for users with avatar_filename
+    const usersWithAvatars = usersResult.rows.map(user => ({
+      ...user,
+      custom_avatar: user.avatar_filename 
+        ? `/avatars/${user.avatar_filename}?v=${user.avatar_version || 1}`
+        : null
+    }));
+    
+    res.json(usersWithAvatars);
   } catch (error) {
     console.error('Error fetching users:', error);
     res.status(500).json({ error: 'Failed to fetch users' });
@@ -1929,7 +1968,9 @@ app.get('/api/admin/users/:userId', async (req, res) => {
     // Get user details
     const userResult = await pool.query(
       `SELECT 
-        u.id, u.name, u.email, u.picture, u.is_admin, u.xp, u.created_at, u.last_visit,
+        u.id, u.name, u.nickname, COALESCE(u.nickname, u.name) as display_name,
+        u.email, u.picture, u.avatar_filename, u.avatar_version,
+        u.is_admin, u.xp, u.created_at, u.last_visit,
         u.is_banned, u.ban_reason, u.banned_at, 
         b.name as banned_by_name
       FROM users u
@@ -1943,6 +1984,11 @@ app.get('/api/admin/users/:userId', async (req, res) => {
     }
 
     const user = userResult.rows[0];
+    
+    // Add custom_avatar URL if user has avatar_filename
+    if (user.avatar_filename) {
+      user.custom_avatar = `/avatars/${user.avatar_filename}?v=${user.avatar_version || 1}`;
+    }
 
     // Get POI statistics
     const statsResult = await pool.query(
