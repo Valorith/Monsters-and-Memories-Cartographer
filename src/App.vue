@@ -467,6 +467,12 @@ export default {
         return pois
       }
       
+      // Debug: Log when grouping starts affecting custom POIs
+      const customPOICount = pois.filter(p => p.is_custom).length
+      if (customPOICount > 0) {
+        console.log(`Grouping at scale ${scale.value} (${Math.round(scale.value * 100)}%) with ${customPOICount} custom POIs`)
+      }
+      
       // Calculate grouping distance based on zoom level (adjusted for earlier grouping)
       const groupingDistance = 60 / scale.value // Larger distance when more zoomed out
       
@@ -531,7 +537,8 @@ export default {
                 x: centerX + Math.cos(angle) * radius,
                 y: centerY + Math.sin(angle) * radius,
                 isInExpandedGroup: true,
-                groupId: groupId
+                groupId: groupId,
+                is_custom: p.is_custom  // Explicitly preserve is_custom flag
               })
               angle += (2 * Math.PI) / group.length
             })
@@ -553,7 +560,8 @@ export default {
                 groupTypes: typeMap.size,
                 groupId: groupId,
                 groupedPOIs: group, // Include all POIs in the group for tooltip
-                showGroupBadge: offset === 0 // Only show badge on the first POI of the group
+                showGroupBadge: offset === 0, // Only show badge on the first POI of the group
+                is_custom: representativePOI.is_custom  // Explicitly preserve is_custom flag
               })
               offset++
             })
@@ -562,6 +570,11 @@ export default {
           // Single POI, not grouped
           processedPOIs.add(poi.id)
           groups.push(poi)
+          
+          // Debug: Log when custom POI is added as single
+          if (poi.is_custom) {
+            console.log(`Custom POI "${poi.name}" added as single (not grouped)`)
+          }
         }
       })
       
@@ -658,10 +671,11 @@ export default {
       const regularPOIs = currentGroupedPOIs.filter(poi => !poi.is_custom)
       const customPOIsToRender = currentGroupedPOIs.filter(poi => poi.is_custom)
       
-      // Debug logging for custom POIs
-      if (scale.value < 0.5 && customPOIs.value.length > 0) {
+      // Debug logging for custom POIs - changed to trigger at the problem threshold
+      if (scale.value < 0.85 && customPOIs.value.length > 0) {
         console.log('Custom POIs rendering debug:', {
           scale: scale.value,
+          scalePercent: Math.round(scale.value * 100) + '%',
           customPOIsOriginal: customPOIs.value.length,
           allPOIs: allPOIs.filter(p => p.is_custom).length,
           currentGroupedPOIs: currentGroupedPOIs.filter(p => p.is_custom).length,
@@ -670,10 +684,15 @@ export default {
         
         // Log first custom POI details
         if (customPOIs.value[0]) {
-          console.log('First custom POI:', customPOIs.value[0])
+          console.log('First custom POI:', {
+            ...customPOIs.value[0],
+            hasIsCustomFlag: customPOIs.value[0].is_custom
+          })
         }
         if (customPOIsToRender[0]) {
           console.log('First custom POI to render:', customPOIsToRender[0])
+        } else if (customPOIs.value.length > 0 && customPOIsToRender.length === 0) {
+          console.error('Custom POIs exist but none are being rendered!')
         }
       }
       
