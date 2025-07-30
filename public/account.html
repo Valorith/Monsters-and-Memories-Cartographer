@@ -1980,14 +1980,12 @@
     }
 
     function goToPoi(poiId, mapId, x, y) {
-      console.log('goToPoi called with:', { poiId, mapId, x, y });
       // Store POI location in sessionStorage to highlight it when the map loads
       sessionStorage.setItem('highlightCustomPoi', JSON.stringify({ id: poiId, mapId, x, y }));
       window.location.href = '/';
     }
 
     async function sharePoi(poiId) {
-      console.log('sharePoi called with ID:', poiId);
       try {
         const response = await window.csrfHelper.fetchWithCSRF(`/api/custom-pois/${poiId}/share`, {
           method: 'POST'
@@ -2007,7 +2005,6 @@
     }
 
     async function deletePoi(poiId) {
-      console.log('deletePoi called with ID:', poiId);
       if (!confirm('Are you sure you want to delete this custom POI? This will also remove it from anyone you shared it with and from pending community approval if applicable.')) {
         return;
       }
@@ -2399,7 +2396,6 @@
     }
     
     async function votePoi(poiId, vote, isCreator = false) {
-      console.log('votePoi called:', { poiId, vote, isCreator, isCreatorType: typeof isCreator });
       
       // Convert string 'true'/'false' to boolean
       const isCreatorBool = isCreator === true || isCreator === 'true';
@@ -2574,7 +2570,6 @@
 
     // XP Configuration Functions
     async function loadXPConfig() {
-      console.log('Loading XP config...');
       const loading = document.getElementById('xp-config-loading');
       const content = document.getElementById('xp-config-content');
       const tbody = document.getElementById('xp-config-tbody');
@@ -3343,21 +3338,17 @@
       window.changeUsersPage = changeUsersPage;
       // Handle all data-action elements
       document.addEventListener('click', function(e) {
-        console.log('Click event on:', e.target);
         
         // Find the closest element with data-action attribute
         const actionElement = e.target.closest('[data-action]');
         if (!actionElement) {
-          console.log('No data-action element found');
           return;
         }
         
         const action = actionElement.getAttribute('data-action');
-        console.log('Clicked element with data-action:', action);
         if (action) {
           e.preventDefault();
           const args = actionElement.getAttribute('data-args');
-          console.log('Arguments:', args);
           
           // Call the appropriate function
           if (window[action]) {
@@ -3723,8 +3714,14 @@
           closeAddSharedPOIModal();
           loadCustomPois(); // Refresh the list
         } else {
-          const error = await response.json();
-          showMessage(error.error || 'Failed to add shared POI', 'error');
+          let errorMessage = 'Failed to add shared POI';
+          try {
+            const error = await response.json();
+            errorMessage = error.error || errorMessage;
+          } catch (e) {
+            // If response isn't JSON, use default error message
+          }
+          showMessage(errorMessage, 'error');
         }
       } catch (error) {
         showMessage('Failed to add shared POI', 'error');
