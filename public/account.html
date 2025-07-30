@@ -3096,9 +3096,14 @@
       window.changeUsersPage = changeUsersPage;
       // Handle all data-action elements
       document.addEventListener('click', function(e) {
+        console.log('Click event on:', e.target);
+        
         // Find the closest element with data-action attribute
         const actionElement = e.target.closest('[data-action]');
-        if (!actionElement) return;
+        if (!actionElement) {
+          console.log('No data-action element found');
+          return;
+        }
         
         const action = actionElement.getAttribute('data-action');
         console.log('Clicked element with data-action:', action);

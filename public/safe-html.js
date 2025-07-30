@@ -17,7 +17,7 @@
     
     // Define allowed tags and attributes
     const allowedTags = ['b', 'i', 'em', 'strong', 'span', 'br', 'p', 'div', 'img', 'td', 'tr', 'th', 'button', 'table', 'thead', 'tbody', 'tfoot', 'select', 'option', 'input', 'label', 'small'];
-    const allowedAttrs = ['class', 'style', 'src', 'alt', 'onclick', 'colspan', 'rowspan', 'disabled', 'type', 'value', 'selected', 'data-poi-id', 'data-status', 'title', 'min', 'max', 'step'];
+    const allowedAttrs = ['class', 'style', 'src', 'alt', 'onclick', 'colspan', 'rowspan', 'disabled', 'type', 'value', 'selected', 'data-poi-id', 'data-status', 'data-action', 'data-args', 'title', 'min', 'max', 'step'];
     
     // Function to clean a node
     function cleanNode(node) {
