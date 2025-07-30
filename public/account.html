@@ -2604,7 +2604,18 @@
     }
     
     function displayUserModal(user) {
-      document.getElementById('detail-user-avatar').src = user.custom_avatar || user.picture;
+      const detailAvatar = document.getElementById('detail-user-avatar');
+      const detailAvatarUrl = user.custom_avatar ? `/avatars/${user.custom_avatar}` : user.picture;
+      detailAvatar.src = detailAvatarUrl;
+      
+      // Add fallback to Google picture
+      detailAvatar.onerror = function() {
+        if (user.picture && this.src !== user.picture) {
+          this.src = user.picture;
+        } else {
+          this.style.display = 'none';
+        }
+      };
       document.getElementById('detail-user-name').textContent = user.display_name || user.name;
       document.getElementById('detail-user-email').textContent = user.email;
       document.getElementById('detail-user-id').textContent = user.id;
@@ -2773,7 +2784,18 @@
     function showXPAdjustment() {
       if (!selectedUser) return;
       
-      document.getElementById('xp-user-avatar').src = selectedUser.custom_avatar || selectedUser.picture;
+      const xpAvatar = document.getElementById('xp-user-avatar');
+      const xpAvatarUrl = selectedUser.custom_avatar ? `/avatars/${selectedUser.custom_avatar}` : selectedUser.picture;
+      xpAvatar.src = xpAvatarUrl;
+      
+      // Add fallback to Google picture
+      xpAvatar.onerror = function() {
+        if (selectedUser.picture && this.src !== selectedUser.picture) {
+          this.src = selectedUser.picture;
+        } else {
+          this.style.display = 'none';
+        }
+      };
       document.getElementById('xp-user-name').textContent = selectedUser.display_name || selectedUser.name;
       document.getElementById('xp-current').textContent = selectedUser.xp || 0;
       document.getElementById('xp-new-value').value = selectedUser.xp || 0;
