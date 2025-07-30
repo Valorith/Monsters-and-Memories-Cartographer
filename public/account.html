@@ -1847,12 +1847,14 @@
     }
 
     function goToPoi(poiId, mapId, x, y) {
+      console.log('goToPoi called with:', { poiId, mapId, x, y });
       // Store POI location in sessionStorage to highlight it when the map loads
       sessionStorage.setItem('highlightCustomPoi', JSON.stringify({ id: poiId, mapId, x, y }));
       window.location.href = '/';
     }
 
     async function sharePoi(poiId) {
+      console.log('sharePoi called with ID:', poiId);
       try {
         const response = await window.csrfHelper.fetchWithCSRF(`/api/custom-pois/${poiId}/share`, {
           method: 'POST'
@@ -1869,13 +1871,18 @@
             // Fallback for browsers that don't support clipboard API
             prompt('Copy this share link:', shareUrl);
           });
+        } else {
+          const error = await response.json();
+          showMessage(error.error || 'Failed to create share link', 'error');
         }
       } catch (error) {
+        console.error('Error in sharePoi:', error);
         showMessage('Failed to create share link', 'error');
       }
     }
 
     async function deletePoi(poiId) {
+      console.log('deletePoi called with ID:', poiId);
       if (!confirm('Are you sure you want to delete this custom POI? This will also remove it from anyone you shared it with and from pending community approval if applicable.')) {
         return;
       }
@@ -1889,8 +1896,12 @@
           showMessage('Custom POI deleted', 'success');
           loadCustomPois(); // Reload the list
           loadPendingPois(); // Also reload pending POIs in case it was there
+        } else {
+          const error = await response.json();
+          showMessage(error.error || 'Failed to delete custom POI', 'error');
         }
       } catch (error) {
+        console.error('Error in deletePoi:', error);
         showMessage('Failed to delete custom POI', 'error');
       }
     }
@@ -3036,23 +3047,52 @@
     document.addEventListener('DOMContentLoaded', function() {
       // Handle all data-action elements
       document.addEventListener('click', function(e) {
-        const action = e.target.getAttribute('data-action');
+        // Find the closest element with data-action attribute
+        const actionElement = e.target.closest('[data-action]');
+        if (!actionElement) return;
+        
+        const action = actionElement.getAttribute('data-action');
+        console.log('Clicked element with data-action:', action);
         if (action) {
           e.preventDefault();
-          const args = e.target.getAttribute('data-args');
+          const args = actionElement.getAttribute('data-args');
+          console.log('Arguments:', args);
           
           // Call the appropriate function
           if (window[action]) {
             if (args) {
               // Parse arguments and call function
               try {
-                // Handle simple arguments like numbers or strings
-                if (args.match(/^-?\d+$/)) {
-                  window[action](parseInt(args));
-                } else if (args.match(/^'.*'$/) || args.match(/^".*"$/)) {
-                  window[action](args.slice(1, -1));
+                // Handle multiple comma-separated arguments
+                if (args.includes(',')) {
+                  // Split by comma and trim whitespace
+                  const argArray = args.split(',').map(arg => {
+                    arg = arg.trim();
+                    // Convert to number if it's a number
+                    if (arg.match(/^-?\d+$/)) {
+                      return parseInt(arg);
+                    }
+                    // Handle boolean strings
+                    if (arg === 'true') return true;
+                    if (arg === 'false') return false;
+                    // Remove quotes if present
+                    if ((arg.startsWith("'") && arg.endsWith("'")) || 
+                        (arg.startsWith('"') && arg.endsWith('"'))) {
+                      return arg.slice(1, -1);
+                    }
+                    return arg;
+                  });
+                  // Call function with spread arguments
+                  window[action](...argArray);
                 } else {
-                  window[action](args);
+                  // Single argument
+                  if (args.match(/^-?\d+$/)) {
+                    window[action](parseInt(args));
+                  } else if (args.match(/^'.*'$/) || args.match(/^".*"$/)) {
+                    window[action](args.slice(1, -1));
+                  } else {
+                    window[action](args);
+                  }
                 }
               } catch (error) {
                 console.error('Error calling function:', action, error);
@@ -3060,6 +3100,8 @@
             } else {
               window[action]();
             }
+          } else {
+            console.error('Function not found:', action);
           }
         }
       });

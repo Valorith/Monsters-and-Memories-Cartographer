@@ -92,6 +92,16 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     const canvasPos = imageToCanvas(poi.x, poi.y)
     const isHovered = hoveredPOI.value?.id === poi.id
     
+    // Early return if POI is off-screen
+    const canvasWidth = ctx.canvas.width
+    const canvasHeight = ctx.canvas.height
+    const buffer = 100 // Buffer to draw POIs slightly off-screen
+    
+    if (canvasPos.x < -buffer || canvasPos.x > canvasWidth + buffer || 
+        canvasPos.y < -buffer || canvasPos.y > canvasHeight + buffer) {
+      return // Skip drawing if POI is way off-screen
+    }
+    
     
     // Calculate icon size - moderate scaling when zoomed out
     const baseSize = poi.icon_size || 24  // Use custom POI icon_size if available
@@ -116,7 +126,13 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     const colors = getPOIColors(poi.type)
     // Use custom icon if available, otherwise use the type-based icon
     // For custom POIs, the icon field contains the emoji
-    const displayIcon = poi.is_custom ? (poi.icon || poi.custom_icon || '📍') : (poi.custom_icon || poi.icon || colors.icon)
+    let displayIcon = poi.is_custom ? (poi.icon || poi.custom_icon || '📍') : (poi.custom_icon || poi.icon || colors.icon)
+    
+    // Ensure we always have a valid icon to display
+    if (!displayIcon || displayIcon.trim() === '') {
+      console.warn(`POI "${poi.name}" has no valid icon, using default`)
+      displayIcon = '📍'
+    }
     
     ctx.save()
     ctx.translate(canvasPos.x, canvasPos.y)
@@ -128,6 +144,15 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     }
     
     // Glow effect removed per user request
+    
+    // Debug: Check if custom POI rendering is happening at low zoom
+    if (poi.is_custom && scale.value < 0.5) {
+      // Draw a visible debug circle to confirm rendering is happening
+      ctx.fillStyle = 'red'
+      ctx.beginPath()
+      ctx.arc(0, 0, 20, 0, Math.PI * 2)
+      ctx.fill()
+    }
     
     // Draw icon with outline for visibility
     ctx.font = `bold ${iconSize}px sans-serif`
