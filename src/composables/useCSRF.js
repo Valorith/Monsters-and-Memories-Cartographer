@@ -5,7 +5,9 @@ let csrfToken = null
 export function useCSRF() {
   const fetchCSRFToken = async () => {
     try {
-      const response = await fetch('/api/csrf-token')
+      const response = await fetch('/api/csrf-token', {
+        credentials: 'same-origin'
+      })
       if (response.ok) {
         const data = await response.json()
         csrfToken = data.csrfToken
@@ -29,8 +31,12 @@ export function useCSRF() {
     
     // Add CSRF token to headers
     const headers = {
-      ...options.headers,
-      'X-CSRF-Token': token
+      ...options.headers
+    }
+    
+    // Only add CSRF token if we have one
+    if (token) {
+      headers['X-CSRF-Token'] = token
     }
     
     // For POST/PUT with JSON body, ensure Content-Type is set
@@ -41,7 +47,8 @@ export function useCSRF() {
     
     const response = await fetch(url, {
       ...options,
-      headers
+      headers,
+      credentials: 'same-origin'
     })
     
     // If CSRF token is invalid, refresh and retry once
@@ -49,8 +56,10 @@ export function useCSRF() {
       const errorData = await response.json()
       if (errorData.error === 'Invalid CSRF token') {
         await fetchCSRFToken()
-        headers['X-CSRF-Token'] = csrfToken
-        return fetch(url, { ...options, headers })
+        if (csrfToken) {
+          headers['X-CSRF-Token'] = csrfToken
+        }
+        return fetch(url, { ...options, headers, credentials: 'same-origin' })
       }
     }
     

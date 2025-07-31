@@ -175,6 +175,27 @@ export function useMapInteractions(scale, offsetX, offsetY) {
   // Cache for loaded icon images
   const iconImageCache = new Map()
   
+  // Helper function to adjust color brightness
+  const adjustColorBrightness = (hex, percent) => {
+    // Remove # if present
+    hex = hex.replace('#', '')
+    
+    // Convert to RGB
+    const r = parseInt(hex.substr(0, 2), 16)
+    const g = parseInt(hex.substr(2, 2), 16)
+    const b = parseInt(hex.substr(4, 2), 16)
+    
+    // Adjust brightness
+    const adjust = (color) => {
+      const adjusted = Math.round(color * (100 + percent) / 100)
+      return Math.max(0, Math.min(255, adjusted))
+    }
+    
+    // Convert back to hex
+    const toHex = (n) => n.toString(16).padStart(2, '0')
+    return '#' + toHex(adjust(r)) + toHex(adjust(g)) + toHex(adjust(b))
+  }
+  
   // Helper function to draw emoji icons
   const drawEmojiIcon = (ctx, displayIcon, iconSize, isHovered, isCustom, colors) => {
     // Draw icon with outline for visibility
@@ -229,11 +250,115 @@ export function useMapInteractions(scale, offsetX, offsetY) {
       if (iconType === 'iconify' || iconType === 'fontawesome') {
         // Use Iconify API to get SVG with original colors
         const iconName = iconValue
-        // Don't specify color to get the original icon colors
-        const response = await fetch(`https://api.iconify.design/${iconName}.svg`)
-        if (!response.ok) throw new Error('Failed to fetch icon')
+        let apiUrl
         
-        const svgText = await response.text()
+        // Build API URL - never specify color to preserve original colors
+        apiUrl = `https://api.iconify.design/${iconName}.svg?width=64&height=64`
+        
+        const response = await fetch(apiUrl)
+        if (!response.ok) {
+          console.error(`Failed to fetch icon ${iconName}: ${response.status} ${response.statusText}`)
+          throw new Error('Failed to fetch icon')
+        }
+        
+        let svgText = await response.text()
+        
+        // Only colorize monochrome icons (like game-icons)
+        // Skip colorization for emoji-style icons (twemoji, noto, openmoji)
+        const isEmojiStyle = iconName.startsWith('twemoji:') || 
+                           iconName.startsWith('noto:') || 
+                           iconName.startsWith('openmoji:') ||
+                           iconName.startsWith('emojione:')
+        
+        if (!isEmojiStyle && iconName.startsWith('game-icons:')) {
+          // Check if the SVG has no fill colors (is monochrome)
+          if (!svgText.includes('fill=') || svgText.includes('fill="currentColor"')) {
+            // Add vibrant, high-contrast colors based on icon type
+            const iconColors = {
+              // Wood/Lumberjack - Rich brown with orange tint
+              'axe': '#D2691E',
+              'wood': '#A0522D',
+              'hatchet': '#8B4513',
+              'tree': '#228B22',
+              
+              // Fishing - Bright blue/cyan
+              'fishing': '#00CED1',
+              'fish': '#1E90FF',
+              'hook': '#4169E1',
+              'pole': '#00BFFF',
+              
+              // Blacksmith - Bright orange/red for hot metal
+              'anvil': '#FF4500',
+              'hammer': '#FF6347',
+              'forge': '#DC143C',
+              'blacksmith': '#FF8C00',
+              'metal': '#B22222',
+              
+              // Tailoring - Rich purple/pink
+              'spool': '#DA70D6',
+              'yarn': '#9932CC',
+              'needle': '#FF1493',
+              'thread': '#C71585',
+              'sewing': '#8B008B',
+              
+              // Smelting - Glowing orange/yellow
+              'molten': '#FFA500',
+              'ore': '#DAA520',
+              'ingot': '#FFD700',
+              'smelt': '#FF8C00',
+              'flamer': '#FF4500',
+              
+              // Quest/NPC - Bright green
+              'conversation': '#00FF00',
+              'talk': '#32CD32',
+              'chat': '#00FA9A',
+              'bubble': '#00FF7F',
+              'person': '#3CB371',
+              'quest': '#FFFF00',
+              'exclamation': '#FFD700',
+              
+              // Additional common types
+              'sword': '#C0C0C0',
+              'shield': '#4682B4',
+              'potion': '#9400D3',
+              'treasure': '#FFD700',
+              'castle': '#8B7355',
+              'dragon': '#DC143C',
+              'merchant': '#FFD700',
+              'death': '#8B0000',
+              'skull': '#DDA0DD',
+              'dungeon': '#4B0082',
+              'cave': '#696969',
+              'crystal': '#00FFFF',
+              'magic': '#FF00FF',
+              'spell': '#9932CC'
+            }
+            
+            // Find which color to use based on icon name
+            let color = '#FFD700' // Default gold
+            for (const [key, col] of Object.entries(iconColors)) {
+              if (iconName.toLowerCase().includes(key)) {
+                color = col
+                break
+              }
+            }
+            
+            // Replace currentColor or add fill to paths and shapes
+            svgText = svgText.replace(/fill="currentColor"/g, `fill="${color}"`)
+            svgText = svgText.replace(/fill="#[0-9a-fA-F]{6}"/g, `fill="${color}"`)
+            svgText = svgText.replace(/fill="rgb[^"]*"/g, `fill="${color}"`)
+            
+            // Add fill to paths, circles, rects, polygons without fill
+            svgText = svgText.replace(/<path(?![^>]*fill)/g, `<path fill="${color}"`)
+            svgText = svgText.replace(/<circle(?![^>]*fill)/g, `<circle fill="${color}"`)
+            svgText = svgText.replace(/<rect(?![^>]*fill)/g, `<rect fill="${color}"`)
+            svgText = svgText.replace(/<polygon(?![^>]*fill)/g, `<polygon fill="${color}"`)
+            
+            // Also add stroke for better definition
+            const strokeColor = adjustColorBrightness(color, -30) // Darker stroke
+            svgText = svgText.replace(/<svg/g, `<svg style="filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.7))"`)
+          }
+        }
         
         // Convert SVG to data URL
         const blob = new Blob([svgText], { type: 'image/svg+xml' })
@@ -344,23 +469,23 @@ export function useMapInteractions(scale, offsetX, offsetY) {
         loadIconImage(poi.icon_type, poi.icon).then(img => {
           if (img) {
             // Icon is now cached, trigger a re-render
-            // The parent component should watch for this and re-render
+            // Force a re-render by dispatching a custom event
             if (window.requestIdleCallback) {
               window.requestIdleCallback(() => {
-                // Trigger re-render on next idle callback
-                if (poi.onIconLoad) poi.onIconLoad()
+                window.dispatchEvent(new CustomEvent('poi-icon-loaded', { detail: { poi } }))
               })
             } else {
               // Fallback for browsers without requestIdleCallback
               setTimeout(() => {
-                if (poi.onIconLoad) poi.onIconLoad()
+                window.dispatchEvent(new CustomEvent('poi-icon-loaded', { detail: { poi } }))
               }, 16)
             }
           }
         })
         
-        // Draw fallback emoji while loading
-        drawEmojiIcon(ctx, '⏳', iconSize, isHovered, poi.is_custom, colors)
+        // Draw fallback emoji while loading - use a more visible icon
+        const fallbackIcon = poi.icon || '❓'
+        drawEmojiIcon(ctx, fallbackIcon, iconSize, isHovered, poi.is_custom, colors)
       }
     } else {
       // Handle emoji icons
