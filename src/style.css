@@ -29,6 +29,15 @@ body {
     position: relative;
 }
 
+.poi-search-section {
+    background-color: rgba(45, 45, 45, 0.8);
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid rgba(255, 215, 0, 0.2);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    position: relative;
+    z-index: 10;
+}
+
 .logo-container {
     display: flex;
     align-items: center;

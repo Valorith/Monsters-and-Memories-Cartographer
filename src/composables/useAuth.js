@@ -2,7 +2,7 @@ import { ref, computed } from 'vue';
 
 const user = ref(null);
 const isAuthenticated = computed(() => !!user.value);
-const isAdmin = computed(() => user.value?.isAdmin || false);
+const isAdmin = computed(() => user.value?.is_admin || false);
 const adminModeEnabled = ref(false);
 const loading = ref(true);
 

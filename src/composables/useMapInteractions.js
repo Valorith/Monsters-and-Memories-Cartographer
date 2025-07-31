@@ -107,7 +107,7 @@ export function useMapInteractions(scale, offsetX, offsetY) {
       // For grouped POIs, show all POI names with their icons
       poi.groupedPOIs.forEach(p => {
         const pColors = getPOIColors(p.type)
-        const pIcon = p.custom_icon || p.icon || pColors.icon
+        const pIcon = p.icon || pColors.icon
         const text = `${pIcon} ${p.name}`
         const metrics = ctx.measureText(text)
         maxWidth = Math.max(maxWidth, metrics.width)
@@ -172,64 +172,11 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     ctx.restore()
   }
 
-  // Draw POI on canvas
-  const drawPOI = (ctx, poi, isDragging = false) => {
-    const canvasPos = imageToCanvas(poi.x, poi.y)
-    const isHovered = hoveredPOI.value?.id === poi.id
-    
-    // Early return if POI is off-screen
-    const canvasWidth = ctx.canvas.width
-    const canvasHeight = ctx.canvas.height
-    const buffer = 100 // Buffer to draw POIs slightly off-screen
-    
-    if (canvasPos.x < -buffer || canvasPos.x > canvasWidth + buffer || 
-        canvasPos.y < -buffer || canvasPos.y > canvasHeight + buffer) {
-      return // Skip drawing if POI is way off-screen
-    }
-    
-    
-    // Calculate icon size - moderate scaling when zoomed out
-    const baseSize = poi.icon_size || 24  // Use custom POI icon_size if available
-    const minSize = 20
-    const maxSize = 48  // Increased max size to accommodate larger custom POIs
-    // More subtle inverse relationship with zoom
-    const inverseScale = Math.max(0.8, Math.min(1.5, 1 / Math.sqrt(scale.value)))
-    const iconScale = poi.iconScale || 1
-    let iconSize = Math.max(minSize, Math.min(maxSize, baseSize * inverseScale * iconScale))
-    
-    // Ensure custom POIs remain visible at all zoom levels
-    if (poi.is_custom) {
-      // Always ensure minimum visibility for custom POIs
-      iconSize = Math.max(iconSize, 24)
-      
-      // When very zoomed out, make them even larger
-      if (scale.value < 0.5) {
-        iconSize = Math.max(iconSize * 1.2, 30)
-      }
-    }
-    
-    const colors = getPOIColors(poi.type)
-    // Use custom icon if available, otherwise use the type-based icon
-    // For custom POIs, the icon field contains the emoji
-    let displayIcon = poi.is_custom ? (poi.icon || poi.custom_icon || '📍') : (poi.custom_icon || poi.icon || colors.icon)
-    
-    // Ensure we always have a valid icon to display
-    if (!displayIcon || displayIcon.trim() === '') {
-      console.warn(`POI "${poi.name}" has no valid icon, using default`)
-      displayIcon = '📍'
-    }
-    
-    ctx.save()
-    ctx.translate(canvasPos.x, canvasPos.y)
-    
-    // Apply dragging effect
-    if (isDragging) {
-      ctx.globalAlpha = 0.7
-      ctx.scale(1.1, 1.1)
-    }
-    
-    // Glow effect removed per user request
-    
+  // Cache for loaded icon images
+  const iconImageCache = new Map()
+  
+  // Helper function to draw emoji icons
+  const drawEmojiIcon = (ctx, displayIcon, iconSize, isHovered, isCustom, colors) => {
     // Draw icon with outline for visibility
     ctx.font = `bold ${iconSize}px sans-serif`
     ctx.textAlign = 'center'
@@ -259,12 +206,174 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     
     // Icon itself
     // For custom POIs, use a consistent color that's always visible
-    if (poi.is_custom) {
+    if (isCustom) {
       ctx.fillStyle = isHovered ? '#666666' : '#000000'
     } else {
       ctx.fillStyle = isHovered ? colors.secondary : colors.primary
     }
     ctx.fillText(displayIcon, 0, 0)
+  }
+  
+  // Load an icon image (Iconify, FontAwesome, or uploaded)
+  const loadIconImage = async (iconType, iconValue) => {
+    const cacheKey = `${iconType}:${iconValue}`
+    
+    // Check cache first
+    if (iconImageCache.has(cacheKey)) {
+      return iconImageCache.get(cacheKey)
+    }
+    
+    try {
+      let imageUrl
+      
+      if (iconType === 'iconify' || iconType === 'fontawesome') {
+        // Use Iconify API to get SVG with original colors
+        const iconName = iconValue
+        // Don't specify color to get the original icon colors
+        const response = await fetch(`https://api.iconify.design/${iconName}.svg`)
+        if (!response.ok) throw new Error('Failed to fetch icon')
+        
+        const svgText = await response.text()
+        
+        // Convert SVG to data URL
+        const blob = new Blob([svgText], { type: 'image/svg+xml' })
+        imageUrl = URL.createObjectURL(blob)
+      } else if (iconType === 'upload') {
+        imageUrl = iconValue
+      }
+      
+      // Load image
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+      
+      return new Promise((resolve, reject) => {
+        img.onload = () => {
+          iconImageCache.set(cacheKey, img)
+          if (imageUrl.startsWith('blob:')) {
+            URL.revokeObjectURL(imageUrl)
+          }
+          resolve(img)
+        }
+        img.onerror = () => {
+          console.error(`Failed to load icon: ${cacheKey}`)
+          reject(new Error('Failed to load icon'))
+        }
+        img.src = imageUrl
+      })
+    } catch (error) {
+      console.error(`Error loading icon ${cacheKey}:`, error)
+      return null
+    }
+  }
+  
+  // Draw POI on canvas
+  const drawPOI = (ctx, poi, isDragging = false) => {
+    const canvasPos = imageToCanvas(poi.x, poi.y)
+    const isHovered = hoveredPOI.value?.id === poi.id
+    
+    // Early return if POI is off-screen
+    const canvasWidth = ctx.canvas.width
+    const canvasHeight = ctx.canvas.height
+    const buffer = 100 // Buffer to draw POIs slightly off-screen
+    
+    if (canvasPos.x < -buffer || canvasPos.x > canvasWidth + buffer || 
+        canvasPos.y < -buffer || canvasPos.y > canvasHeight + buffer) {
+      return // Skip drawing if POI is way off-screen
+    }
+    
+    
+    // Calculate icon size - moderate scaling when zoomed out
+    // All POIs use consistent sizing
+    const baseSize = poi.icon_size || 48
+    const minSize = 20
+    const maxSize = 48
+    // More subtle inverse relationship with zoom
+    const inverseScale = Math.max(0.8, Math.min(1.5, 1 / Math.sqrt(scale.value)))
+    const iconScale = poi.iconScale || 1
+    let iconSize = Math.max(minSize, Math.min(maxSize, baseSize * inverseScale * iconScale))
+    
+    
+    const colors = getPOIColors(poi.type)
+    
+    ctx.save()
+    ctx.translate(canvasPos.x, canvasPos.y)
+    
+    // Apply dragging effect
+    if (isDragging) {
+      ctx.globalAlpha = 0.7
+      ctx.scale(1.1, 1.1)
+    }
+    
+    // Check if this POI has an image-based icon
+    const hasImageIcon = poi.icon_type && (poi.icon_type === 'iconify' || poi.icon_type === 'fontawesome' || poi.icon_type === 'upload')
+    
+    if (hasImageIcon && poi.icon) {
+      // Handle image-based icons (Iconify, FontAwesome, uploaded)
+      const iconImage = iconImageCache.get(`${poi.icon_type}:${poi.icon}`)
+      
+      if (iconImage) {
+        // Draw the image icon
+        const drawSize = iconSize * 1.5 // Make icons appropriately sized
+        
+        // Drop shadow for depth and visibility
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)'
+        ctx.shadowBlur = 6
+        ctx.shadowOffsetX = 2
+        ctx.shadowOffsetY = 2
+        
+        // Draw the icon image directly without background
+        ctx.drawImage(iconImage, -drawSize / 2, -drawSize / 2, drawSize, drawSize)
+        
+        // Reset shadow
+        ctx.shadowColor = 'transparent'
+        ctx.shadowBlur = 0
+        ctx.shadowOffsetX = 0
+        ctx.shadowOffsetY = 0
+        
+        // Add a subtle white outline for visibility on dark backgrounds
+        if (isHovered) {
+          // Draw a glow effect when hovered
+          ctx.shadowColor = '#FFD700'
+          ctx.shadowBlur = 8
+          ctx.drawImage(iconImage, -drawSize / 2, -drawSize / 2, drawSize, drawSize)
+          ctx.shadowColor = 'transparent'
+          ctx.shadowBlur = 0
+        }
+      } else {
+        // Image not loaded yet, queue it for loading
+        loadIconImage(poi.icon_type, poi.icon).then(img => {
+          if (img) {
+            // Icon is now cached, trigger a re-render
+            // The parent component should watch for this and re-render
+            if (window.requestIdleCallback) {
+              window.requestIdleCallback(() => {
+                // Trigger re-render on next idle callback
+                if (poi.onIconLoad) poi.onIconLoad()
+              })
+            } else {
+              // Fallback for browsers without requestIdleCallback
+              setTimeout(() => {
+                if (poi.onIconLoad) poi.onIconLoad()
+              }, 16)
+            }
+          }
+        })
+        
+        // Draw fallback emoji while loading
+        drawEmojiIcon(ctx, '⏳', iconSize, isHovered, poi.is_custom, colors)
+      }
+    } else {
+      // Handle emoji icons
+      let displayIcon = poi.is_custom ? (poi.icon || '📍') : (poi.icon || colors.icon)
+      
+      // Ensure we always have a valid icon to display
+      if (!displayIcon || displayIcon.trim() === '') {
+        console.warn(`POI "${poi.name}" has no valid icon, using default`)
+        displayIcon = '📍'
+      }
+      
+      drawEmojiIcon(ctx, displayIcon, iconSize, isHovered, poi.is_custom, colors)
+    }
     
     // Draw group indicator if this is a grouped POI and it should show the badge
     if (poi.isGrouped && poi.groupSize > 1 && (poi.showGroupBadge !== false)) {
@@ -787,6 +896,8 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     drawPOI,
     drawPOITooltip,
     drawConnection,
-    drawConnector
+    drawConnector,
+    loadIconImage,
+    iconImageCache
   }
 }

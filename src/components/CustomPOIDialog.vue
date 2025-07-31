@@ -1,77 +1,117 @@
 <template>
   <div v-if="visible" class="dialog-overlay" @click="cancel">
     <div class="dialog" @click.stop>
-      <h2>{{ isEdit ? 'Edit' : 'Create' }} Custom POI</h2>
-      
-      <div class="form-group">
-        <label>Name *</label>
-        <input v-model="formData.name" type="text" placeholder="Enter POI name" />
+      <div class="dialog-header">
+        <div class="header-content">
+          <div class="header-icon">
+            <span v-if="isEdit">✏️</span>
+            <span v-else>📍</span>
+          </div>
+          <h2>{{ isEdit ? 'Edit' : 'Create' }} Custom POI</h2>
+        </div>
+        <button class="close-button" @click="cancel" title="Close">×</button>
       </div>
       
-      <div class="form-group">
-        <label>Description</label>
-        <textarea v-model="formData.description" placeholder="Enter description (optional)" rows="3"></textarea>
-      </div>
-      
-      <div class="form-group">
-        <label>Icon</label>
-        <div class="icon-input-group">
-          <input v-model="formData.icon" type="text" placeholder="Enter custom emoji or select below" maxlength="2" class="icon-input" />
-          <div class="icon-preview">{{ formData.icon }}</div>
-        </div>
-        <div class="icon-tabs">
-          <button v-for="cat in iconCategories" :key="cat.name"
-                  @click="activeCategory = cat.name"
-                  :class="['tab', { active: activeCategory === cat.name }]">
-            {{ cat.label }}
-          </button>
-        </div>
-        <div class="icon-grid">
-          <button v-for="icon in currentCategoryIcons" :key="icon" 
-                  @click="formData.icon = icon" 
-                  :class="['icon-option', { selected: formData.icon === icon }]">
-            {{ icon }}
-          </button>
-        </div>
-      </div>
-      
-      <div class="appearance-section">
-        <h3>Appearance</h3>
-        <div class="form-row">
-          <div class="form-group half">
-            <label>Icon Size</label>
-            <div class="size-control">
-              <input v-model.number="formData.icon_size" type="range" min="16" max="48" />
-              <span class="size-value">{{ formData.icon_size }}px</span>
+      <div class="dialog-body">
+        <div class="form-section">
+          <div class="form-group">
+            <label>
+              <span class="label-text">Name</span>
+              <span class="required">*</span>
+            </label>
+            <input 
+              v-model="formData.name" 
+              type="text" 
+              placeholder="Enter a memorable name for this location" 
+              class="form-input"
+              :class="{ 'has-value': formData.name }"
+              @focus="handleFocus"
+              @blur="handleBlur"
+            />
+          </div>
+          
+          <div class="form-group">
+            <label>
+              <span class="label-text">Description</span>
+              <span class="optional">(optional)</span>
+            </label>
+            <textarea 
+              v-model="formData.description" 
+              placeholder="Add notes, lore, or important details about this location" 
+              rows="4"
+              class="form-textarea"
+              :class="{ 'has-value': formData.description }"
+              @focus="handleFocus"
+              @blur="handleBlur"
+            ></textarea>
+          </div>
+          
+          <div class="form-group">
+            <label>
+              <span class="label-text">POI Type</span>
+              <span class="required">*</span>
+            </label>
+            <div class="custom-select-wrapper">
+              <div class="custom-select" @click="toggleTypeDropdown" :class="{ open: showTypeDropdown, 'has-value': selectedType }">
+                <div class="selected-value">
+                  <template v-if="selectedType">
+                    <span class="type-icon" v-html="getTypeIcon(selectedType)"></span>
+                    <span class="type-name">{{ selectedType.name }}</span>
+                  </template>
+                  <span v-else class="placeholder">Choose a category for this location</span>
+                </div>
+                <span class="dropdown-arrow">
+                  <svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M1 1.5L6 6.5L11 1.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
+              </div>
+              <div v-if="showTypeDropdown" class="custom-dropdown">
+                <div 
+                  v-for="type in poiTypes" 
+                  :key="type.id" 
+                  @click="selectType(type)"
+                  class="dropdown-option"
+                  :class="{ selected: type.id === formData.type_id }"
+                >
+                  <span class="type-icon" v-html="getTypeIcon(type)"></span>
+                  <span class="type-name">{{ type.name }}</span>
+                  <span v-if="type.id === formData.type_id" class="checkmark">✓</span>
+                </div>
+              </div>
             </div>
           </div>
-          <div class="form-group half">
-            <label>Label Display</label>
-            <div class="checkbox-group">
-              <label class="checkbox-label">
-                <input v-model="formData.label_visible" type="checkbox" />
-                <span>Show label</span>
-              </label>
-            </div>
-          </div>
         </div>
-        <div v-if="formData.label_visible" class="form-group">
-          <label>Label Position</label>
-          <div class="position-selector">
-            <button v-for="pos in ['top', 'bottom', 'left', 'right']" :key="pos"
-                    @click="formData.label_position = pos"
-                    :class="['position-option', { selected: formData.label_position === pos }]">
-              {{ pos.charAt(0).toUpperCase() + pos.slice(1) }}
-            </button>
+        
+        <div class="preview-section" v-if="selectedType">
+          <div class="preview-header">
+            <h3>Preview</h3>
+            <span class="preview-subtitle">This is how your POI will appear on the map</span>
+          </div>
+          <div class="preview-content">
+            <div class="preview-poi">
+              <span class="preview-icon" v-html="getTypeIcon(selectedType)"></span>
+              <span class="preview-name">{{ formData.name || 'POI Name' }}</span>
+            </div>
           </div>
         </div>
       </div>
       
-      <div class="dialog-actions">
-        <button @click="save" class="btn primary" :disabled="!formData.name">
-          {{ isEdit ? 'Update' : 'Create' }}
-        </button>
-        <button @click="cancel" class="btn secondary">Cancel</button>
+      <div class="dialog-footer">
+        <div class="footer-info">
+          <span v-if="!formData.name || !formData.type_id" class="missing-fields">
+            Please fill in all required fields
+          </span>
+        </div>
+        <div class="dialog-actions">
+          <button @click="cancel" class="btn secondary">
+            Cancel
+          </button>
+          <button @click="save" class="btn primary" :disabled="!formData.name || !formData.type_id">
+            <span v-if="isEdit">Save Changes</span>
+            <span v-else>Create POI</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -91,88 +131,24 @@ export default {
       formData: {
         name: '',
         description: '',
-        icon: '📍',
-        icon_size: 24,
-        label_visible: true,
-        label_position: 'bottom'
+        type_id: null
       },
-      activeCategory: 'general',
-      iconCategories: [
-        {
-          name: 'general',
-          label: 'General',
-          icons: ['📍', '⭐', '🏠', '🎯', '🗝️', '⚔️', '🛡️', '🏪', '🏛️', '⛺']
-        },
-        {
-          name: 'weapons',
-          label: 'Weapons',
-          icons: ['⚔️', '🗡️', '🏹', '🪓', '🔱', '🛡️', '🪃', '🔪', '🏺', '⛏️']
-        },
-        {
-          name: 'magic',
-          label: 'Magic',
-          icons: ['🔮', '🪄', '✨', '🌟', '💫', '🔯', '📿', '🧿', '💎', '🪬']
-        },
-        {
-          name: 'creatures',
-          label: 'Creatures',
-          icons: ['🐉', '🦄', '🧙', '🧚', '🧛', '🧟', '👹', '🦅', '🐺', '🕷️']
-        },
-        {
-          name: 'locations',
-          label: 'Locations',
-          icons: ['🏰', '🗼', '⛪', '🏛️', '🕌', '🛖', '⛩️', '🏚️', '🌉', '🗿']
-        },
-        {
-          name: 'nature',
-          label: 'Nature',
-          icons: ['🏔️', '🌋', '🏞️', '🕳️', '🌊', '🏜️', '🏝️', '🌳', '🌲', '🌴']
-        },
-        {
-          name: 'treasures',
-          label: 'Treasures',
-          icons: ['💰', '🪙', '💎', '👑', '🏆', '🎁', '📦', '🗝️', '💍', '🪔']
-        },
-        {
-          name: 'consumables',
-          label: 'Consumables',
-          icons: ['🧪', '⚗️', '🍷', '🍺', '🥤', '🍖', '🍞', '🍎', '🍄', '🌿']
-        },
-        {
-          name: 'elements',
-          label: 'Elements',
-          icons: ['🔥', '❄️', '⚡', '🌀', '💨', '💧', '☀️', '🌙', '⭐', '🌑']
-        },
-        {
-          name: 'danger',
-          label: 'Danger',
-          icons: ['💀', '☠️', '⚠️', '🚫', '☢️', '☣️', '🩸', '🕸️', '🦴', '⛔']
-        },
-        {
-          name: 'quest',
-          label: 'Quest',
-          icons: ['❗', '❓', '💬', '📜', '📋', '🎯', '✅', '❌', '🔔', '📍']
-        },
-        {
-          name: 'craft',
-          label: 'Craft',
-          icons: ['🔨', '⚒️', '🪛', '🧵', '🪡', '🎨', '🪵', '🪨', '🧱', '⚙️']
-        }
-      ]
+      poiTypes: [],
+      showTypeDropdown: false
     };
   },
   computed: {
     isEdit() {
       return !!this.poi;
     },
-    currentCategoryIcons() {
-      const category = this.iconCategories.find(cat => cat.name === this.activeCategory);
-      return category ? category.icons : [];
+    selectedType() {
+      return this.poiTypes.find(t => t.id === this.formData.type_id);
     }
   },
   watch: {
     visible(newVal) {
       if (newVal) {
+        this.loadPoiTypes();
         if (this.poi) {
           // Edit mode - load existing data
           this.formData = { ...this.poi };
@@ -181,18 +157,32 @@ export default {
           this.formData = {
             name: '',
             description: '',
-            icon: '📍',
-            icon_size: 24,
-            label_visible: true,
-            label_position: 'bottom'
+            type_id: null
           };
         }
       }
     }
   },
   methods: {
+    async loadPoiTypes() {
+      try {
+        const response = await fetch('/api/poi-types');
+        if (!response.ok) throw new Error('Failed to load POI types');
+        this.poiTypes = await response.json();
+        
+        // If no type is selected and there's a default, select it
+        if (!this.formData.type_id && this.poiTypes.length > 0) {
+          const defaultType = this.poiTypes.find(t => t.is_default);
+          if (defaultType) {
+            this.formData.type_id = defaultType.id;
+          }
+        }
+      } catch (error) {
+        console.error('Error loading POI types:', error);
+      }
+    },
     save() {
-      if (!this.formData.name) return;
+      if (!this.formData.name || !this.formData.type_id) return;
       
       const data = {
         ...this.formData,
@@ -205,7 +195,45 @@ export default {
     },
     cancel() {
       this.$emit('cancel');
+    },
+    getTypeIcon(type) {
+      if (!type) return '';
+      
+      if (type.icon_type === 'emoji') {
+        return type.icon_value;
+      } else if (type.icon_type === 'iconify' || type.icon_type === 'fontawesome') {
+        return `<iconify-icon icon="${type.icon_value}" width="20" height="20"></iconify-icon>`;
+      } else if (type.icon_type === 'upload') {
+        return `<img src="${type.icon_value}" style="width: 20px; height: 20px; object-fit: contain;" />`;
+      }
+      
+      return '';
+    },
+    toggleTypeDropdown() {
+      this.showTypeDropdown = !this.showTypeDropdown;
+    },
+    selectType(type) {
+      this.formData.type_id = type.id;
+      this.showTypeDropdown = false;
+    },
+    handleClickOutside(event) {
+      if (!this.$el || !this.$el.contains(event.target)) {
+        this.showTypeDropdown = false;
+      }
+    },
+    handleFocus(event) {
+      event.target.parentElement.classList.add('focused');
+    },
+    handleBlur(event) {
+      event.target.parentElement.classList.remove('focused');
     }
+  },
+  mounted() {
+    // Close dropdown when clicking outside
+    document.addEventListener('click', this.handleClickOutside);
+  },
+  beforeDestroy() {
+    document.removeEventListener('click', this.handleClickOutside);
   }
 }
 </script>
@@ -217,261 +245,462 @@ export default {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1001;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .dialog {
-  background: #2d2d2d;
-  border-radius: 8px;
-  padding: 2rem;
-  max-width: 500px;
+  background: #1e1e1e;
+  border-radius: 12px;
+  max-width: 600px;
   width: 90%;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-}
-
-.dialog h2 {
-  margin: 0 0 1.5rem 0;
-  color: #e0e0e0;
-}
-
-.form-group {
-  margin-bottom: 1rem;
-}
-
-.form-group label {
-  display: block;
-  color: #ccc;
-  font-size: 0.9rem;
-  margin-bottom: 0.5rem;
-}
-
-.form-group input[type="text"],
-.form-group textarea,
-.form-group select {
-  width: 100%;
-  padding: 0.5rem;
-  background: #1a1a1a;
-  border: 1px solid #444;
-  border-radius: 4px;
-  color: #e0e0e0;
-  font-size: 1rem;
-}
-
-.form-group input[type="checkbox"] {
-  margin-right: 0.5rem;
-}
-
-.appearance-section {
-  margin-top: 1.5rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid #444;
-}
-
-.appearance-section h3 {
-  color: #FFD700;
-  font-size: 1rem;
-  margin: 0 0 1rem 0;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.form-row {
+  max-height: 85vh;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
   display: flex;
-  gap: 1rem;
+  flex-direction: column;
+  position: relative;
+  animation: dialogSlideIn 0.3s ease-out;
 }
 
-.form-group.half {
-  flex: 1;
+@keyframes dialogSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.size-control {
+.dialog-header {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: space-between;
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid #333;
+  background: #252525;
+  border-radius: 12px 12px 0 0;
 }
 
-.size-control input[type="range"] {
-  flex: 1;
-}
-
-.size-value {
-  min-width: 45px;
-  text-align: right;
-  color: #ccc;
-  font-size: 0.9rem;
-}
-
-.checkbox-group {
-  padding: 0.5rem 0;
-}
-
-.checkbox-label {
+.header-content {
   display: flex;
   align-items: center;
-  cursor: pointer;
-  color: #ccc;
+  gap: 0.75rem;
 }
 
-.checkbox-label input[type="checkbox"] {
-  margin-right: 0.5rem;
-}
-
-.checkbox-label span {
-  user-select: none;
-}
-
-.position-selector {
+.header-icon {
+  font-size: 1.5rem;
   display: flex;
-  gap: 0.5rem;
+  align-items: center;
 }
 
-.position-option {
-  flex: 1;
-  padding: 0.5rem;
-  background: #1a1a1a;
-  border: 1px solid #444;
-  border-radius: 4px;
-  color: #ccc;
+.dialog-header h2 {
+  margin: 0;
+  color: #fff;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 2rem;
   cursor: pointer;
-  transition: all 0.2s;
-  text-align: center;
-}
-
-.position-option:hover {
-  background: #2a2a2a;
-  border-color: #555;
-}
-
-.position-option.selected {
-  background: #4a7c59;
-  border-color: #5a8c69;
-  color: white;
-}
-
-.icon-input-group {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.icon-input {
-  flex: 1;
-}
-
-.icon-preview {
-  width: 48px;
-  height: 38px;
-  background: #1a1a1a;
-  border: 1px solid #444;
-  border-radius: 4px;
+  padding: 0;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
-}
-
-.icon-tabs {
-  display: flex;
-  gap: 0.25rem;
-  margin-bottom: 1rem;
-  flex-wrap: wrap;
-}
-
-.tab {
-  padding: 0.5rem 1rem;
-  background: #1a1a1a;
-  border: 1px solid #444;
   border-radius: 4px;
-  color: #ccc;
-  font-size: 0.85rem;
-  cursor: pointer;
   transition: all 0.2s;
 }
 
-.tab:hover {
-  background: #2a2a2a;
-  border-color: #555;
+.close-button:hover {
+  background: #333;
+  color: #fff;
 }
 
-.tab.active {
-  background: #4a7c59;
-  border-color: #5a8c69;
-  color: white;
-}
-
-.icon-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
-  gap: 0.5rem;
-  max-height: 180px;
+.dialog-body {
+  padding: 2rem;
   overflow-y: auto;
-  padding: 0.5rem;
-  background: #1a1a1a;
-  border-radius: 4px;
+  flex: 1;
 }
 
-.icon-option {
-  background: #1a1a1a;
-  border: 1px solid #444;
-  border-radius: 4px;
-  padding: 0.5rem;
-  font-size: 1.5rem;
-  cursor: pointer;
+.form-section {
+  margin-bottom: 2rem;
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+  position: relative;
+}
+
+.form-group.focused::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #FFD700;
+  border-radius: 2px;
+}
+
+.form-group label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.label-text {
+  color: #e0e0e0;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.required {
+  color: #ff6b6b;
+  font-size: 0.9rem;
+}
+
+.optional {
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.form-input,
+.form-textarea {
+  width: 100%;
+  padding: 0.875rem 1rem;
+  background: #2a2a2a;
+  border: 2px solid #3a3a3a;
+  border-radius: 8px;
+  color: #e0e0e0;
+  font-size: 1rem;
   transition: all 0.2s;
+  font-family: inherit;
 }
 
-.icon-option:hover {
-  background: #3a3a3a;
-  border-color: #666;
+.form-input:hover,
+.form-textarea:hover {
+  background: #333;
+  border-color: #444;
 }
 
-.icon-option.selected {
-  background: #4a7c59;
-  border-color: #5a8c69;
+.form-input:focus,
+.form-textarea:focus {
+  outline: none;
+  background: #333;
+  border-color: #FFD700;
+  box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.1);
+}
+
+.form-input.has-value,
+.form-textarea.has-value {
+  border-color: #4a7c59;
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+
+
+.dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem 2rem;
+  border-top: 1px solid #333;
+  background: #252525;
+  border-radius: 0 0 12px 12px;
+}
+
+.footer-info {
+  flex: 1;
+}
+
+.missing-fields {
+  color: #666;
+  font-size: 0.875rem;
+  font-style: italic;
 }
 
 .dialog-actions {
   display: flex;
   gap: 1rem;
-  margin-top: 2rem;
-  justify-content: flex-end;
+  align-items: center;
 }
 
 .btn {
   padding: 0.75rem 1.5rem;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   font-size: 1rem;
+  font-weight: 500;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .btn.primary {
-  background: #4a7c59;
+  background: linear-gradient(135deg, #4a7c59 0%, #3a6249 100%);
   color: white;
+  box-shadow: 0 2px 8px rgba(74, 124, 89, 0.3);
 }
 
 .btn.primary:hover:not(:disabled) {
-  background: #3a6249;
+  background: linear-gradient(135deg, #5a8c69 0%, #4a7c59 100%);
+  box-shadow: 0 4px 12px rgba(74, 124, 89, 0.4);
+  transform: translateY(-1px);
+}
+
+.btn.primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(74, 124, 89, 0.3);
 }
 
 .btn.primary:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
+  background: #4a7c59;
+  box-shadow: none;
 }
 
 .btn.secondary {
-  background: #666;
-  color: white;
+  background: #3a3a3a;
+  color: #ccc;
+  border: 1px solid #4a4a4a;
 }
 
 .btn.secondary:hover {
-  background: #777;
+  background: #444;
+  color: #fff;
+  border-color: #555;
+}
+
+/* Custom Select Dropdown Styles */
+.custom-select-wrapper {
+  position: relative;
+}
+
+.custom-select {
+  width: 100%;
+  padding: 0.875rem 1rem;
+  background: #2a2a2a;
+  border: 2px solid #3a3a3a;
+  border-radius: 8px;
+  color: #e0e0e0;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.custom-select:hover {
+  background: #333;
+  border-color: #444;
+}
+
+.custom-select.open {
+  border-color: #FFD700;
+  background: #333;
+  box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.1);
+}
+
+.custom-select.has-value {
+  border-color: #4a7c59;
+}
+
+.selected-value {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.placeholder {
+  color: #666;
+}
+
+.dropdown-arrow {
+  color: #666;
+  transition: transform 0.2s;
+  display: flex;
+  align-items: center;
+}
+
+.custom-select.open .dropdown-arrow {
+  transform: rotate(180deg);
+  color: #FFD700;
+}
+
+.custom-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 8px;
+  background: #2a2a2a;
+  border: 2px solid #3a3a3a;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  max-height: 280px;
+  overflow-y: auto;
+  z-index: 1000;
+  animation: dropdownSlideIn 0.2s ease-out;
+}
+
+@keyframes dropdownSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.custom-dropdown::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-dropdown::-webkit-scrollbar-track {
+  background: #1a1a1a;
+  border-radius: 4px;
+}
+
+.custom-dropdown::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 4px;
+}
+
+.custom-dropdown::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+.dropdown-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-bottom: 1px solid #333;
+  position: relative;
+}
+
+.dropdown-option:last-child {
+  border-bottom: none;
+}
+
+.dropdown-option:hover {
+  background: #333;
+  padding-left: 1.25rem;
+}
+
+.dropdown-option.selected {
+  background: rgba(74, 124, 89, 0.2);
+}
+
+.dropdown-option .checkmark {
+  margin-left: auto;
+  color: #4a7c59;
+  font-weight: bold;
+}
+
+.type-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  font-size: 1.2rem;
+}
+
+.type-name {
+  flex: 1;
+  color: #e0e0e0;
+  font-weight: 500;
+}
+
+/* Preview Section */
+.preview-section {
+  background: #2a2a2a;
+  border-radius: 8px;
+  padding: 1.5rem;
+  border: 1px solid #3a3a3a;
+}
+
+.preview-header {
+  margin-bottom: 1rem;
+}
+
+.preview-header h3 {
+  margin: 0 0 0.25rem 0;
+  color: #FFD700;
+  font-size: 1rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.preview-subtitle {
+  color: #666;
+  font-size: 0.875rem;
+}
+
+.preview-content {
+  display: flex;
+  justify-content: center;
+  padding: 1.5rem;
+  background: #1e1e1e;
+  border-radius: 6px;
+  border: 1px solid #333;
+}
+
+.preview-poi {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1.25rem;
+  background: #2a2a2a;
+  border-radius: 8px;
+  border: 1px solid #3a3a3a;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.preview-icon {
+  font-size: 1.5rem;
+}
+
+.preview-name {
+  color: #e0e0e0;
+  font-weight: 500;
+  font-size: 1.1rem;
 }
 </style>

@@ -18,6 +18,7 @@ import compression from 'compression';
 import { scheduleAvatarCleanup, cleanupOrphanedAvatars, deleteAllUserAvatars } from './src/utils/avatar-cleanup.js';
 import { mapsCache, leaderboardCache, userStatsCache, cacheMiddleware, etagMiddleware } from './src/utils/cache.js';
 import { optimizeImage, getExtensionForFormat } from './src/utils/image-optimizer.js';
+import poiTypesRouter from './src/api/poi-types.js';
 
 // Try to load sharp, but make it optional
 let sharp;
@@ -49,6 +50,17 @@ const ensureAvatarsDirectory = async () => {
   } catch (error) {
     console.error('❌ Error with avatars directory:', error);
     console.error('   Avatar uploads may fail. Please ensure the directory is writable.');
+  }
+};
+
+// Ensure POI icons directory exists
+const ensurePOIIconsDirectory = async () => {
+  const iconsDir = join(__dirname, 'public', 'poi-icons');
+  try {
+    await fs.mkdir(iconsDir, { recursive: true });
+    console.log('✅ POI icons directory ready:', iconsDir);
+  } catch (error) {
+    console.error('❌ Error with POI icons directory:', error);
   }
 };
 
@@ -482,6 +494,9 @@ async function updateUserXP(userId, xpChange, reason) {
 // Apply general API rate limiting to all /api routes (but skip for admins)
 app.use('/api/', skipAdminRateLimit(apiLimiter));
 
+// POI Types routes
+poiTypesRouter(app, validateCSRF);
+
 // Get all maps - cached for 5 minutes
 app.get('/api/maps', 
   cacheMiddleware(mapsCache, 'maps-list', 5 * 60 * 1000), // 5 minutes
@@ -511,15 +526,19 @@ app.get('/api/maps/:id',
         return res.status(404).json({ error: 'Map not found' });
       }
       
-      // Get POIs
+      // Get POIs with type information
       const poisResult = await pool.query(`
         SELECT p.*, 
           CASE 
             WHEN p.created_by_user_id IS NOT NULL THEN COALESCE(u.nickname, u.name)
             ELSE p.created_by
-          END as display_created_by
+          END as display_created_by,
+          pt.name as type_name,
+          pt.icon_type as type_icon_type,
+          pt.icon_value as type_icon_value
         FROM pois p
         LEFT JOIN users u ON p.created_by_user_id = u.id
+        LEFT JOIN poi_types pt ON p.type_id = pt.id
         WHERE p.map_id = $1
       `, [mapId]);
       
@@ -620,23 +639,47 @@ app.delete('/api/maps/:id', validateCSRF, async (req, res) => {
 // Save POI
 app.post('/api/pois', validateCSRF, async (req, res) => {
   try {
-    const { id, map_id, name, description, x, y, type, icon, icon_size, label_visible, label_position, custom_icon } = req.body;
+    const { id, map_id, name, description, x, y, type, icon, icon_size, label_visible, label_position, type_id } = req.body;
     
     if (id) {
       // Update existing POI
-      const result = await pool.query(
+      const updateResult = await pool.query(
         `UPDATE pois SET name = $1, description = $2, x = $3, y = $4, type = $5, icon = $6, icon_size = $7, 
-         label_visible = $8, label_position = $9, custom_icon = $10 WHERE id = $11 RETURNING *`,
-        [name, description, x, y, type, icon, icon_size, label_visible, label_position, custom_icon, id]
+         label_visible = $8, label_position = $9, type_id = $10 WHERE id = $11 RETURNING id`,
+        [name, description, x, y, type, icon, icon_size, label_visible, label_position, type_id, id]
       );
+      
+      // Fetch the complete POI with type information
+      const result = await pool.query(`
+        SELECT p.*, 
+          pt.name as type_name,
+          pt.icon_type as type_icon_type,
+          pt.icon_value as type_icon_value
+        FROM pois p
+        LEFT JOIN poi_types pt ON p.type_id = pt.id
+        WHERE p.id = $1
+      `, [id]);
+      
       res.json(result.rows[0]);
     } else {
       // Create new POI
-      const result = await pool.query(
-        `INSERT INTO pois (map_id, name, description, x, y, type, icon, icon_size, label_visible, label_position, custom_icon) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-        [map_id, name, description, x, y, type, icon, icon_size, label_visible, label_position, custom_icon]
+      const insertResult = await pool.query(
+        `INSERT INTO pois (map_id, name, description, x, y, type, icon, icon_size, label_visible, label_position, type_id) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+        [map_id, name, description, x, y, type, icon, icon_size, label_visible, label_position, type_id]
       );
+      
+      // Fetch the complete POI with type information
+      const result = await pool.query(`
+        SELECT p.*, 
+          pt.name as type_name,
+          pt.icon_type as type_icon_type,
+          pt.icon_value as type_icon_value
+        FROM pois p
+        LEFT JOIN poi_types pt ON p.type_id = pt.id
+        WHERE p.id = $1
+      `, [insertResult.rows[0].id]);
+      
       res.json(result.rows[0]);
     }
   } catch (error) {
@@ -645,16 +688,191 @@ app.post('/api/pois', validateCSRF, async (req, res) => {
   }
 });
 
+// Batch delete POIs (must be defined before single delete to avoid route conflict)
+app.delete('/api/pois/batch-delete', validateCSRF, async (req, res) => {
+  try {
+    // Check if user is admin
+    if (!req.isAuthenticated() || !req.user.is_admin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    
+    const { ids } = req.body;
+    
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'No POI IDs provided' });
+    }
+    
+    // Start transaction
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+      
+      // Create placeholders for the IN clause
+      const placeholders = ids.map((_, index) => `$${index + 1}`).join(', ');
+      
+      // Delete POIs (cascading deletes should handle related records)
+      const result = await client.query(
+        `DELETE FROM pois WHERE id IN (${placeholders})`,
+        ids
+      );
+      
+      await client.query('COMMIT');
+      res.json({ success: true, deleted: result.rowCount });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('Error in batch delete:', error);
+    res.status(500).json({ error: 'Failed to delete POIs' });
+  }
+});
+
 // Delete POI
 app.delete('/api/pois/:id', validateCSRF, async (req, res) => {
   try {
-    await pool.query('DELETE FROM pois WHERE id = $1', [req.params.id]);
+    // Check if user is authenticated
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    const poiId = req.params.id;
+    
+    // Get POI details to check ownership
+    const poiResult = await pool.query(
+      'SELECT created_by_user_id FROM pois WHERE id = $1',
+      [poiId]
+    );
+    
+    if (poiResult.rows.length === 0) {
+      return res.status(404).json({ error: 'POI not found' });
+    }
+    
+    const poi = poiResult.rows[0];
+    const isOwner = poi.created_by_user_id === req.user.id;
+    const isAdmin = req.user.is_admin && req.session.adminModeEnabled;
+    
+    // Allow deletion if user is the owner OR is an admin with admin mode enabled
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ 
+        error: 'Forbidden', 
+        details: 'You can only delete POIs you created, or be an admin with admin mode enabled' 
+      });
+    }
+    
+    await pool.query('DELETE FROM pois WHERE id = $1', [poiId]);
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting POI:', error);
     res.status(500).json({ error: 'Failed to delete POI' });
   }
 });
+
+// Get all POIs for admin POI editor
+app.get('/api/pois/all', async (req, res) => {
+  try {
+    // Check if user is admin
+    if (!req.isAuthenticated() || !req.user.is_admin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    
+    const result = await pool.query(`
+      SELECT 
+        p.*,
+        COALESCE(u.nickname, u.name) as created_by_name,
+        m.name as map_name,
+        pt.name as poi_type_name,
+        pt.icon_type,
+        pt.icon_value
+      FROM pois p
+      LEFT JOIN users u ON p.created_by_user_id = u.id
+      LEFT JOIN maps m ON p.map_id = m.id
+      LEFT JOIN poi_types pt ON p.type_id = pt.id
+      ORDER BY p.id DESC
+    `);
+    
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching all POIs:', error);
+    res.status(500).json({ error: 'Failed to fetch POIs' });
+  }
+});
+
+// Batch update POIs for admin POI editor
+app.put('/api/pois/batch-update', validateCSRF, async (req, res) => {
+  try {
+    // Check if user is admin
+    if (!req.isAuthenticated() || !req.user.is_admin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    
+    const { updates } = req.body;
+    
+    if (!Array.isArray(updates) || updates.length === 0) {
+      return res.status(400).json({ error: 'No updates provided' });
+    }
+    
+    let updateCount = 0;
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+      
+      for (const update of updates) {
+        const { id, ...fields } = update;
+        
+        if (!id) continue;
+        
+        // Build dynamic UPDATE query
+        const updateFields = [];
+        const values = [];
+        let paramCount = 1;
+        
+        // Allowed fields to update
+        const allowedFields = [
+          'name', 'description', 'x', 'y', 'type_id', 'icon_size'
+        ];
+        
+        for (const [field, value] of Object.entries(fields)) {
+          if (allowedFields.includes(field)) {
+            updateFields.push(`${field} = $${paramCount}`);
+            values.push(value);
+            paramCount++;
+          }
+        }
+        
+        if (updateFields.length > 0) {
+          values.push(id); // Add ID as last parameter
+          const query = `
+            UPDATE pois 
+            SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP
+            WHERE id = $${paramCount}
+          `;
+          
+          await client.query(query, values);
+          updateCount++;
+        }
+      }
+      
+      await client.query('COMMIT');
+      res.json({ success: true, updated: updateCount });
+      
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+    
+  } catch (error) {
+    console.error('Error batch updating POIs:', error);
+    res.status(500).json({ error: 'Failed to update POIs' });
+  }
+});
+
 
 // Save connection
 app.post('/api/connections', validateCSRF, async (req, res) => {
@@ -1029,7 +1247,7 @@ app.get('/api/auth/status', async (req, res) => {
         displayName: req.user.nickname || req.user.name,
         nickname: req.user.nickname,
         avatarUrl,
-        isAdmin: req.user.is_admin,
+        is_admin: req.user.is_admin,
         xp: req.user.xp || 0,
         // Include avatar state for debugging
         avatarState: {
@@ -1312,13 +1530,20 @@ app.post('/api/user/profile/avatar', validateCSRF, upload.single('avatar'), asyn
     }
 
     // Generate unique filename with environment prefix
-    const isDevelopment = process.env.NODE_ENV !== 'production';
-    const envPrefix = isDevelopment ? 'dev' : 'prod';
+    // Check multiple environment indicators
+    const isProduction = process.env.NODE_ENV === 'production' || 
+                        process.env.RAILWAY_ENVIRONMENT === 'production' ||
+                        process.env.RENDER_SERVICE_NAME ||
+                        process.env.HEROKU_APP_NAME ||
+                        (process.env.PORT && process.env.PORT !== '4173');
+    
+    const envPrefix = isProduction ? 'prod' : 'dev';
     const filename = `${envPrefix}_${req.user.id}_${Date.now()}.${fileExtension}`;
     const avatarsDir = join(__dirname, 'public', 'avatars');
     const filepath = join(avatarsDir, filename);
     
-    console.log(`[AVATAR] Upload: Generated filename ${filename} with verified extension ${fileExtension} (format: ${saveFormat}) in ${envPrefix} environment`);
+    console.log(`[AVATAR] Upload: NODE_ENV=${process.env.NODE_ENV}, isProduction=${isProduction}, prefix=${envPrefix}`);
+    console.log(`[AVATAR] Upload: Generated filename ${filename} with verified extension ${fileExtension} (format: ${saveFormat})`);
     
     // Ensure avatars directory exists
     await fs.mkdir(avatarsDir, { recursive: true });
@@ -2441,11 +2666,15 @@ app.get('/api/custom-pois', async (req, res) => {
              cp.share_code,
              cp.share_code_revoked,
              (SELECT COUNT(*) FROM shared_pois WHERE custom_poi_id = cp.id AND is_active = true) as share_count,
-             sp.is_active as is_shared_active
+             sp.is_active as is_shared_active,
+             pt.name as type_name,
+             pt.icon_type as type_icon_type,
+             pt.icon_value as type_icon_value
       FROM custom_pois cp
       JOIN users u ON cp.user_id = u.id
       JOIN maps m ON cp.map_id = m.id
       LEFT JOIN shared_pois sp ON cp.id = sp.custom_poi_id AND sp.user_id = $1
+      LEFT JOIN poi_types pt ON cp.type_id = pt.id
       WHERE cp.user_id = $1
          OR sp.user_id = $1
       ORDER BY cp.created_at DESC
@@ -2470,11 +2699,15 @@ app.get('/api/maps/:mapId/custom-pois', async (req, res) => {
         pp.vote_score,
         (SELECT COUNT(*) FROM pending_poi_votes WHERE pending_poi_id = pp.id AND vote = 1) as upvotes,
         (SELECT COUNT(*) FROM pending_poi_votes WHERE pending_poi_id = pp.id AND vote = -1) as downvotes,
-        sp.is_active as is_shared_active
+        sp.is_active as is_shared_active,
+        pt.name as type_name,
+        pt.icon_type as type_icon_type,
+        pt.icon_value as type_icon_value
       FROM custom_pois cp
       JOIN users u ON cp.user_id = u.id
       LEFT JOIN pending_pois pp ON pp.custom_poi_id = cp.id
       LEFT JOIN shared_pois sp ON cp.id = sp.custom_poi_id AND sp.user_id = $2
+      LEFT JOIN poi_types pt ON cp.type_id = pt.id
       WHERE cp.map_id = $1 
         AND (cp.user_id = $2 OR (sp.user_id = $2 AND sp.is_active = true))
     `, [req.params.mapId, req.user.id]);
@@ -2492,16 +2725,16 @@ app.post('/api/custom-pois', validateCSRF, async (req, res) => {
     return res.status(401).json({ error: 'Not authenticated' });
   }
 
-  const { map_id, name, description, x, y, icon, icon_size, label_visible, label_position, custom_icon } = req.body;
+  const { map_id, name, description, x, y, icon, label_visible, label_position, type_id } = req.body;
 
   try {
     const result = await pool.query(
       `INSERT INTO custom_pois 
-       (user_id, map_id, name, description, x, y, icon, icon_size, label_visible, label_position, custom_icon) 
+       (user_id, map_id, name, description, x, y, icon, icon_size, label_visible, label_position, type_id) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
        RETURNING *`,
-      [req.user.id, map_id, name, description, Math.round(x), Math.round(y), icon || '📍', icon_size || 24, 
-       label_visible !== false, label_position || 'bottom', custom_icon]
+      [req.user.id, map_id, name, description, Math.round(x), Math.round(y), icon || '📍', 
+       48, label_visible !== false, label_position || 'bottom', type_id]
     );
     res.json(result.rows[0]);
   } catch (error) {
@@ -2516,7 +2749,7 @@ app.put('/api/custom-pois/:id', validateCSRF, async (req, res) => {
     return res.status(401).json({ error: 'Not authenticated' });
   }
 
-  const { name, description, icon, icon_size, label_visible, label_position, custom_icon, x, y } = req.body;
+  const { name, description, icon, label_visible, label_position, x, y, type_id } = req.body;
 
   try {
     // Check if user owns this POI
@@ -2535,12 +2768,12 @@ app.put('/api/custom-pois/:id', validateCSRF, async (req, res) => {
 
     const result = await pool.query(
       `UPDATE custom_pois 
-       SET name = $2, description = $3, icon = $4, icon_size = $5, 
-           label_visible = $6, label_position = $7, custom_icon = $8,
-           x = $9, y = $10, updated_at = CURRENT_TIMESTAMP
+       SET name = $2, description = $3, icon = $4, 
+           label_visible = $5, label_position = $6, 
+           x = $7, y = $8, type_id = $9, updated_at = CURRENT_TIMESTAMP
        WHERE id = $1 
        RETURNING *`,
-      [req.params.id, name, description, icon, icon_size, label_visible, label_position, custom_icon, x, y]
+      [req.params.id, name, description, icon, label_visible, label_position, x, y, type_id]
     );
     
     res.json(result.rows[0]);
@@ -3002,10 +3235,10 @@ app.post('/api/custom-pois/:id/publish', validateCSRF, async (req, res) => {
 
     // Create pending POI entry with initial vote score of 1
     const pendingResult = await pool.query(
-      `INSERT INTO pending_pois (custom_poi_id, user_id, map_id, name, description, x, y, icon, icon_size, label_visible, label_position, custom_icon, vote_score)
+      `INSERT INTO pending_pois (custom_poi_id, user_id, map_id, name, description, x, y, type_id, icon, icon_size, label_visible, label_position, vote_score)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 1)
        RETURNING id`,
-      [poi.id, req.user.id, poi.map_id, poi.name, poi.description, poi.x, poi.y, poi.icon, poi.icon_size, poi.label_visible, poi.label_position, poi.custom_icon]
+      [poi.id, req.user.id, poi.map_id, poi.name, poi.description, poi.x, poi.y, poi.type_id, poi.icon, 48, poi.label_visible, poi.label_position]
     );
 
     // Add creator's automatic upvote
@@ -3143,12 +3376,12 @@ app.post('/api/pending-pois/:id/vote', validateCSRF, async (req, res) => {
 
     if (updatedPendingPoi.vote_score >= 10) {
       // Approve POI
-      // Insert into main POIs table with all custom settings
+      // Insert into main POIs table with all custom settings including type_id
       await pool.query(
-        `INSERT INTO pois (map_id, name, description, x, y, type, icon, icon_size, label_visible, label_position, custom_icon, created_by, created_by_user_id)
-         VALUES ($1, $2, $3, $4, $5, 'custom', $6, $7, $8, $9, $10, $11, $12)`,
+        `INSERT INTO pois (map_id, name, description, x, y, type_id, icon, icon_size, label_visible, label_position, created_by, created_by_user_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
         [updatedPendingPoi.map_id, updatedPendingPoi.name, updatedPendingPoi.description, updatedPendingPoi.x, updatedPendingPoi.y, 
-         updatedPendingPoi.icon, updatedPendingPoi.icon_size, updatedPendingPoi.label_visible, updatedPendingPoi.label_position, updatedPendingPoi.custom_icon,
+         updatedPendingPoi.type_id, updatedPendingPoi.icon, updatedPendingPoi.icon_size, updatedPendingPoi.label_visible, updatedPendingPoi.label_position,
          updatedPendingPoi.creator_name, updatedPendingPoi.user_id]
       );
 
@@ -3248,12 +3481,12 @@ app.post('/api/pending-pois/:id/force-publish', validateCSRF, async (req, res) =
 
     const pendingPoi = poiResult.rows[0];
 
-    // Insert into main POIs table with all custom settings
+    // Insert into main POIs table with all custom settings including type_id
     await pool.query(
-      `INSERT INTO pois (map_id, name, description, x, y, type, icon, icon_size, label_visible, label_position, custom_icon, created_by, created_by_user_id)
-       VALUES ($1, $2, $3, $4, $5, 'custom', $6, $7, $8, $9, $10, $11, $12)`,
+      `INSERT INTO pois (map_id, name, description, x, y, type_id, icon, icon_size, label_visible, label_position, created_by, created_by_user_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [pendingPoi.map_id, pendingPoi.name, pendingPoi.description, pendingPoi.x, pendingPoi.y, 
-       pendingPoi.icon, pendingPoi.icon_size, pendingPoi.label_visible, pendingPoi.label_position, pendingPoi.custom_icon,
+       pendingPoi.type_id, pendingPoi.icon, pendingPoi.icon_size, pendingPoi.label_visible, pendingPoi.label_position,
        pendingPoi.creator_name, pendingPoi.user_id]
     );
 
@@ -3383,6 +3616,7 @@ app.get('*', (req, res) => {
 initializeDatabase().then(async () => {
   // Ensure avatars directory exists before starting
   await ensureAvatarsDirectory();
+  await ensurePOIIconsDirectory();
   
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);

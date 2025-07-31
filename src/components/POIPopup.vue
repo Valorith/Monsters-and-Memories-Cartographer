@@ -113,10 +113,15 @@
         </button>
       </div>
       
-      <!-- Admin delete button for regular POIs -->
-      <button v-else-if="isAdmin && !isCustomPOI" class="delete-btn" @click="handleDelete">
-        Delete POI
-      </button>
+      <!-- Admin buttons for regular POIs -->
+      <div v-else-if="isAdmin && !isCustomPOI" class="admin-poi-actions">
+        <button class="edit-btn" @click="handleEdit">
+          Edit in POI Editor
+        </button>
+        <button class="delete-btn" @click="handleDelete">
+          Delete POI
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -287,6 +292,13 @@ export default {
       emit('publish', props.poi.id)
     }
     
+    const handleEdit = () => {
+      // Navigate to account page with POI ID to highlight
+      const poiId = props.poi.id
+      // Use absolute path to ensure proper navigation
+      window.location.href = `/account.html?tab=admin&section=poi-editor&highlight=${poiId}`
+    }
+    
     const formatStatus = (status) => {
       const statusMap = {
         'private': 'Private',
@@ -333,7 +345,8 @@ export default {
       canEdit,
       canPublish,
       formatStatus,
-      handlePublish
+      handlePublish,
+      handleEdit
     }
   }
 }
@@ -569,6 +582,33 @@ export default {
   color: #666;
   font-style: italic;
   margin: 0.5rem 0;
+}
+
+.admin-poi-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.admin-poi-actions .edit-btn,
+.admin-poi-actions .delete-btn {
+  flex: 1;
+  margin-top: 0;
+}
+
+.edit-btn {
+  padding: 0.5rem;
+  background: #4a7c59;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.edit-btn:hover {
+  background: #5a8d69;
 }
 
 .delete-btn {

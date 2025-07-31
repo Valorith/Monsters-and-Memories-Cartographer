@@ -214,6 +214,30 @@ async function migrate() {
       console.log('Added avatar development environment tracking');
     }
     
+    // Create POI types table
+    const poiTypesPath = path.join(__dirname, 'create-poi-types-table.sql');
+    if (fs.existsSync(poiTypesPath)) {
+      const poiTypesSchema = fs.readFileSync(poiTypesPath, 'utf8');
+      await pool.query(poiTypesSchema);
+      console.log('POI types table created and existing POIs migrated');
+    }
+    
+    // Update POI types to support Iconify
+    const updatePoiTypesIconifyPath = path.join(__dirname, 'update-poi-types-iconify.sql');
+    if (fs.existsSync(updatePoiTypesIconifyPath)) {
+      const updatePoiTypesIconifySchema = fs.readFileSync(updatePoiTypesIconifyPath, 'utf8');
+      await pool.query(updatePoiTypesIconifySchema);
+      console.log('POI types updated to support Iconify icons');
+    }
+    
+    // Remove icon_size from custom POIs for consistent sizing
+    const removeCustomPoiIconSizePath = path.join(__dirname, 'remove-custom-poi-icon-size.sql');
+    if (fs.existsSync(removeCustomPoiIconSizePath)) {
+      const removeCustomPoiIconSizeSchema = fs.readFileSync(removeCustomPoiIconSizePath, 'utf8');
+      await pool.query(removeCustomPoiIconSizeSchema);
+      console.log('Removed icon_size from custom POIs for consistent sizing');
+    }
+    
     console.log('Database migration completed successfully!');
     
     // Check tables after migration

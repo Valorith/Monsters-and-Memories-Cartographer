@@ -23,6 +23,16 @@
         </div>
       </div>
       
+      <!-- POI Type Selection (for POIs) -->
+      <div v-if="itemType === 'poi'" class="setting-group">
+        <label>POI Type</label>
+        <POITypeDropdown 
+          v-model="currentTypeId" 
+          :poi-types="poiTypes"
+          @update:modelValue="updatePOIType"
+        />
+      </div>
+      
       <!-- Icon Selection -->
       <div v-if="hasIcon" class="setting-group">
         <label>Icon</label>
@@ -97,9 +107,13 @@
 
 <script>
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import POITypeDropdown from './POITypeDropdown.vue'
 
 export default {
   name: 'AdminPopup',
+  components: {
+    POITypeDropdown
+  },
   props: {
     item: {
       type: Object,
@@ -124,6 +138,8 @@ export default {
     const labelSize = ref(1)
     const currentLabelPosition = ref('bottom')
     const currentIcon = ref('')
+    const currentTypeId = ref(null)
+    const poiTypes = ref([])
     
     // Available RPG icons
     const availableIcons = [
@@ -305,6 +321,23 @@ export default {
     const logPosition = () => {
     }
     
+    const loadPoiTypes = async () => {
+      try {
+        const response = await fetch('/api/poi-types')
+        if (!response.ok) throw new Error('Failed to load POI types')
+        poiTypes.value = await response.json()
+      } catch (error) {
+        console.error('Error loading POI types:', error)
+      }
+    }
+    
+    const updatePOIType = () => {
+      emit('update', {
+        ...props.item,
+        type_id: currentTypeId.value
+      })
+    }
+    
     const checkAndAdjustPosition = () => {
       nextTick(() => {
         const popup = document.querySelector('.admin-popup')
@@ -333,18 +366,27 @@ export default {
     
     onMounted(() => {
       checkAndAdjustPosition()
+      if (props.itemType === 'poi') {
+        loadPoiTypes()
+      }
     })
     
     // Re-check position when content changes
     watch(() => props.item, () => {
       checkAndAdjustPosition()
-    })
+      if (props.item && props.itemType === 'poi') {
+        currentTypeId.value = props.item.type_id
+      }
+    }, { immediate: true })
+    
     
     return {
       iconSize,
       labelSize,
       currentLabelPosition,
       currentIcon,
+      currentTypeId,
+      poiTypes,
       availableIcons,
       popupStyle,
       arrowPosition,
@@ -356,6 +398,7 @@ export default {
       updateLabelPosition,
       updateIconSize,
       updateLabelSize,
+      updatePOIType,
       handleActivate,
       handleDelete,
       logPosition
@@ -468,6 +511,27 @@ export default {
   background: #4a7c59;
   color: #fff;
   border-color: #5a8c69;
+}
+
+.type-select {
+  width: 100%;
+  padding: 0.5rem;
+  background: #3a3a3a;
+  border: 1px solid #555;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.type-select:hover {
+  background: #4a4a4a;
+  border-color: #666;
+}
+
+.type-select:focus {
+  outline: none;
+  border-color: #4a7c59;
 }
 
 .icon-grid {
@@ -697,4 +761,6 @@ export default {
   opacity: 0;
   transform: scale(0.95);
 }
+
+/* POI Type Selection Styles */
 </style>

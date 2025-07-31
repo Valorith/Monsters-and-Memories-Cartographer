@@ -44,19 +44,19 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:4173',
+        target: 'http://localhost:4174',
         changeOrigin: true
       },
       '/auth': {
-        target: 'http://localhost:4173',
+        target: 'http://localhost:4174',
         changeOrigin: true
       },
       '/avatars': {
-        target: 'http://localhost:4173',
+        target: 'http://localhost:4174',
         changeOrigin: true
       },
       '/maps': {
-        target: 'http://localhost:4173',
+        target: 'http://localhost:4174',
         changeOrigin: true
       }
     }

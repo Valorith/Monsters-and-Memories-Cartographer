@@ -48,7 +48,7 @@
             </option>
           </select>
         </div>
-        <div v-if="user && user.isAdmin" class="admin-toggle">
+        <div v-if="user && user.is_admin" class="admin-toggle">
           <button @click="toggleAdmin" class="admin-toggle-button" :class="{ active: isAdmin }">
             <span class="admin-icon">👑</span>
             <span class="admin-text">Admin Mode</span>
@@ -84,6 +84,15 @@
     </header>
     
     <XPBar :user="user" v-if="isAuthenticated" />
+    
+    <div class="poi-search-section">
+      <POISearch
+        :all-pois="allSearchablePOIs"
+        :current-map-id="currentMapId"
+        :maps="maps"
+        @select-poi="handlePOISelected"
+      />
+    </div>
     
     <div class="map-container" ref="mapContainer" @click="handleMapClick" @contextmenu.prevent="handleRightClick" @click.capture="hideContextMenu">
       <canvas 
@@ -260,9 +269,17 @@ import ConfirmDialog from './components/ConfirmDialog.vue'
 import ContextMenu from './components/ContextMenu.vue'
 import CustomPOIDialog from './components/CustomPOIDialog.vue'
 import XPBar from './components/XPBar.vue'
+import POISearch from './components/POISearch.vue'
 import { useToast } from './composables/useToast'
 import { useAuth } from './composables/useAuth'
 import { useCSRF } from './composables/useCSRF'
+import { 
+  EntityTypes, 
+  parseEntityReference, 
+  normalizeId, 
+  findEntityById,
+  isSameEntity 
+} from './utils/entityId'
 
 // Helper function to get map filename from path
 function getMapFilename(path) {
@@ -280,7 +297,8 @@ export default {
     ConfirmDialog,
     ContextMenu,
     CustomPOIDialog,
-    XPBar
+    XPBar,
+    POISearch
   },
   setup() {
     const mapCanvas = ref(null)
@@ -383,7 +401,8 @@ export default {
       drawPOI,
       drawPOITooltip,
       drawConnection,
-      drawConnector
+      drawConnector,
+      loadIconImage
     } = useMapInteractions(scale, offsetX, offsetY)
     
     // Database state
@@ -501,7 +520,7 @@ export default {
           group.forEach(p => {
             const type = p.type || 'other'
             // Always include custom POIs in the type map
-            if (!typeMap.has(type) || p.id === poi.id || p.is_custom) {
+            if (!typeMap.has(type) || isSameEntity(p.id, poi.id) || p.is_custom) {
               typeMap.set(type, p)
             }
           })
@@ -619,8 +638,8 @@ export default {
       // Draw connectors
       if (currentMapData.value.connectors) {
         currentMapData.value.connectors.forEach(connector => {
-          const isDragging = draggedItem.value && draggedItem.value.id === connector.id
-          const isPending = pendingChange.value && pendingChange.value.item.id === connector.id
+          const isDragging = draggedItem.value && isSameEntity(draggedItem.value.id, connector.id)
+          const isPending = pendingChange.value && isSameEntity(pendingChange.value.item.id, connector.id)
           drawConnector(ctx.value, connector, isDragging || isPending)
         })
       }
@@ -779,7 +798,8 @@ export default {
         await loadImage(map.file)
         
         // If it's a database map, load its data
-        if (map.id && !dbMapData.value[map.id]) {
+        // Load if we don't have data or if we only have search data
+        if (map.id && (!dbMapData.value[map.id] || dbMapData.value[map.id].searchOnly)) {
           const mapData = await mapsAPI.getById(map.id)
           // Transform database connectors to the format expected by the UI
           const connectors = (mapData.pointConnectors || []).flatMap(pc => {
@@ -832,8 +852,11 @@ export default {
             return result
           })
           
+          // Process POIs to handle icon types from poi_types table
+          const processedPOIs = (mapData.pois || []).map(poi => processPOI(poi))
+          
           dbMapData.value[map.id] = {
-            pois: mapData.pois || [],
+            pois: processedPOIs,
             connections: mapData.connections || [],
             connectors: connectors,
             zoneConnectors: mapData.zoneConnectors || []
@@ -919,15 +942,60 @@ export default {
         )
         
         if (clickedPOI) {
+          console.log('Shift+Click on POI:', {
+            clickedPOI: clickedPOI,
+            isGrouped: clickedPOI.isGrouped,
+            groupedPOIs: clickedPOI.groupedPOIs,
+            is_custom: clickedPOI.is_custom
+          })
+          
+          // If it's a grouped POI, we need to determine which POI to delete
+          let poiToDelete = clickedPOI
+          
+          if (clickedPOI.isGrouped && clickedPOI.groupedPOIs && clickedPOI.groupedPOIs.length > 1) {
+            console.log('Grouped POI clicked, searching for regular POI in group...')
+            
+            // For grouped POIs, we should show a selection dialog
+            const regularPOIs = clickedPOI.groupedPOIs.filter(poi => 
+              !poi.is_custom && currentMapData.value.pois.some(p => p.id === poi.id)
+            )
+            
+            console.log('Regular POIs in group:', regularPOIs)
+            
+            if (regularPOIs.length === 0) {
+              // No regular POI in this group
+              info('This group contains only custom POIs. Use the POI popup to delete them.')
+              return
+            } else if (regularPOIs.length === 1) {
+              poiToDelete = regularPOIs[0]
+            } else {
+              // Multiple regular POIs - for now, warn the user
+              warning(`Multiple POIs at this location. Please zoom in or use the POI popup to select the specific POI to delete.`)
+              return
+            }
+          }
+          
+          console.log('POI to delete:', {
+            id: poiToDelete.id,
+            name: poiToDelete.name,
+            is_custom: poiToDelete.is_custom,
+            type: poiToDelete.type
+          })
+          
           // Check if it's a regular POI (admin can only delete regular POIs via this method)
-          const isRegularPOI = currentMapData.value.pois.some(poi => poi.id === clickedPOI.id)
+          const isRegularPOI = !poiToDelete.is_custom && 
+            currentMapData.value.pois.some(poi => poi.id === poiToDelete.id)
           
           if (isRegularPOI) {
-            showConfirm('Delete POI', `Delete POI "${clickedPOI.name}"?`, 'Delete', 'Cancel').then(confirmed => {
+            showConfirm('Delete POI', `Delete POI "${poiToDelete.name}"?`, 'Delete', 'Cancel').then(confirmed => {
               if (confirmed) {
-                deletePOI(clickedPOI.id)
+                console.log('Deleting POI with ID:', poiToDelete.id)
+                deletePOI(poiToDelete.id)
               }
             })
+            return
+          } else if (poiToDelete.is_custom) {
+            info('Cannot delete custom POIs with Shift+Click. Use the POI popup instead.')
             return
           }
         }
@@ -1234,7 +1302,49 @@ export default {
       // Check for POI clicks (works in both admin and normal mode, and for both regular and custom POIs)
       // We already checked above, so use the existing clickedPOI if found
       if (clickedPOI && !isConnectorPOI) {
-        selectedPOI.value = clickedPOI
+        // If it's a grouped POI, we need to handle it specially
+        if (clickedPOI.isGrouped && clickedPOI.groupedPOIs && clickedPOI.groupedPOIs.length > 1) {
+          console.log('Grouped POI clicked, showing selection:', {
+            groupId: clickedPOI.groupId,
+            groupSize: clickedPOI.groupedPOIs.length,
+            pois: clickedPOI.groupedPOIs.map(p => ({ id: p.id, name: p.name }))
+          })
+          
+          // Find which specific POI in the group was clicked based on exact position
+          // This helps when POIs are slightly offset in a group
+          let poiToSelect = clickedPOI.groupedPOIs[0] // Default to first
+          
+          // Try to find the exact POI that was clicked if they have different positions
+          const clickTolerance = 10 // pixels
+          for (const poi of clickedPOI.groupedPOIs) {
+            const dx = Math.abs(poi.x - imagePos.x)
+            const dy = Math.abs(poi.y - imagePos.y)
+            if (dx <= clickTolerance && dy <= clickTolerance) {
+              poiToSelect = poi
+              break
+            }
+          }
+          
+          console.log('Selecting POI from group:', {
+            id: poiToSelect.id,
+            name: poiToSelect.name,
+            is_custom: poiToSelect.is_custom
+          })
+          
+          // For better UX, we should implement a selection menu in the future
+          // For now, we'll use the most accurate POI we can find
+          selectedPOI.value = poiToSelect
+        } else {
+          console.log('Single POI clicked:', {
+            id: clickedPOI.id,
+            name: clickedPOI.name,
+            is_custom: clickedPOI.is_custom,
+            x: clickedPOI.x,
+            y: clickedPOI.y
+          })
+          selectedPOI.value = clickedPOI
+        }
+        
         const canvasPos = imageToCanvas(clickedPOI.x, clickedPOI.y)
         
         // Calculate offset based on the POI's icon size (matching drawPOI logic)
@@ -1349,6 +1459,19 @@ export default {
       
       // In connector mode with invisible link, clicking on POI sets connector position
       if (editMode.value === 'connector' && clickedPOI) {
+        // Check if this is a custom POI - connections to custom POIs are not allowed
+        if (clickedPOI.is_custom || clickedPOI.id.toString().startsWith('custom_')) {
+          warning('Connections to custom POIs are not supported. Custom POIs may be deleted or moved by their owners.')
+          return
+        }
+        
+        // Verify it's actually a regular POI in the database
+        const isRegularPOI = currentMapData.value.pois.some(p => p.id === clickedPOI.id)
+        if (!isRegularPOI) {
+          warning('This POI cannot be used for connections.')
+          return
+        }
+        
         // Check if we have invisibleLink from the AdminPanel (need to pass this through)
         // For now, we'll place the connector at the POI position
         pendingConnector.value = {
@@ -2178,7 +2301,7 @@ export default {
     
     const toggleAdmin = async () => {
       // Only allow admin users to toggle admin mode
-      if (!user.value || !user.value.isAdmin) {
+      if (!user.value || !user.value.is_admin) {
         error('Admin access required')
         return
       }
@@ -2248,6 +2371,44 @@ export default {
       }
     }
     
+    // Process a single POI to extract icon from type data
+    const processPOI = (poi) => {
+      let icon = poi.icon
+      let iconType = 'emoji' // default
+      
+      // Check if POI has type information from poi_types table
+      if (poi.type_icon_type && poi.type_icon_value) {
+        if (poi.type_icon_type === 'emoji') {
+          icon = poi.type_icon_value
+          iconType = 'emoji'
+        } else if (poi.type_icon_type === 'iconify' || poi.type_icon_type === 'fontawesome') {
+          icon = poi.type_icon_value
+          iconType = poi.type_icon_type
+        } else if (poi.type_icon_type === 'upload') {
+          icon = poi.type_icon_value
+          iconType = 'upload'
+        }
+      }
+      
+      // If we still don't have an icon, fallback to POI's direct icon or default
+      if (!icon) {
+        icon = poi.icon || '📍'
+      }
+      
+      return {
+        ...poi,
+        icon: icon,
+        icon_type: iconType,
+        icon_size: poi.icon_size || 48, // Preserve icon_size with default of 48
+        // Keep the original type data for reference
+        poi_type: poi.type_name ? {
+          name: poi.type_name,
+          icon_type: poi.type_icon_type,
+          icon_value: poi.type_icon_value
+        } : null
+      }
+    }
+    
     const savePOI = async (poiData) => {
       if (!pendingPOI.value) return
       
@@ -2266,17 +2427,21 @@ export default {
           name: poiData.name,
           description: poiData.description || '',
           type: poiData.type || 'landmark',
-          icon: null, // Let the type determine the icon
+          type_id: poiData.type_id,
+          icon: null, // Icon will come from POI type
           icon_size: 48,
           label_visible: true,
           label_position: 'bottom'
         })
         
+        // Process the POI to extract icon from type data
+        const processedPOI = processPOI(newPOI)
+        
         // Update local cache
         if (!dbMapData.value[map.id]) {
           dbMapData.value[map.id] = { pois: [], connections: [], connectors: [] }
         }
-        dbMapData.value[map.id].pois.push(newPOI)
+        dbMapData.value[map.id].pois.push(processedPOI)
         
         pendingPOI.value = null
         render()
@@ -2392,15 +2557,30 @@ export default {
           let secondLabel = connectorData.label
           
           if (pendingConnector.value.poiId) {
-            // Connecting to a POI
-            toPoiId = pendingConnector.value.poiId
+            // Connecting to a POI - verify it's a regular POI
+            const poiId = pendingConnector.value.poiId
+            
+            // Double-check this isn't a custom POI
+            if (poiId.toString().startsWith('custom_')) {
+              error('Cannot create connections to custom POIs')
+              pendingConnectorPair.value = { first: null, second: null }
+              pendingConnector.value = null
+              return
+            }
+            
+            // Verify the POI exists in regular POIs
+            const poi = findEntityById(currentMapData.value.pois, poiId)
+            if (!poi) {
+              error('Invalid POI selected for connection')
+              pendingConnectorPair.value = { first: null, second: null }
+              pendingConnector.value = null
+              return
+            }
+            
+            toPoiId = poiId
             toX = null
             toY = null
-            // Get POI name for the label
-            const poi = currentMapData.value.pois.find(p => p.id === pendingConnector.value.poiId)
-            if (poi) {
-              secondLabel = poi.name
-            }
+            secondLabel = poi.name
           }
           
           const newConnectorData = {
@@ -2502,18 +2682,121 @@ export default {
       }
     }
     
-    const deletePOI = async (poiId) => {
-      // Check if this is a custom POI (handle both prefixed and unprefixed IDs)
-      const actualId = poiId.toString().startsWith('custom_') ? 
-        parseInt(poiId.toString().replace('custom_', '')) : 
-        poiId
-      const customPoi = customPOIs.value.find(p => p.id === actualId)
+    const deletePOI = async (poiIdOrRef) => {
+      console.log('deletePOI called with:', poiIdOrRef)
       
-      if (customPoi) {
+      // Create context for entity type inference
+      const context = {
+        pois: currentMapData.value?.pois || [],
+        customPOIs: customPOIs.value || []
+      }
+      
+      // Parse the entity reference (supports both legacy ID and new {type, id} format)
+      const entityRef = parseEntityReference(poiIdOrRef, context)
+      console.log('Parsed entity reference:', entityRef)
+      
+      // First, check if we're deleting the currently selected POI
+      // This is the most reliable way to determine if it's custom or regular
+      let isCustomPOI = false
+      let poiToDelete = null
+      
+      console.log('Current selectedPOI:', selectedPOI.value)
+      
+      if (selectedPOI.value && isSameEntity(selectedPOI.value.id, entityRef.numericId || entityRef.id)) {
+        // We're deleting the selected POI - trust its is_custom flag
+        isCustomPOI = selectedPOI.value.is_custom === true
+        poiToDelete = selectedPOI.value
+        console.log('Deleting selected POI:', {
+          id: entityRef.id,
+          selectedPOI_id: selectedPOI.value.id,
+          name: poiToDelete.name,
+          is_custom: isCustomPOI,
+          type: poiToDelete.type,
+          entityType: entityRef.type || (isCustomPOI ? EntityTypes.CUSTOM_POI : EntityTypes.POI)
+        })
+      }
+      
+      if (!poiToDelete) {
+        // Use entity type to determine where to look
+        if (entityRef.type === EntityTypes.CUSTOM_POI) {
+          isCustomPOI = true
+          poiToDelete = findEntityById(customPOIs.value, entityRef.numericId || entityRef.id)
+          if (poiToDelete) {
+            console.log('Found in customPOIs by type:', {
+              id: poiToDelete.id,
+              name: poiToDelete.name,
+              entityType: EntityTypes.CUSTOM_POI
+            })
+          }
+        } else if (entityRef.type === EntityTypes.POI) {
+          isCustomPOI = false
+          poiToDelete = findEntityById(currentMapData.value?.pois || [], entityRef.numericId || entityRef.id)
+          if (poiToDelete) {
+            console.log('Found in regular POIs by type:', {
+              id: poiToDelete.id,
+              name: poiToDelete.name,
+              entityType: EntityTypes.POI
+            })
+          }
+        } else {
+          // No type specified - use the safer approach of checking regular POIs first
+          console.log('No entity type specified, checking both collections...')
+          
+          // IMPORTANT: We should NOT be here if we're deleting from the POI popup
+          // The POI popup should always have selectedPOI set
+          console.warn('WARNING: Deleting POI without selectedPOI set. This may cause issues!')
+          
+          // As a fallback, check regular POIs first (safer default)
+          const map = maps.value[selectedMapIndex.value]
+          if (map.id && dbMapData.value[map.id]) {
+            poiToDelete = findEntityById(dbMapData.value[map.id].pois, entityRef.numericId || entityRef.id)
+            if (poiToDelete) {
+              isCustomPOI = false
+              console.log('Found in regular POIs (fallback):', {
+                id: poiToDelete.id,
+                name: poiToDelete.name,
+                type: poiToDelete.type,
+                created_by: poiToDelete.created_by
+              })
+            }
+          }
+          
+          // Only check custom POIs if not found in regular POIs
+          if (!poiToDelete) {
+            poiToDelete = findEntityById(customPOIs.value, entityRef.numericId || entityRef.id)
+            if (poiToDelete) {
+              isCustomPOI = true
+              console.log('Found in customPOIs (fallback):', {
+                id: poiToDelete.id,
+                name: poiToDelete.name,
+                is_custom: true
+              })
+            }
+          }
+          
+          // Log all POIs with this ID for debugging
+          const searchId = entityRef.numericId || entityRef.id
+          console.log('All custom POIs with ID', searchId + ':', 
+            customPOIs.value.filter(p => isSameEntity(p.id, searchId)))
+          console.log('All regular POIs with ID', searchId + ':', 
+            dbMapData.value[maps.value[selectedMapIndex.value]?.id]?.pois?.filter(p => isSameEntity(p.id, searchId)) || [])
+        }
+      }
+      
+      if (!poiToDelete) {
+        console.error(`POI with ID ${entityRef.id} not found`)
+        error('POI not found')
+        return
+      }
+      
+      if (isCustomPOI) {
         // Handle custom POI deletion
+        const actualId = poiToDelete.id
+        console.log('Custom POI deletion - actualId:', actualId)
+        
         const confirmed = await showConfirm(
           'Delete Custom POI',
-          `Delete custom POI "${customPoi.name || 'Unnamed'}"? This will also remove it from anyone you shared it with.`,
+          `Delete custom POI "${poiToDelete.name || 'Unnamed'}"? This will also remove it from anyone you shared it with.`,
           'Delete',
           'Cancel'
         )
@@ -2528,9 +2811,10 @@ export default {
           if (response.ok) {
             success('Custom POI deleted')
             await loadCustomPOIs()
+            await loadAllCustomPOIs() // Update global search
             
             // Clear selected POI if it's the one being deleted
-            if (selectedPOI.value && (selectedPOI.value.id === actualId || selectedPOI.value.id === `custom_${actualId}`)) {
+            if (selectedPOI.value && isSameEntity(selectedPOI.value.id, actualId)) {
               selectedPOI.value = null
             }
             render()
@@ -2553,35 +2837,56 @@ export default {
       }
       
       try {
-        const poi = dbMapData.value[map.id].pois.find(p => p.id === poiId)
+        console.log('Regular POI deletion:', {
+          id: poiToDelete.id,
+          name: poiToDelete.name
+        })
         
         // Show confirmation dialog
         const confirmed = await showConfirm(
           'Delete POI',
-          `Delete POI "${poi?.name || 'Unnamed'}"? This action cannot be undone.`,
+          `Delete POI "${poiToDelete.name || 'Unnamed'}"? This action cannot be undone.`,
           'Delete',
           'Cancel'
         )
         
         if (!confirmed) return
         
-        await poisAPI.delete(poiId)
+        const numericPoiId = typeof poiToDelete.id === 'string' && !isNaN(poiToDelete.id) ? parseInt(poiToDelete.id) : poiToDelete.id
         
-        // Update local cache
-        dbMapData.value[map.id].pois = dbMapData.value[map.id].pois.filter(p => p.id !== poiId)
+        // Use fetchWithCSRF for proper authentication
+        const response = await fetchWithCSRF(`/api/pois/${numericPoiId}`, {
+          method: 'DELETE'
+        })
+        
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.details || errorData.error || `${response.status} ${response.statusText}`)
+        }
+        
+        // Update local cache (use numericPoiId for comparison)
+        dbMapData.value[map.id].pois = dbMapData.value[map.id].pois.filter(p => p.id !== numericPoiId)
         
         // Clear selected POI if it's the one being deleted
-        if (selectedPOI.value && selectedPOI.value.id === poiId) {
+        if (selectedPOI.value && isSameEntity(selectedPOI.value.id, numericPoiId)) {
           selectedPOI.value = null
         }
         render()
-        if (poi) {
-          success(`POI "${poi.name}" deleted successfully`)
-        }
+        success(`POI "${poiToDelete.name}" deleted successfully`)
       } catch (err) {
         console.error('Failed to delete POI:', err)
-        error(`Failed to delete POI: ${err.message || 'Database error'}`)
-        warning('Please check your internet connection and try again')
+        
+        // Check for specific error types
+        if (err.message && err.message.includes('403')) {
+          error('Cannot delete POI: Admin privileges required')
+          warning('Please ensure you are logged in as an admin with admin mode enabled')
+        } else if (err.message && err.message.includes('401')) {
+          error('Cannot delete POI: Authentication required')
+          warning('Please log in to delete POIs')
+        } else {
+          error(`Failed to delete POI: ${err.message || 'Database error'}`)
+          warning('Please check your internet connection and try again')
+        }
       }
     }
     
@@ -2599,7 +2904,7 @@ export default {
           const updatedPOI = await poisAPI.save(updatedItem)
           
           // Update local cache
-          const poiIndex = dbMapData.value[map.id].pois.findIndex(p => p.id === updatedItem.id)
+          const poiIndex = dbMapData.value[map.id].pois.findIndex(p => isSameEntity(p.id, updatedItem.id))
           if (poiIndex !== -1) {
             dbMapData.value[map.id].pois[poiIndex] = updatedPOI
           }
@@ -2643,7 +2948,7 @@ export default {
           const updatedConnection = await zoneConnectorsAPI.save(zoneData)
           
           // Update local cache
-          const connIndex = dbMapData.value[map.id].zoneConnectors?.findIndex(c => c.id === updatedItem.id)
+          const connIndex = dbMapData.value[map.id].zoneConnectors?.findIndex(c => isSameEntity(c.id, updatedItem.id))
           
           if (connIndex !== -1 && dbMapData.value[map.id].zoneConnectors) {
             // Use Vue's reactivity system to ensure the update is detected
@@ -2847,7 +3152,7 @@ export default {
         }
         
         try {
-          const poiToUpdate = dbMapData.value[map.id].pois.find(p => p.id === id)
+          const poiToUpdate = findEntityById(dbMapData.value[map.id].pois, id)
           if (poiToUpdate) {
             // Update in database
             const updatedPOI = await poisAPI.save({
@@ -2856,13 +3161,13 @@ export default {
             })
             
             // Update local cache
-            const poiIndex = dbMapData.value[map.id].pois.findIndex(p => p.id === id)
+            const poiIndex = dbMapData.value[map.id].pois.findIndex(p => isSameEntity(p.id, id))
             if (poiIndex !== -1) {
               dbMapData.value[map.id].pois[poiIndex] = updatedPOI
             }
             
             // Update selectedPOI to reflect the change
-            if (selectedPOI.value && selectedPOI.value.id === id) {
+            if (selectedPOI.value && isSameEntity(selectedPOI.value.id, id)) {
               selectedPOI.value = { ...selectedPOI.value, [field]: newValue }
             }
             
@@ -2887,14 +3192,14 @@ export default {
       
       try {
         // For zone connectors
-        const connection = dbMapData.value[map.id].zoneConnectors?.find(c => c.id === connectionId)
+        const connection = findEntityById(dbMapData.value[map.id].zoneConnectors, connectionId)
         
         if (connection) {
           await zoneConnectorsAPI.delete(connectionId)
           
           // Update local cache
           if (dbMapData.value[map.id].zoneConnectors) {
-            dbMapData.value[map.id].zoneConnectors = dbMapData.value[map.id].zoneConnectors.filter(c => c.id !== connectionId)
+            dbMapData.value[map.id].zoneConnectors = dbMapData.value[map.id].zoneConnectors.filter(c => !isSameEntity(c.id, connectionId))
           }
           
           render()
@@ -3404,6 +3709,100 @@ export default {
     }
     
     // Custom POI methods
+    // Load all POIs from all maps for global search
+    const loadAllPOIsForSearch = async () => {
+      try {
+        // Load POIs for all maps that haven't been loaded yet
+        const loadPromises = maps.value.map(async (map) => {
+          // Skip if we already have data for this map
+          if (dbMapData.value[map.id]?.pois) {
+            return
+          }
+          
+          try {
+            const response = await fetch(`/api/maps/${map.id}`)
+            if (response.ok) {
+              const mapData = await response.json()
+              // Process POIs to extract icon from type data
+              const processedPOIs = (mapData.pois || []).map(poi => processPOI(poi))
+              
+              // Store ONLY POIs for search to avoid interfering with map display
+              if (!dbMapData.value[map.id]) {
+                // Create a minimal entry just for search
+                dbMapData.value[map.id] = {
+                  pois: processedPOIs,
+                  // Empty arrays - these will be properly loaded when map is visited
+                  connections: [],
+                  connectors: [],
+                  zoneConnectors: [],
+                  // Mark this as search-only to force reload when map is visited
+                  searchOnly: true
+                }
+              } else if (dbMapData.value[map.id].searchOnly) {
+                // Update search-only POIs
+                dbMapData.value[map.id].pois = processedPOIs
+              }
+              // If we have full data (!searchOnly), don't touch it
+            }
+          } catch (error) {
+            console.error(`Failed to load POIs for map ${map.id}:`, error)
+          }
+        })
+        
+        await Promise.all(loadPromises)
+      } catch (error) {
+        console.error('Failed to load all POIs:', error)
+      }
+    }
+    
+    // Load all custom POIs across all maps for global search
+    const allCustomPOIs = ref([])
+    
+    const loadAllCustomPOIs = async () => {
+      if (!isAuthenticated.value) return
+      
+      try {
+        const response = await fetch('/api/custom-pois')
+        if (response.ok) {
+          const pois = await response.json()
+          allCustomPOIs.value = pois.map(poi => {
+            // Set the icon based on the POI type data
+            let icon = null
+            let iconType = null
+            
+            if (poi.type_icon_type === 'emoji') {
+              icon = poi.type_icon_value
+              iconType = 'emoji'
+            } else if (poi.type_icon_type === 'iconify' || poi.type_icon_type === 'fontawesome') {
+              icon = poi.type_icon_value
+              iconType = poi.type_icon_type
+            } else if (poi.type_icon_type === 'upload') {
+              icon = poi.type_icon_value
+              iconType = 'upload'
+            }
+            
+            if (!icon) {
+              icon = '📍'
+            }
+            
+            return {
+              ...poi,
+              is_custom: true,
+              icon: icon,
+              icon_type: iconType,
+              poi_type: {
+                name: poi.type_name,
+                icon_type: poi.type_icon_type,
+                icon_value: poi.type_icon_value
+              }
+            }
+          })
+        }
+      } catch (error) {
+        console.error('Failed to load all custom POIs:', error)
+      }
+    }
+    
     const loadCustomPOIs = async () => {
       if (!isAuthenticated.value || !maps.value[selectedMapIndex.value]?.id) return
       
@@ -3411,8 +3810,57 @@ export default {
         const response = await fetch(`/api/maps/${maps.value[selectedMapIndex.value].id}/custom-pois`)
         if (response.ok) {
           const pois = await response.json()
-          // Mark POIs as custom for proper identification
-          customPOIs.value = pois.map(poi => ({ ...poi, is_custom: true }))
+          // Mark POIs as custom for proper identification and set icon from POI type
+          customPOIs.value = pois.map(poi => {
+            // Set the icon based on the POI type data
+            let icon = null
+            let iconType = null
+            
+            if (poi.type_icon_type === 'emoji') {
+              icon = poi.type_icon_value
+              iconType = 'emoji'
+            } else if (poi.type_icon_type === 'iconify' || poi.type_icon_type === 'fontawesome') {
+              // Now we support rendering these icons!
+              icon = poi.type_icon_value
+              iconType = poi.type_icon_type
+            } else if (poi.type_icon_type === 'upload') {
+              // Support uploaded images too
+              icon = poi.type_icon_value
+              iconType = 'upload'
+            }
+            
+            // Ensure we always have an icon
+            if (!icon) {
+              console.warn(`Custom POI "${poi.name}" has invalid icon type: ${poi.type_icon_type}`)
+              icon = '📍' // Default pin if all else fails
+            }
+            
+            return {
+              ...poi,
+              is_custom: true,
+              icon: icon,
+              icon_type: iconType,
+              // Keep the original type data for reference
+              poi_type: {
+                name: poi.type_name,
+                icon_type: poi.type_icon_type,
+                icon_value: poi.type_icon_value
+              },
+              // Add callback for when icon loads
+              onIconLoad: () => {
+                render() // Re-render when icon is loaded
+              }
+            }
+          })
+          
+          // Preload non-emoji icons
+          customPOIs.value.forEach(poi => {
+            if (poi.icon_type && poi.icon_type !== 'emoji' && poi.icon) {
+              // Use the loadIconImage function to preload the icon
+              loadIconImage(poi.icon_type, poi.icon)
+            }
+          })
+          
           render() // Re-render to show custom POIs
         }
       } catch (error) {
@@ -3455,6 +3903,7 @@ export default {
         if (response.ok) {
           success('POI submitted for community approval')
           await loadCustomPOIs() // Refresh to get updated status
+          await loadAllCustomPOIs() // Update global search
           
           // Update the selected POI status if it's still open
           if (selectedPOI.value && selectedPOI.value.id === poiId) {
@@ -3514,6 +3963,7 @@ export default {
           success(selectedCustomPOI.value ? 'Custom POI updated' : 'Custom POI created')
           customPOIDialogVisible.value = false
           await loadCustomPOIs()
+          await loadAllCustomPOIs() // Update global search
         } else {
           error('Failed to save custom POI')
         }
@@ -3531,7 +3981,7 @@ export default {
     
     // Watch for user changes to ensure non-admins can't have admin mode
     watch(user, (newUser) => {
-      if (!newUser || !newUser.isAdmin) {
+      if (!newUser || !newUser.is_admin) {
         isAdmin.value = false
       }
     })
@@ -3575,9 +4025,14 @@ export default {
       // Load maps from database
       maps.value = await loadMapsFromDatabase()
       
+      // Load all POIs for global search
+      await loadAllPOIsForSearch()
+      
       // Start XP polling if authenticated
       if (isAuthenticated.value) {
         xpPollingInterval = setInterval(pollForXPUpdates, 30000) // Poll every 30 seconds
+        // Load all custom POIs for global search
+        await loadAllCustomPOIs()
       }
       
       initCanvas(mapCanvas.value)
@@ -3588,6 +4043,9 @@ export default {
       // Listen for avatar updates from account page
       window.addEventListener('avatar-updated', async () => {
         await checkAuthStatus()
+        if (isAuthenticated.value) {
+          await loadAllCustomPOIs()
+        }
       })
       
       // Close user dropdown when clicking outside
@@ -3655,6 +4113,107 @@ export default {
         clearInterval(xpPollingInterval)
       }
     })
+    
+    // Computed property for all searchable POIs
+    const allSearchablePOIs = computed(() => {
+      const allPOIs = []
+      
+      // Add regular POIs from all maps
+      Object.entries(dbMapData.value).forEach(([mapId, mapData]) => {
+        if (mapData.pois) {
+          mapData.pois.forEach(poi => {
+            allPOIs.push({
+              ...poi,
+              map_id: parseInt(mapId),
+              is_custom: false
+            })
+          })
+        }
+      })
+      
+      // Add ALL custom POIs (owned and shared) across all maps if user is authenticated
+      if (isAuthenticated.value && allCustomPOIs.value) {
+        allCustomPOIs.value.forEach(poi => {
+          allPOIs.push({
+            ...poi,
+            is_custom: true,
+            is_pending: poi.status === 'pending',
+            is_shared: !poi.is_owner // Mark shared POIs
+          })
+        })
+      }
+      
+      return allPOIs
+    })
+    
+    // Current map ID
+    const currentMapId = computed(() => maps.value[selectedMapIndex.value]?.id || null)
+    
+    // Handle POI selection from search
+    const handlePOISelected = async (poi) => {
+      // Switch to the POI's map if different
+      if (poi.map_id !== currentMapId.value) {
+        const mapIndex = maps.value.findIndex(m => m.id === poi.map_id)
+        if (mapIndex !== -1) {
+          selectedMapIndex.value = mapIndex
+          await loadSelectedMap()
+        }
+      }
+      
+      // Wait for map to load
+      await nextTick()
+      
+      // Center on the POI and zoom in
+      const targetScale = 1.5 // Zoom to 150%
+      
+      // Calculate the position to center the POI
+      const canvasRect = mapCanvas.value.getBoundingClientRect()
+      const centerX = canvasRect.width / 2
+      const centerY = canvasRect.height / 2
+      
+      // Update scale and offset to center on POI
+      scale.value = targetScale
+      offsetX.value = centerX - (poi.x * targetScale)
+      offsetY.value = centerY - (poi.y * targetScale)
+      
+      // Set up the highlight effect
+      setTimeout(() => {
+        // Set the highlighted POI to trigger the glowing circle effect
+        highlightedPOI.value = { id: poi.id, x: poi.x, y: poi.y }
+        highlightStartTime.value = Date.now()
+        
+        const canvasPos = imageToCanvas(poi.x, poi.y)
+        
+        // Create a synthetic click event to show the POI popup
+        const clickEvent = {
+          clientX: canvasRect.left + canvasPos.x,
+          clientY: canvasRect.top + canvasPos.y
+        }
+        
+        // If it's a custom POI, find it in customPOIs
+        if (poi.is_custom) {
+          const customPOI = customPOIs.value.find(p => p.id === poi.id)
+          if (customPOI) {
+            selectedPOI.value = { ...customPOI, is_custom: true }
+            popupPosition.value = {
+              x: clickEvent.clientX,
+              y: clickEvent.clientY
+            }
+            popupIsLeftSide.value = canvasPos.x > canvasRect.width / 2
+          }
+        } else {
+          // Regular POI
+          selectedPOI.value = poi
+          popupPosition.value = {
+            x: clickEvent.clientX,
+            y: clickEvent.clientY
+          }
+          popupIsLeftSide.value = canvasPos.x > canvasRect.width / 2
+        }
+        
+        render()
+      }, 100)
+    }
     
     return {
       mapCanvas,
@@ -3737,7 +4296,11 @@ export default {
       saveCustomPOI,
       // Highlight
       highlightedPOI,
-      highlightStartTime
+      highlightStartTime,
+      // Search
+      allSearchablePOIs,
+      currentMapId,
+      handlePOISelected
     }
   }
 }

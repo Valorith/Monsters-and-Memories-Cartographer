@@ -1,17 +1,13 @@
 // API service for database operations
+import { useCSRF } from '../composables/useCSRF.js'
 
 const API_BASE = '/api';
+const { fetchWithCSRF } = useCSRF();
 
-// Helper function for API calls
+// Helper function for API calls with CSRF protection
 async function apiCall(url, options = {}) {
   try {
-    const response = await fetch(`${API_BASE}${url}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-      },
-      ...options
-    });
+    const response = await fetchWithCSRF(`${API_BASE}${url}`, options);
     
     if (!response.ok) {
       throw new Error(`API Error: ${response.status} ${response.statusText}`);
@@ -40,7 +36,7 @@ export const mapsAPI = {
   async save(map) {
     return apiCall('/maps', {
       method: 'POST',
-      body: JSON.stringify(map)
+      body: map
     });
   },
   
@@ -58,7 +54,7 @@ export const poisAPI = {
   async save(poi) {
     return apiCall('/pois', {
       method: 'POST',
-      body: JSON.stringify(poi)
+      body: poi
     });
   },
   
@@ -76,7 +72,7 @@ export const connectionsAPI = {
   async save(connection) {
     return apiCall('/connections', {
       method: 'POST',
-      body: JSON.stringify(connection)
+      body: connection
     });
   },
   
@@ -94,7 +90,7 @@ export const pointConnectorsAPI = {
   async save(connector) {
     return apiCall('/point-connectors', {
       method: 'POST',
-      body: JSON.stringify(connector)
+      body: connector
     });
   },
   
@@ -112,7 +108,7 @@ export const zoneConnectorsAPI = {
   async save(connector) {
     return apiCall('/zone-connectors', {
       method: 'POST',
-      body: JSON.stringify(connector)
+      body: connector
     });
   },
   

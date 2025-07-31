@@ -38,7 +38,8 @@
       "Bash(wget:*)",
       "Bash(find:*)",
       "Bash(ss:*)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(npx vue-tsc:*)"
     ],
     "deny": []
   }

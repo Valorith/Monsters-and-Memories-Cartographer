@@ -18,3 +18,8 @@ SET
   from_icon_size = ROUND(from_icon_size * 0.7),
   to_icon_size = ROUND(to_icon_size * 0.7)
 WHERE from_icon_size IS NOT NULL OR to_icon_size IS NOT NULL;
+
+-- Update custom POI icon sizes
+UPDATE custom_pois 
+SET icon_size = ROUND(icon_size * 0.7)
+WHERE icon_size IS NOT NULL;

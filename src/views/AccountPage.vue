@@ -5,12 +5,14 @@
         <router-link to="/" class="back-link">
           ← Back to Maps
         </router-link>
-        <h1>Account Settings</h1>
+        <h1 style="color: red;">Account Settings - TESTING 456</h1>
       </div>
     </header>
 
     <div class="account-container" v-if="user">
       <div class="account-sidebar">
+        <p>DEBUG: Number of tabs = {{ tabs.length }}</p>
+        <p>DEBUG: Tabs = {{ JSON.stringify(tabs) }}</p>
         <nav class="account-nav">
           <button 
             v-for="tab in tabs" 
@@ -25,6 +27,8 @@
       </div>
 
       <div class="account-content">
+        <p>DEBUG: Current activeTab = {{ activeTab }}, user = {{ user }}, isAdmin = {{ user?.is_admin }}</p>
+        
         <!-- Profile Tab -->
         <div v-if="activeTab === 'profile'" class="tab-content">
           <h2>Profile Information</h2>
@@ -35,7 +39,7 @@
               <div class="profile-details">
                 <h3>{{ user.name }}</h3>
                 <p>{{ user.email }}</p>
-                <span v-if="user.isAdmin" class="admin-badge">Administrator</span>
+                <span v-if="user.is_admin" class="admin-badge">Administrator</span>
               </div>
             </div>
             
@@ -136,8 +140,9 @@
         </div>
 
         <!-- Admin Tab (only for admins) -->
-        <div v-if="activeTab === 'admin' && user.isAdmin" class="tab-content">
+        <div v-if="activeTab === 'admin' && user.is_admin" class="tab-content">
           <h2>Admin Settings</h2>
+          <p>Debug: activeTab={{ activeTab }}, user.is_admin={{ user.is_admin }}</p>
           
           <div class="admin-section">
             <h3>User Management</h3>
@@ -178,6 +183,15 @@
               </table>
             </div>
           </div>
+          
+          <!-- POI Type Management -->
+          <div style="border: 2px solid red; padding: 20px; margin: 20px 0;">
+            <p>POITypeManager should appear below:</p>
+            <POITypeManager />
+          </div>
+          
+          <!-- Test Component -->
+          <TestComponent />
         </div>
       </div>
     </div>
@@ -201,9 +215,15 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuth } from '../composables/useAuth';
 import { useToast } from '../composables/useToast';
+import POITypeManager from '../components/POITypeManager.vue';
+import TestComponent from '../components/TestComponent.vue';
 
 export default {
   name: 'AccountPage',
+  components: {
+    POITypeManager,
+    TestComponent
+  },
   setup() {
     const router = useRouter();
     const { user, isAuthenticated, logout } = useAuth();
@@ -228,7 +248,7 @@ export default {
         { id: 'privacy', label: 'Privacy & Security', icon: '🔒' }
       ];
       
-      if (user.value?.isAdmin) {
+      if (user.value?.is_admin) {
         baseTabs.push({ id: 'admin', label: 'Admin', icon: '👑' });
       }
       
@@ -329,7 +349,7 @@ export default {
     };
 
     const loadAdminData = async () => {
-      if (!user.value?.isAdmin) return;
+      if (!user.value?.is_admin) return;
       
       try {
         const response = await fetch('/api/admin/users');
@@ -363,6 +383,10 @@ export default {
         router.push('/');
         return;
       }
+      
+      console.log('AccountPage mounted - user:', user.value);
+      console.log('Is admin?', user.value?.is_admin);
+      console.log('Active tab:', activeTab.value);
       
       loadPreferences();
       loadAdminData();

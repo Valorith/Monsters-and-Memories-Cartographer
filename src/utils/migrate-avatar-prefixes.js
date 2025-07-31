@@ -10,11 +10,17 @@ const __dirname = path.dirname(__filename);
  * Migrate existing avatar files to include environment prefix
  */
 async function migrateAvatarPrefixes() {
-  const isDevelopment = process.env.NODE_ENV !== 'production';
-  const envPrefix = isDevelopment ? 'dev' : 'prod';
+  // Check multiple environment indicators
+  const isProduction = process.env.NODE_ENV === 'production' || 
+                      process.env.RAILWAY_ENVIRONMENT === 'production' ||
+                      process.env.RENDER_SERVICE_NAME ||
+                      process.env.HEROKU_APP_NAME ||
+                      (process.env.PORT && process.env.PORT !== '4173');
+  
+  const envPrefix = isProduction ? 'prod' : 'dev';
   const avatarsDir = path.join(__dirname, '../../public/avatars');
   
-  console.log(`Starting avatar prefix migration for ${envPrefix} environment...`);
+  console.log(`Starting avatar prefix migration for ${envPrefix} environment (NODE_ENV=${process.env.NODE_ENV})...`);
   
   try {
     // Read all files in avatars directory

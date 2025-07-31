@@ -11,7 +11,7 @@
         <div class="profile-info">
           <h3>{{ user.name }}</h3>
           <p>{{ user.email }}</p>
-          <span v-if="user.isAdmin" class="admin-badge">Admin</span>
+          <span v-if="user.is_admin" class="admin-badge">Admin</span>
         </div>
       </div>
 

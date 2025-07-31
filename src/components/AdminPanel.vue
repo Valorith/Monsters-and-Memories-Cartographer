@@ -59,14 +59,10 @@
             placeholder="Description"
             rows="3"
           ></textarea>
-          <select v-model="poiType">
-            <option value="landmark">🏛️ Landmark</option>
-            <option value="quest">❗ Quest</option>
-            <option value="merchant">💰 Merchant</option>
-            <option value="npc">💀 NPC</option>
-            <option value="dungeon">⚔️ Dungeon</option>
-            <option value="other">📍 Other</option>
-          </select>
+          <POITypeDropdown 
+            v-model="poiTypeId" 
+            :poi-types="poiTypes"
+          />
           <div class="form-buttons">
             <button @click="savePOI" class="save-btn">Save POI</button>
             <button @click="cancelPOI" class="cancel-btn">Cancel</button>
@@ -162,10 +158,14 @@
 </template>
 
 <script>
-import { ref, watch, nextTick, computed } from 'vue'
+import { ref, watch, nextTick, computed, onMounted } from 'vue'
+import POITypeDropdown from './POITypeDropdown.vue'
 
 export default {
   name: 'AdminPanel',
+  components: {
+    POITypeDropdown
+  },
   props: {
     isAdmin: {
       type: Boolean,
@@ -199,6 +199,8 @@ export default {
     const poiName = ref('')
     const poiDescription = ref('')
     const poiType = ref('landmark')
+    const poiTypeId = ref(null)
+    const poiTypes = ref([])
     const targetMap = ref('')
     const connectionLabel = ref('')
     const connectorLabel = ref('')
@@ -263,13 +265,15 @@ export default {
       emit('savePOI', {
         name: poiName.value,
         description: poiDescription.value,
-        type: poiType.value
+        type: poiType.value,
+        type_id: poiTypeId.value
       })
       
       // Reset form
       poiName.value = ''
       poiDescription.value = ''
       poiType.value = 'landmark'
+      poiTypeId.value = poiTypes.value.find(t => t.is_default)?.id || null
     }
     
     const saveConnection = () => {
@@ -362,12 +366,38 @@ export default {
       })
     })
     
+    // Load POI types
+    const loadPoiTypes = async () => {
+      try {
+        const response = await fetch('/api/poi-types')
+        if (!response.ok) throw new Error('Failed to load POI types')
+        poiTypes.value = await response.json()
+        
+        // Set default type if available
+        if (!poiTypeId.value && poiTypes.value.length > 0) {
+          const defaultType = poiTypes.value.find(t => t.is_default)
+          if (defaultType) {
+            poiTypeId.value = defaultType.id
+          }
+        }
+      } catch (error) {
+        console.error('Error loading POI types:', error)
+      }
+    }
+    
+    onMounted(() => {
+      loadPoiTypes()
+    })
+    
+    
     return {
       editMode,
       isMinimized,
       poiName,
       poiDescription,
       poiType,
+      poiTypeId,
+      poiTypes,
       targetMap,
       connectionLabel,
       connectorLabel,
@@ -671,4 +701,10 @@ textarea {
 .poi-connection strong {
   color: #ffd700;
 }
+
+/* POI Type Selection Styles */
+.poi-type-select {
+  width: 100%;
+}
+
 </style>
