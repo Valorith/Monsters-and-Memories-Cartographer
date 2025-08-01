@@ -2076,11 +2076,11 @@ export default {
             const poiX = clickedPOI.originalX !== undefined ? clickedPOI.originalX : clickedPOI.x
             const poiY = clickedPOI.originalY !== undefined ? clickedPOI.originalY : clickedPOI.y
             
-            // If it's a regular POI with a prefixed ID, restore the original ID
-            if (isRegularPOI && clickedPOI.id.toString().startsWith('custom_')) {
+            // If the POI has a prefixed ID, restore the original ID
+            if (clickedPOI.id.toString().startsWith('custom_')) {
               draggedItem.value = {
                 ...clickedPOI,
-                id: actualClickedId  // Use the cleaned ID
+                id: actualClickedId  // Use the cleaned ID for both regular and custom POIs
               }
             } else {
               draggedItem.value = clickedPOI
@@ -3925,7 +3925,9 @@ export default {
           }
         } else if (pendingChange.value.type === 'customPoi') {
           // Update custom POI position
-          const response = await fetchWithCSRF(`/api/custom-pois/${pendingChange.value.item.id}`, {
+          // Ensure we're using a numeric ID without any prefix
+          const customPoiId = pendingChange.value.item.id.toString().replace('custom_', '')
+          const response = await fetchWithCSRF(`/api/custom-pois/${customPoiId}`, {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json'
@@ -3948,7 +3950,7 @@ export default {
           }
           
           // Update local state
-          const index = customPOIs.value.findIndex(p => p.id === pendingChange.value.item.id)
+          const index = customPOIs.value.findIndex(p => p.id.toString() === customPoiId)
           if (index !== -1) {
             customPOIs.value[index] = {
               ...customPOIs.value[index],
