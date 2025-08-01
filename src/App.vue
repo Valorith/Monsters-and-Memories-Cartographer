@@ -816,8 +816,13 @@ export default {
       currentMapData.value.pois.forEach(poi => {
         const key = `${poi.x},${poi.y}`
         if (!poiLocations.has(key)) {
-          poiLocations.set(key, poi)
-          allPOIs.push(poi)
+          // Ensure regular POIs have is_custom flag set to false
+          const regularPOI = {
+            ...poi,
+            is_custom: false
+          }
+          poiLocations.set(key, regularPOI)
+          allPOIs.push(regularPOI)
         }
       })
       
@@ -2047,20 +2052,44 @@ export default {
             customPOI.status !== 'pending'
           )
           
-          // Check if it's a regular POI
-          const isRegularPOI = currentMapData.value.pois.some(poi => poi.id === clickedPOI.id)
+          // Debug logging
+          console.log('Alt+drag POI check:', {
+            clickedPOI_id: clickedPOI.id,
+            actualClickedId,
+            is_custom_flag: clickedPOI.is_custom,
+            isCustomPOI,
+            has_custom_prefix: clickedPOI.id.toString().startsWith('custom_')
+          })
+          
+          // Check if it's a regular POI (use the cleaned ID for comparison)
+          // Convert to string for comparison to handle both numeric and string IDs
+          const isRegularPOI = currentMapData.value.pois.some(poi => poi.id.toString() === actualClickedId.toString())
           
           // Allow dragging if:
           // 1. It's a custom POI owned by the user
           // 2. It's a regular POI and user is admin
           // 3. It's a regular POI and user is authenticated (for proposals)
           if (isCustomPOI || (isAdmin.value && isRegularPOI) || (isAuthenticated.value && isRegularPOI)) {
+            // Additional check: if is_custom flag is explicitly set, trust it
+            if (clickedPOI.is_custom === false && !isRegularPOI) {
+              console.warn('POI marked as not custom but not found in regular POIs:', clickedPOI)
+              return
+            }
             // Use original position if available (for grouped POIs)
             const poiX = clickedPOI.originalX !== undefined ? clickedPOI.originalX : clickedPOI.x
             const poiY = clickedPOI.originalY !== undefined ? clickedPOI.originalY : clickedPOI.y
             
-            draggedItem.value = clickedPOI
+            // If it's a regular POI with a prefixed ID, restore the original ID
+            if (isRegularPOI && clickedPOI.id.toString().startsWith('custom_')) {
+              draggedItem.value = {
+                ...clickedPOI,
+                id: actualClickedId  // Use the cleaned ID
+              }
+            } else {
+              draggedItem.value = clickedPOI
+            }
             dragItemType.value = isCustomPOI ? 'customPoi' : 'poi'
+            console.log('Drag type set to:', dragItemType.value, { isCustomPOI, isRegularPOI })
             dragOffset.value = {
               x: imagePos.x - poiX,
               y: imagePos.y - poiY
@@ -3840,6 +3869,14 @@ export default {
                       pendingChange.value.type === 'connection' ? 'Connection' : 'Connector'
       const itemName = pendingChange.value.item.name || pendingChange.value.item.label
       
+      console.log('Confirming pending change:', {
+        type: pendingChange.value.type,
+        itemType,
+        itemId: pendingChange.value.item.id,
+        isProposalDrag: pendingChange.value.item.isProposalDrag,
+        is_custom: pendingChange.value.item.is_custom
+      })
+      
       if (!map.id || !dbMapData.value[map.id]) {
         error('Cannot move item: Map is not connected to database')
         cancelPendingChange()
@@ -3900,6 +3937,12 @@ export default {
           }
         } else if (pendingChange.value.type === 'customPoi') {
           // Update custom POI position
+          console.log('Updating custom POI:', {
+            id: pendingChange.value.item.id,
+            newX: Math.round(pendingChange.value.newPosition.x),
+            newY: Math.round(pendingChange.value.newPosition.y)
+          })
+          
           const response = await fetchWithCSRF(`/api/custom-pois/${pendingChange.value.item.id}`, {
             method: 'PUT',
             headers: {
@@ -3913,7 +3956,13 @@ export default {
           })
           
           if (!response.ok) {
-            throw new Error('Failed to update custom POI position')
+            const errorData = await response.json().catch(() => ({}))
+            console.error('Custom POI update failed:', {
+              status: response.status,
+              error: errorData,
+              poiId: pendingChange.value.item.id
+            })
+            throw new Error(errorData.error || 'Failed to update custom POI position')
           }
           
           // Update local state
