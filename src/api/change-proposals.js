@@ -1,7 +1,8 @@
 import pool from '../db/database.js';
 import { leaderboardCache, userStatsCache } from '../utils/cache.js';
 
-export default function changeProposalsRouter(app, validateCSRF) {
+export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {}) {
+  const { updateUserXP, getXPConfig } = xpFunctions;
   // Debug endpoint to check vote counts
   app.get('/api/debug/proposal-votes/:id', async (req, res) => {
     try {
@@ -343,6 +344,14 @@ export default function changeProposalsRouter(app, validateCSRF) {
         return res.json({ withdrawn: true });
       }
 
+      // Check if this is the user's first vote on this proposal
+      const existingVoteResult = await client.query(
+        'SELECT vote FROM change_proposal_votes WHERE proposal_id = $1 AND user_id = $2',
+        [proposalId, req.user.id]
+      );
+      const isFirstVote = existingVoteResult.rows.length === 0;
+      const isVotingOnOwnProposal = proposal.proposer_id === req.user.id;
+
       // Upsert vote
       const voteResult = await client.query(`
         INSERT INTO change_proposal_votes (proposal_id, user_id, vote)
@@ -598,6 +607,32 @@ export default function changeProposalsRouter(app, validateCSRF) {
         // Clear caches when XP changes
         leaderboardCache.delete('top10');
         userStatsCache.delete(`user-stats-${proposal.proposer_id}`);
+      }
+
+      // Award XP for first vote on other people's proposals
+      if (isFirstVote && !isVotingOnOwnProposal && updateUserXP && getXPConfig) {
+        // Get XP config value
+        const xpConfigResult = await client.query(
+          'SELECT value FROM xp_config WHERE key = $1',
+          ['proposal_vote']
+        );
+        const xpAmount = xpConfigResult.rows[0]?.value || 2;
+        
+        // Update user XP
+        await client.query(
+          'UPDATE users SET xp = GREATEST(0, xp + $2) WHERE id = $1',
+          [req.user.id, xpAmount]
+        );
+        
+        // Record in XP history
+        await client.query(
+          'INSERT INTO xp_history (user_id, xp_change, reason) VALUES ($1, $2, $3)',
+          [req.user.id, xpAmount, 'Voted on change proposal']
+        );
+        
+        // Clear caches when XP changes
+        leaderboardCache.delete('top10');
+        userStatsCache.delete(`user-stats-${req.user.id}`);
       }
 
       await client.query('COMMIT');

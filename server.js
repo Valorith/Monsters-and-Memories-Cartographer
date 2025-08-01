@@ -568,7 +568,7 @@ itemsRouter(app, validateCSRF);
 npcsRouter(app, validateCSRF);
 
 // Change Proposals routes
-changeProposalsRouter(app, validateCSRF);
+changeProposalsRouter(app, validateCSRF, { updateUserXP, getXPConfig });
 
 // Get all maps - cached for 5 minutes
 app.get('/api/maps', 
@@ -3441,9 +3441,14 @@ app.post('/api/custom-pois/:id/publish', validateCSRF, async (req, res) => {
 
     // Award XP for publishing
     const publishXP = await getXPConfig('poi_publish');
-    await updateUserXP(req.user.id, publishXP, 'publishing a POI');
+    const newXP = await updateUserXP(req.user.id, publishXP, 'publishing a POI');
 
-    res.json({ success: true, message: 'POI submitted for approval' });
+    res.json({ 
+      success: true, 
+      message: 'POI submitted for approval',
+      xpAwarded: publishXP,
+      newTotalXP: newXP
+    });
   } catch (error) {
     await pool.query('ROLLBACK');
     console.error('Error publishing POI:', error);

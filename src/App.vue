@@ -4581,7 +4581,14 @@ export default {
         })
         
         if (response.ok) {
+          const data = await response.json()
           success('POI submitted for community approval')
+          
+          // Update user's XP if awarded - the XPBar component will detect the change and animate
+          if (data.xpAwarded && data.xpAwarded > 0 && user.value) {
+            user.value.xp = data.newTotalXP
+          }
+          
           await loadCustomPOIs() // Refresh to get updated status
           await loadAllCustomPOIs() // Update global search
           

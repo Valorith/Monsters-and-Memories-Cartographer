@@ -2848,6 +2848,11 @@
                 <span style="margin-right: 0.5rem;">🔄</span>Refresh
               </button>
             </div>
+            <div class="filter-group">
+              <button class="btn btn-sm" onclick="resetProposalFilters()" style="background: #666; padding: 0.5rem 1rem;">
+                <span style="margin-right: 0.5rem;">↺</span>Reset
+              </button>
+            </div>
           </div>
 
           <!-- Proposals List -->
@@ -4363,7 +4368,7 @@
         if (response.ok) {
           showMessage('Custom POI deleted', 'success');
           loadCustomPois(); // Reload the list
-          loadPendingPois(); // Also reload pending POIs in case it was there
+          // loadPendingPois(); // Removed - pending POIs system no longer used
         } else {
           const error = await response.json();
           showMessage(error.error || 'Failed to delete custom POI', 'error');
@@ -4506,7 +4511,7 @@
         if (response.ok) {
           showMessage('POI submitted for approval!', 'success');
           loadCustomPois(); // Reload the list
-          loadPendingPois(); // Also reload pending POIs
+          // loadPendingPois(); // Removed - pending POIs system no longer used
         } else {
           const error = await response.json();
           showMessage(error.error || 'Failed to publish POI', 'error');
@@ -4537,7 +4542,8 @@
       displaySharedPois(sharedPois);
     }
     
-    // Pending POIs functionality
+    // Pending POIs functionality - DEPRECATED (replaced by change proposals system)
+    /*
     async function loadPendingPois() {
       document.getElementById('pending-pois-loading').style.display = 'block';
       
@@ -4553,6 +4559,7 @@
         document.getElementById('pending-pois-loading').style.display = 'none';
       }
     }
+    */
     
     function displayPendingPois() {
       const totalPages = Math.ceil(pendingPois.length / ITEMS_PER_PAGE);
@@ -4763,7 +4770,7 @@
           } else if (result.withdrawn) {
             showMessage('POI withdrawn from community voting', 'success');
           }
-          loadPendingPois(); // Reload the list
+          // loadPendingPois(); // Removed - pending POIs system no longer used
           loadCustomPois(); // Also reload custom POIs if withdrawn
         } else {
           const error = await response.json();
@@ -4791,7 +4798,7 @@
         
         if (response.ok) {
           showMessage('POI approved and published! It will now appear on the map.', 'success');
-          loadPendingPois(); // Reload the pending list
+          // loadPendingPois(); // Removed - pending POIs system no longer used
           loadCustomPois(); // Reload My POIs to show updated status
         } else {
           const error = await response.json();
@@ -4817,7 +4824,7 @@
         
         if (response.ok) {
           showMessage('POI rejected and returned to creator with "Rejected" status.', 'success');
-          loadPendingPois(); // Reload the pending list
+          // loadPendingPois(); // Removed - pending POIs system no longer used
           loadCustomPois(); // Reload My POIs to show updated status
         } else {
           const error = await response.json();
@@ -6056,7 +6063,9 @@
       const names = {
         'poi_publish': 'Publish POI',
         'poi_pending_remove': 'Remove from Pending',
-        'poi_approved': 'POI Approved'
+        'poi_approved': 'POI Approved',
+        'proposal_vote': 'Vote on Proposal',
+        'change_approved': 'Change Approved'
       };
       return names[key] || key;
     }
@@ -8275,6 +8284,20 @@
       proposalsPage = 1;
       loadProposals();
     }
+    
+    function resetProposalFilters() {
+      // Reset filters to default values
+      document.getElementById('proposal-type-filter').value = '';
+      document.getElementById('proposal-filter').value = 'not-voted';
+      
+      // Update the filter state
+      proposalFilters.type = '';
+      proposalFilters.show = 'not-voted';
+      
+      // Reset page and reload
+      proposalsPage = 1;
+      loadProposals();
+    }
 
     async function loadProposals() {
       const loading = document.getElementById('proposals-loading');
@@ -8327,7 +8350,15 @@
       const list = document.getElementById('proposals-list');
       
       if (proposals.length === 0) {
-        list.innerHTML = '<div style="text-align: center; padding: 3rem; color: #999;">No proposals found</div>';
+        // Check if "Not Voted" filter is active
+        const filterValue = document.getElementById('proposal-filter')?.value;
+        let message = 'No proposals found';
+        
+        if (filterValue === 'not-voted') {
+          message = 'There are no more proposals left to vote on! Good Work!';
+        }
+        
+        list.innerHTML = `<div style="text-align: center; padding: 3rem; color: #999;">${message}</div>`;
         return;
       }
       
@@ -9479,8 +9510,6 @@
     async function loadAdminData() {
       // Load users
       loadUsers();
-      // Load pending POIs
-      loadPendingPois();
       // Load POI types
       loadPOITypes();
       // Load POI editor

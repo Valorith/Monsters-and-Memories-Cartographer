@@ -224,14 +224,31 @@ export default {
 
     // Watch for real-time XP changes
     watch(() => props.user?.xp, async (newXP, oldXP) => {
-      if (newXP !== undefined && oldXP !== undefined && newXP !== oldXP && !animationInProgress.value) {
+      if (newXP !== undefined && oldXP !== undefined && newXP !== oldXP && !animationInProgress.value && !manualAnimationTriggered) {
         await animateXPChange(oldXP, newXP);
       }
     });
 
+    // Flag to prevent double animations
+    let manualAnimationTriggered = false;
+
+    // Expose triggerXPAnimation globally for other components
+    window.triggerXPAnimation = (xpChange) => {
+      if (!props.user?.xp || xpChange === 0) return;
+      const currentXP = props.user.xp;
+      const oldXP = currentXP - xpChange;
+      manualAnimationTriggered = true;
+      animateXPChange(oldXP, currentXP);
+      // Reset flag after a short delay
+      setTimeout(() => {
+        manualAnimationTriggered = false;
+      }, 100);
+    };
+
     // Cleanup on unmount
     onBeforeUnmount(() => {
       document.removeEventListener('click', handleClickOutside);
+      window.triggerXPAnimation = null;
     });
 
 

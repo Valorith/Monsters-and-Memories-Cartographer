@@ -318,6 +318,14 @@ async function migrate() {
       console.log('Added shared POI invalidation reason tracking');
     }
     
+    // Add vote XP config
+    const voteXpConfigPath = path.join(__dirname, 'add-vote-xp-config.sql');
+    if (fs.existsSync(voteXpConfigPath)) {
+      const voteXpConfigSchema = fs.readFileSync(voteXpConfigPath, 'utf8');
+      await pool.query(voteXpConfigSchema);
+      console.log('Vote XP config migration completed');
+    }
+    
     console.log('Database migration completed successfully!');
     
     // Check tables after migration
