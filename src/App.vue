@@ -2052,15 +2052,6 @@ export default {
             customPOI.status !== 'pending'
           )
           
-          // Debug logging
-          console.log('Alt+drag POI check:', {
-            clickedPOI_id: clickedPOI.id,
-            actualClickedId,
-            is_custom_flag: clickedPOI.is_custom,
-            isCustomPOI,
-            has_custom_prefix: clickedPOI.id.toString().startsWith('custom_')
-          })
-          
           // Check if it's a regular POI (use the cleaned ID for comparison)
           // Convert to string for comparison to handle both numeric and string IDs
           const isRegularPOI = currentMapData.value.pois.some(poi => poi.id.toString() === actualClickedId.toString())
@@ -2070,6 +2061,12 @@ export default {
           // 2. It's a regular POI and user is admin
           // 3. It's a regular POI and user is authenticated (for proposals)
           if (isCustomPOI || (isAdmin.value && isRegularPOI) || (isAuthenticated.value && isRegularPOI)) {
+            // Check if POI already has a pending proposal
+            if (clickedPOI.has_pending_proposal) {
+              warning('This POI already has a pending change proposal')
+              return
+            }
+            
             // Additional check: if is_custom flag is explicitly set, trust it
             if (clickedPOI.is_custom === false && !isRegularPOI) {
               console.warn('POI marked as not custom but not found in regular POIs:', clickedPOI)
@@ -2089,7 +2086,6 @@ export default {
               draggedItem.value = clickedPOI
             }
             dragItemType.value = isCustomPOI ? 'customPoi' : 'poi'
-            console.log('Drag type set to:', dragItemType.value, { isCustomPOI, isRegularPOI })
             dragOffset.value = {
               x: imagePos.x - poiX,
               y: imagePos.y - poiY
@@ -3869,14 +3865,6 @@ export default {
                       pendingChange.value.type === 'connection' ? 'Connection' : 'Connector'
       const itemName = pendingChange.value.item.name || pendingChange.value.item.label
       
-      console.log('Confirming pending change:', {
-        type: pendingChange.value.type,
-        itemType,
-        itemId: pendingChange.value.item.id,
-        isProposalDrag: pendingChange.value.item.isProposalDrag,
-        is_custom: pendingChange.value.item.is_custom
-      })
-      
       if (!map.id || !dbMapData.value[map.id]) {
         error('Cannot move item: Map is not connected to database')
         cancelPendingChange()
@@ -3937,12 +3925,6 @@ export default {
           }
         } else if (pendingChange.value.type === 'customPoi') {
           // Update custom POI position
-          console.log('Updating custom POI:', {
-            id: pendingChange.value.item.id,
-            newX: Math.round(pendingChange.value.newPosition.x),
-            newY: Math.round(pendingChange.value.newPosition.y)
-          })
-          
           const response = await fetchWithCSRF(`/api/custom-pois/${pendingChange.value.item.id}`, {
             method: 'PUT',
             headers: {
