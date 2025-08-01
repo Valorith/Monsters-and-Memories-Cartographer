@@ -858,8 +858,9 @@ export default {
       // Group all POIs when zoomed out and store for click detection
       currentGroupedPOIs = groupPOIsWhenZoomedOut(allPOIs)
       
-      // Draw dotted line during proposal drag (before POIs so it appears behind)
-      if (draggedItem.value && draggedItem.value.isProposalDrag && dragItemType.value === 'poi') {
+      // Draw dotted line during drag (before POIs so it appears behind)
+      // Show for both proposal drags (regular POIs) and custom POI drags
+      if (draggedItem.value && (draggedItem.value.isProposalDrag || dragItemType.value === 'customPoi')) {
         const originalCanvasPos = imageToCanvas(originalPosition.value.x, originalPosition.value.y)
         const currentCanvasPos = imageToCanvas(draggedItem.value.x, draggedItem.value.y)
         
@@ -875,8 +876,9 @@ export default {
         ctx.value.lineTo(currentCanvasPos.x, currentCanvasPos.y)
         ctx.value.stroke()
         
-        // Draw orange line on top
-        ctx.value.strokeStyle = '#FF6B00'
+        // Draw colored line on top
+        // Orange for proposals, blue for custom POI moves
+        ctx.value.strokeStyle = dragItemType.value === 'customPoi' ? '#4B9BFF' : '#FF6B00'
         ctx.value.lineWidth = 4
         ctx.value.setLineDash([12, 6])
         ctx.value.beginPath()
@@ -888,7 +890,8 @@ export default {
       }
       
       // Draw dotted line for pending change (after mouse up)
-      if (pendingChange.value && pendingChange.value.item.isProposalDrag) {
+      // Show for both proposal changes (regular POIs) and custom POI changes
+      if (pendingChange.value && (pendingChange.value.item.isProposalDrag || pendingChange.value.type === 'customPoi')) {
         const originalCanvasPos = imageToCanvas(pendingChange.value.originalPosition.x, pendingChange.value.originalPosition.y)
         const newCanvasPos = imageToCanvas(pendingChange.value.newPosition.x, pendingChange.value.newPosition.y)
         
@@ -904,8 +907,9 @@ export default {
         ctx.value.lineTo(newCanvasPos.x, newCanvasPos.y)
         ctx.value.stroke()
         
-        // Draw orange line on top
-        ctx.value.strokeStyle = '#FF6B00'
+        // Draw colored line on top
+        // Orange for proposals, blue for custom POI moves
+        ctx.value.strokeStyle = pendingChange.value.type === 'customPoi' ? '#4B9BFF' : '#FF6B00'
         ctx.value.lineWidth = 4
         ctx.value.setLineDash([12, 6])
         ctx.value.beginPath()
