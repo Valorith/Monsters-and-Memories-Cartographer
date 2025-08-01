@@ -67,6 +67,49 @@ const ensurePOIIconsDirectory = async () => {
   }
 };
 
+// Level calculation functions
+function calculateLevelFromXP(xp) {
+  if (xp <= 0) return 1;
+  
+  let level = 1;
+  let totalXPNeeded = 0;
+  
+  // Keep adding XP requirements until we exceed the player's XP
+  while (totalXPNeeded <= xp) {
+    totalXPNeeded += level * level * 100;
+    if (totalXPNeeded <= xp) {
+      level++;
+    }
+  }
+  
+  return level;
+}
+
+function calculateXPProgress(xp) {
+  const level = calculateLevelFromXP(xp);
+  
+  // Calculate total XP needed to reach the current level
+  let totalXPForCurrentLevel = 0;
+  for (let i = 1; i < level; i++) {
+    totalXPForCurrentLevel += i * i * 100;
+  }
+  
+  // Calculate XP needed for next level
+  const xpNeededForNextLevel = level * level * 100;
+  
+  // Calculate progress within current level
+  const xpInCurrentLevel = xp - totalXPForCurrentLevel;
+  const progressPercent = (xpInCurrentLevel / xpNeededForNextLevel) * 100;
+  
+  return {
+    level,
+    xpInCurrentLevel,
+    xpNeededForNextLevel,
+    progressPercent,
+    totalXPForCurrentLevel
+  };
+}
+
 // Environment variable validation
 const validateEnvironment = () => {
   const required = [];
@@ -2152,8 +2195,7 @@ app.get('/api/leaderboard/top10',
           avatar_filename,
           avatar_version,
           picture,
-          xp,
-          GREATEST(1, FLOOR(SQRT(xp / 100))) as level
+          xp
         FROM users
         WHERE xp >= 0
         ORDER BY xp DESC
@@ -2162,21 +2204,9 @@ app.get('/api/leaderboard/top10',
       
       // Calculate XP progress for current level and build avatar URLs
       const players = result.rows.map(player => {
-        const level = player.level;
-        
-        // Calculate total XP needed to reach the current level
-        let totalXPForCurrentLevel = 0;
-        for (let i = 1; i < level; i++) {
-          totalXPForCurrentLevel += i * i * 100;
-        }
-        
-        // Calculate total XP needed to reach the next level
-        const totalXPForNextLevel = totalXPForCurrentLevel + (level * level * 100);
-        
-        // Calculate progress within current level
-        const xpInCurrentLevel = player.xp - totalXPForCurrentLevel;
-        const xpNeededForNextLevel = totalXPForNextLevel - totalXPForCurrentLevel;
-        const progressPercent = (xpInCurrentLevel / xpNeededForNextLevel) * 100;
+        // Use the correct level calculation
+        const xpProgress = calculateXPProgress(player.xp);
+        const { level, xpInCurrentLevel, xpNeededForNextLevel, progressPercent } = xpProgress;
         
         // Build avatar URL
         let avatarUrl = player.picture; // Default to OAuth picture
@@ -2189,7 +2219,7 @@ app.get('/api/leaderboard/top10',
           display_name: player.display_name,
           avatar: avatarUrl,
           xp: player.xp,
-          level: player.level,
+          level: level,
           xpInCurrentLevel,
           xpNeededForNextLevel,
           progressPercent: Math.min(100, Math.max(0, progressPercent))
