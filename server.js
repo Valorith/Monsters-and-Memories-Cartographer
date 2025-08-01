@@ -499,8 +499,9 @@ async function updateUserXP(userId, xpChange, reason) {
     
     console.log(`XP Update: User ${userId} ${xpChange > 0 ? 'gained' : 'lost'} ${Math.abs(xpChange)} XP for ${reason}. New total: ${result.rows[0]?.xp || 0}`);
     
-    // Invalidate leaderboard cache when XP changes
+    // Invalidate caches when XP changes
     leaderboardCache.delete('top10');
+    userStatsCache.delete(`user-stats-${userId}`);
     
     return result.rows[0]?.xp || 0;
   } catch (error) {
@@ -2667,6 +2668,10 @@ app.put('/api/admin/users/:userId/xp', validateCSRF, async (req, res) => {
     
     await pool.query('COMMIT');
     
+    // Clear caches when XP changes
+    leaderboardCache.delete('top10');
+    userStatsCache.delete(`user-stats-${userId}`);
+    
     res.json({ success: true, newXP: xp });
   } catch (error) {
     await pool.query('ROLLBACK');
@@ -3779,6 +3784,13 @@ initializeDatabase().then(async () => {
     // Schedule avatar cleanup to run daily
     const avatarsDir = join(__dirname, 'public', 'avatars');
     scheduleAvatarCleanup(avatarsDir, 24); // Run every 24 hours
+    
+    // Periodically refresh leaderboard cache to ensure accuracy
+    // This acts as a safety net in case any XP updates don't clear the cache
+    setInterval(() => {
+      leaderboardCache.delete('top10');
+      console.log('Leaderboard cache refreshed');
+    }, 10 * 60 * 1000); // Refresh every 10 minutes
   });
   
   server.on('error', (err) => {

@@ -4323,7 +4323,7 @@
     function goToPoi(poiId, mapId, x, y) {
       // Store POI location in sessionStorage to highlight it when the map loads
       sessionStorage.setItem('highlightCustomPoi', JSON.stringify({ id: poiId, mapId, x, y }));
-      window.location.href = '/';
+      window.open('/', '_blank');
     }
 
     async function sharePoi(poiId) {
@@ -6390,7 +6390,7 @@
     function viewUserPois() {
       if (!confirm(`View all POIs created by ${selectedUser.name}?`)) return;
       sessionStorage.setItem('viewUserPois', selectedUser.id);
-      window.location.href = '/';
+      window.open('/', '_blank');
     }
     
     // XP Adjustment functions
@@ -9103,8 +9103,8 @@
         return;
       }
       
-      // Navigate to the map page
-      window.location.href = `/?map_id=${mapId}`;
+      // Navigate to the map page in a new tab
+      window.open(`/?map_id=${mapId}`, '_blank');
     }
     
     function updateProposalsPagination(totalPages) {

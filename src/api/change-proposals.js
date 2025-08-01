@@ -1,4 +1,5 @@
 import pool from '../db/database.js';
+import { leaderboardCache, userStatsCache } from '../utils/cache.js';
 
 export default function changeProposalsRouter(app, validateCSRF) {
   // Debug endpoint to check vote counts
@@ -593,6 +594,10 @@ export default function changeProposalsRouter(app, validateCSRF) {
           'INSERT INTO xp_history (user_id, xp_change, reason) VALUES ($1, $2, $3)',
           [proposal.proposer_id, xpAmount, 'Change proposal approved by community']
         );
+        
+        // Clear caches when XP changes
+        leaderboardCache.delete('top10');
+        userStatsCache.delete(`user-stats-${proposal.proposer_id}`);
       }
 
       await client.query('COMMIT');
@@ -953,6 +958,10 @@ export default function changeProposalsRouter(app, validateCSRF) {
           'INSERT INTO xp_history (user_id, xp_change, reason, admin_id) VALUES ($1, $2, $3, $4)',
           [proposalData.proposer_id, xpAmount, 'Change proposal approved by admin', req.user.id]
         );
+        
+        // Clear caches when XP changes
+        leaderboardCache.delete('top10');
+        userStatsCache.delete(`user-stats-${proposalData.proposer_id}`);
       }
 
       await client.query('COMMIT');

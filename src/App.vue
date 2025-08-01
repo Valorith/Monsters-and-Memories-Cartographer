@@ -3900,7 +3900,7 @@ export default {
           }
         } else if (pendingChange.value.type === 'customPoi') {
           // Update custom POI position
-          const response = await fetch(`/api/custom-pois/${pendingChange.value.item.id}`, {
+          const response = await fetchWithCSRF(`/api/custom-pois/${pendingChange.value.item.id}`, {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json'
@@ -4569,7 +4569,7 @@ export default {
       }
       
       try {
-        const response = await fetch(`/api/custom-pois/${poi.id}`, {
+        const response = await fetchWithCSRF(`/api/custom-pois/${poi.id}`, {
           method: 'DELETE'
         })
         
