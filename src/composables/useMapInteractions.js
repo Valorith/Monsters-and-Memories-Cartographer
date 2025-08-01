@@ -429,6 +429,36 @@ export function useMapInteractions(scale, offsetX, offsetY) {
       ctx.scale(1.1, 1.1)
     }
     
+    // Draw pending proposal indicator
+    if (poi.has_pending_proposal) {
+      // Draw a subtle pulsing orange ring around the POI
+      const pulseTime = Date.now() / 1000
+      const pulseScale = 1 + Math.sin(pulseTime * 3) * 0.05  // Reduced pulse amplitude
+      const ringRadius = (iconSize / 2 + 6) * pulseScale  // Slightly smaller ring
+      
+      ctx.save()
+      ctx.strokeStyle = '#ff9800'
+      ctx.lineWidth = 2  // Thinner line
+      ctx.shadowColor = '#ff9800'
+      ctx.shadowBlur = 4  // Less glow
+      ctx.globalAlpha = 0.5  // More transparent
+      
+      ctx.beginPath()
+      ctx.arc(0, 0, ringRadius, 0, Math.PI * 2)
+      ctx.stroke()
+      
+      // Add small proposal icon
+      ctx.font = 'bold 16px sans-serif'
+      ctx.fillStyle = '#ff9800'
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)'
+      ctx.shadowBlur = 4
+      ctx.shadowOffsetX = 1
+      ctx.shadowOffsetY = 1
+      ctx.fillText('📋', iconSize / 2 + 5, -iconSize / 2 - 5)
+      
+      ctx.restore()
+    }
+    
     // Check if this POI has an image-based icon
     const hasImageIcon = poi.icon_type && (poi.icon_type === 'iconify' || poi.icon_type === 'fontawesome' || poi.icon_type === 'upload')
     

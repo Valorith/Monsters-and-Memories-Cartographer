@@ -19,6 +19,9 @@ import { scheduleAvatarCleanup, cleanupOrphanedAvatars, deleteAllUserAvatars } f
 import { mapsCache, leaderboardCache, userStatsCache, cacheMiddleware, etagMiddleware } from './src/utils/cache.js';
 import { optimizeImage, getExtensionForFormat } from './src/utils/image-optimizer.js';
 import poiTypesRouter from './src/api/poi-types.js';
+import itemsRouter from './src/api/items.js';
+import npcsRouter from './src/api/npcs.js';
+import changeProposalsRouter from './src/api/change-proposals.js';
 
 // Try to load sharp, but make it optional
 let sharp;
@@ -497,6 +500,15 @@ app.use('/api/', skipAdminRateLimit(apiLimiter));
 // POI Types routes
 poiTypesRouter(app, validateCSRF);
 
+// Items routes
+itemsRouter(app, validateCSRF);
+
+// NPCs routes
+npcsRouter(app, validateCSRF);
+
+// Change Proposals routes
+changeProposalsRouter(app, validateCSRF);
+
 // Get all maps - cached for 5 minutes
 app.get('/api/maps', 
   cacheMiddleware(mapsCache, 'maps-list', 5 * 60 * 1000), // 5 minutes
@@ -535,7 +547,21 @@ app.get('/api/maps/:id',
           END as display_created_by,
           pt.name as type_name,
           pt.icon_type as type_icon_type,
-          pt.icon_value as type_icon_value
+          pt.icon_value as type_icon_value,
+          p.npc_id,
+          p.item_id,
+          -- Check if POI has pending proposals (direct or via NPC)
+          EXISTS(
+            SELECT 1 FROM change_proposals cp 
+            WHERE cp.status = 'pending'
+            AND (
+              -- Direct POI proposals
+              (cp.target_type = 'poi' AND cp.target_id = p.id)
+              OR
+              -- NPC proposals for POI's associated NPC
+              (cp.target_type = 'npc' AND cp.target_id = (SELECT id FROM npcs WHERE npcid = p.npc_id))
+            )
+          ) as has_pending_proposal
         FROM pois p
         LEFT JOIN users u ON p.created_by_user_id = u.id
         LEFT JOIN poi_types pt ON p.type_id = pt.id
@@ -684,7 +710,29 @@ app.post('/api/pois', validateCSRF, async (req, res) => {
     }
   } catch (error) {
     console.error('Error saving POI:', error);
-    res.status(500).json({ error: 'Failed to save POI' });
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      hint: error.hint,
+      position: error.position,
+      stack: error.stack
+    });
+    
+    // In development, send detailed error to client
+    if (process.env.NODE_ENV === 'development') {
+      res.status(500).json({ 
+        error: 'Failed to save POI',
+        details: {
+          message: error.message,
+          code: error.code,
+          detail: error.detail,
+          hint: error.hint
+        }
+      });
+    } else {
+      res.status(500).json({ error: 'Failed to save POI' });
+    }
   }
 });
 
@@ -771,6 +819,55 @@ app.delete('/api/pois/:id', validateCSRF, async (req, res) => {
   }
 });
 
+// Get full POI data with associations
+app.get('/api/pois/:id/full', async (req, res) => {
+  try {
+    const poiId = req.params.id;
+    
+    const result = await pool.query(`
+      SELECT 
+        p.*,
+        COALESCE(u.nickname, u.name) as created_by_name,
+        m.name as map_name,
+        pt.name as type_name,
+        pt.icon_type,
+        pt.icon_value,
+        n.name as npc_name,
+        i.name as item_name,
+        i.icon_type as item_icon_type,
+        i.icon_value as item_icon_value,
+        -- Check if POI has pending proposals (direct or via NPC)
+        EXISTS(
+          SELECT 1 FROM change_proposals cp 
+          WHERE cp.status = 'pending'
+          AND (
+            -- Direct POI proposals
+            (cp.target_type = 'poi' AND cp.target_id = p.id)
+            OR
+            -- NPC proposals for POI's associated NPC
+            (cp.target_type = 'npc' AND cp.target_id = (SELECT id FROM npcs WHERE npcid = p.npc_id))
+          )
+        ) as has_pending_proposal
+      FROM pois p
+      LEFT JOIN users u ON p.created_by_user_id = u.id
+      LEFT JOIN maps m ON p.map_id = m.id
+      LEFT JOIN poi_types pt ON p.type_id = pt.id
+      LEFT JOIN npcs n ON p.npc_id = n.npcid
+      LEFT JOIN items i ON p.item_id = i.id
+      WHERE p.id = $1
+    `, [poiId]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'POI not found' });
+    }
+    
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error fetching full POI data:', error);
+    res.status(500).json({ error: 'Failed to fetch POI data' });
+  }
+});
+
 // Get all POIs for admin POI editor
 app.get('/api/pois/all', async (req, res) => {
   try {
@@ -833,7 +930,7 @@ app.put('/api/pois/batch-update', validateCSRF, async (req, res) => {
         
         // Allowed fields to update
         const allowedFields = [
-          'name', 'description', 'x', 'y', 'type_id', 'icon_size'
+          'name', 'description', 'x', 'y', 'type_id', 'icon_size', 'npc_id', 'item_id'
         ];
         
         for (const [field, value] of Object.entries(fields)) {
@@ -2667,6 +2764,8 @@ app.get('/api/custom-pois', async (req, res) => {
              cp.share_code_revoked,
              (SELECT COUNT(*) FROM shared_pois WHERE custom_poi_id = cp.id AND is_active = true) as share_count,
              sp.is_active as is_shared_active,
+             sp.invalidation_reason,
+             sp.published_poi_data,
              pt.name as type_name,
              pt.icon_type as type_icon_type,
              pt.icon_value as type_icon_value
@@ -2696,20 +2795,23 @@ app.get('/api/maps/:mapId/custom-pois', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT cp.*, COALESCE(u.nickname, u.name) as owner_name,
-        pp.vote_score,
-        (SELECT COUNT(*) FROM pending_poi_votes WHERE pending_poi_id = pp.id AND vote = 1) as upvotes,
-        (SELECT COUNT(*) FROM pending_poi_votes WHERE pending_poi_id = pp.id AND vote = -1) as downvotes,
+        chp.vote_score,
+        (SELECT COUNT(*) FROM change_proposal_votes WHERE proposal_id = chp.id AND vote = 1) as upvotes,
+        (SELECT COUNT(*) FROM change_proposal_votes WHERE proposal_id = chp.id AND vote = -1) as downvotes,
         sp.is_active as is_shared_active,
         pt.name as type_name,
         pt.icon_type as type_icon_type,
-        pt.icon_value as type_icon_value
+        pt.icon_value as type_icon_value,
+        cp.npc_id,
+        cp.item_id
       FROM custom_pois cp
       JOIN users u ON cp.user_id = u.id
-      LEFT JOIN pending_pois pp ON pp.custom_poi_id = cp.id
+      LEFT JOIN change_proposals chp ON chp.proposed_data->>'custom_poi_id' = cp.id::text 
+        AND chp.status = 'pending' AND chp.change_type = 'add_poi'
       LEFT JOIN shared_pois sp ON cp.id = sp.custom_poi_id AND sp.user_id = $2
       LEFT JOIN poi_types pt ON cp.type_id = pt.id
       WHERE cp.map_id = $1 
-        AND (cp.user_id = $2 OR (sp.user_id = $2 AND sp.is_active = true))
+        AND (cp.user_id = $2 OR (sp.user_id = $2))
     `, [req.params.mapId, req.user.id]);
     
     res.json(result.rows);
@@ -2725,16 +2827,16 @@ app.post('/api/custom-pois', validateCSRF, async (req, res) => {
     return res.status(401).json({ error: 'Not authenticated' });
   }
 
-  const { map_id, name, description, x, y, icon, label_visible, label_position, type_id } = req.body;
+  const { map_id, name, description, x, y, icon, label_visible, label_position, type_id, npc_id, item_id } = req.body;
 
   try {
     const result = await pool.query(
       `INSERT INTO custom_pois 
-       (user_id, map_id, name, description, x, y, icon, icon_size, label_visible, label_position, type_id) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
+       (user_id, map_id, name, description, x, y, icon, label_visible, label_position, type_id, npc_id, item_id) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) 
        RETURNING *`,
       [req.user.id, map_id, name, description, Math.round(x), Math.round(y), icon || '📍', 
-       48, label_visible !== false, label_position || 'bottom', type_id]
+       label_visible !== false, label_position || 'bottom', type_id, npc_id || null, item_id || null]
     );
     res.json(result.rows[0]);
   } catch (error) {
@@ -2749,7 +2851,7 @@ app.put('/api/custom-pois/:id', validateCSRF, async (req, res) => {
     return res.status(401).json({ error: 'Not authenticated' });
   }
 
-  const { name, description, icon, label_visible, label_position, x, y, type_id } = req.body;
+  const { name, description, icon, label_visible, label_position, x, y, type_id, npc_id, item_id } = req.body;
 
   try {
     // Check if user owns this POI
@@ -2770,10 +2872,11 @@ app.put('/api/custom-pois/:id', validateCSRF, async (req, res) => {
       `UPDATE custom_pois 
        SET name = $2, description = $3, icon = $4, 
            label_visible = $5, label_position = $6, 
-           x = $7, y = $8, type_id = $9, updated_at = CURRENT_TIMESTAMP
+           x = $7, y = $8, type_id = $9, npc_id = $10, item_id = $11, 
+           updated_at = CURRENT_TIMESTAMP
        WHERE id = $1 
        RETURNING *`,
-      [req.params.id, name, description, icon, label_visible, label_position, x, y, type_id]
+      [req.params.id, name, description, icon, label_visible, label_position, x, y, type_id, npc_id || null, item_id || null]
     );
     
     res.json(result.rows[0]);
@@ -2809,10 +2912,21 @@ app.delete('/api/custom-pois/:id', validateCSRF, async (req, res) => {
     // Begin transaction
     await pool.query('BEGIN');
 
-    // If pending, remove from pending_pois table first
+    // If pending, remove from change proposals table
     if (status === 'pending') {
-      await pool.query('DELETE FROM pending_poi_votes WHERE pending_poi_id IN (SELECT id FROM pending_pois WHERE custom_poi_id = $1)', [req.params.id]);
-      await pool.query('DELETE FROM pending_pois WHERE custom_poi_id = $1', [req.params.id]);
+      // Delete votes first
+      await pool.query(`
+        DELETE FROM change_proposal_votes 
+        WHERE proposal_id IN (
+          SELECT id FROM change_proposals 
+          WHERE proposed_data->>'custom_poi_id' = $1
+        )`, [req.params.id]);
+      
+      // Delete the proposal
+      await pool.query(
+        `DELETE FROM change_proposals WHERE proposed_data->>'custom_poi_id' = $1`,
+        [req.params.id]
+      );
       
       // Deduct XP for removing from pending
       const pendingRemoveXP = await getXPConfig('poi_pending_remove');
@@ -3233,18 +3347,42 @@ app.post('/api/custom-pois/:id/publish', validateCSRF, async (req, res) => {
       ['pending', req.params.id]
     );
 
-    // Create pending POI entry with initial vote score of 1
-    const pendingResult = await pool.query(
-      `INSERT INTO pending_pois (custom_poi_id, user_id, map_id, name, description, x, y, type_id, icon, icon_size, label_visible, label_position, vote_score)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 1)
-       RETURNING id`,
-      [poi.id, req.user.id, poi.map_id, poi.name, poi.description, poi.x, poi.y, poi.type_id, poi.icon, 48, poi.label_visible, poi.label_position]
+    // Create change proposal for new POI
+    const proposalResult = await pool.query(
+      `INSERT INTO change_proposals (
+        change_type, target_type, target_id, proposer_id, 
+        current_data, proposed_data, notes, vote_score, status
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING id`,
+      [
+        'add_poi', 'poi', null, req.user.id,
+        null,
+        JSON.stringify({
+          map_id: poi.map_id,
+          name: poi.name,
+          description: poi.description,
+          x: poi.x,
+          y: poi.y,
+          type_id: poi.type_id,
+          icon: poi.icon,
+          icon_size: poi.icon_size,
+          label_visible: poi.label_visible,
+          label_position: poi.label_position,
+          npc_id: poi.npc_id,
+          item_id: poi.item_id,
+          custom_poi_id: poi.id
+        }),
+        'New POI submission',
+        0,
+        'pending'
+      ]
     );
 
     // Add creator's automatic upvote
     await pool.query(
-      'INSERT INTO pending_poi_votes (pending_poi_id, user_id, vote) VALUES ($1, $2, 1)',
-      [pendingResult.rows[0].id, req.user.id]
+      'INSERT INTO change_proposal_votes (proposal_id, user_id, vote) VALUES ($1, $2, 1)',
+      [proposalResult.rows[0].id, req.user.id]
     );
 
     await pool.query('COMMIT');

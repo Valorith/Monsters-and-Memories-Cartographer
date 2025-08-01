@@ -31,6 +31,9 @@ dist-ssr
 *.sln
 *.sw?
 
+# Claude AI configuration
+.claude/
+
 # User uploaded files
 public/avatars/*
 !public/avatars/.gitkeep

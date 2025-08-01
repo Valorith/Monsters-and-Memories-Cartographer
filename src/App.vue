@@ -94,7 +94,7 @@
       />
     </div>
     
-    <div class="map-container" ref="mapContainer" @click="handleMapClick" @contextmenu.prevent="handleRightClick" @click.capture="hideContextMenu">
+    <div class="map-container" ref="mapContainer" @click="handleMapClick" @contextmenu.prevent="handleContextMenu" @click.capture="hideContextMenu">
       <canvas 
         ref="mapCanvas"
         class="map-canvas"
@@ -136,12 +136,28 @@
       <!-- Pending Change Confirmation -->
       <div v-if="pendingChange" class="pending-change-overlay">
         <div class="pending-change-card">
-          <h3>Confirm Position Change</h3>
-          <p>Move {{ pendingChange.type === 'poi' ? 'POI' : 'Connection' }} to new position?</p>
+          <h3>{{ pendingChange.item.isProposalDrag ? 'Submit Move Proposal' : 'Confirm Position Change' }}</h3>
+          <p v-if="pendingChange.item.isProposalDrag">
+            Submit a proposal to move "{{ pendingChange.item.name || 'POI' }}" to the new location?
+            <br><small style="color: #999;">This will require community voting before the change is applied.</small>
+          </p>
+          <p v-else>
+            Move {{ pendingChange.type === 'poi' ? 'POI' : pendingChange.type === 'customPoi' ? 'Custom POI' : 'Connection' }} to new position?
+          </p>
           <div class="pending-change-buttons">
-            <button @click="confirmPendingChange" class="confirm-btn">✓ Confirm</button>
+            <button @click="confirmPendingChange" class="confirm-btn">
+              {{ pendingChange.item.isProposalDrag ? '✓ Submit Proposal' : '✓ Confirm' }}
+            </button>
             <button @click="cancelPendingChange" class="cancel-btn">✗ Cancel</button>
           </div>
+        </div>
+      </div>
+      
+      <!-- Proposal Preview Loading -->
+      <div v-if="isLoadingProposalPreview" class="proposal-preview-loading">
+        <div class="loading-content">
+          <div class="loading-spinner"></div>
+          <p>Loading proposal preview...</p>
         </div>
       </div>
     </div>
@@ -155,10 +171,16 @@
       :isAdmin="isAdmin"
       :isLeftSide="popupIsLeftSide"
       :currentUserId="user?.id"
+      :isAuthenticated="isAuthenticated"
       @close="selectedPOI = null"
       @delete="deletePOI"
       @confirmUpdate="handlePOIUpdate"
       @publish="publishCustomPOI"
+      @propose-edit="showEditProposalDialog"
+      @propose-delete="showDeleteProposalDialog"
+      @propose-loot="showLootProposalDialog"
+      @propose-npc-edit="showNPCEditProposal"
+      @propose-item-edit="showItemEditProposal"
     />
     
     <!-- Toast Container -->
@@ -221,11 +243,90 @@
       @cancel="confirmDialog.onCancel"
     />
     
+    <!-- POI Edit Proposal Dialog -->
+    <POIEditProposalDialog
+      :visible="editProposalDialog.visible"
+      :poi="editProposalDialog.poi"
+      @close="editProposalDialog.visible = false"
+      @submitted="handleProposalSubmitted"
+    />
+    
+    <!-- POI Delete Proposal Dialog -->
+    <POIDeleteProposalDialog
+      :visible="deleteProposalDialog.visible"
+      :poi="deleteProposalDialog.poi"
+      @close="deleteProposalDialog.visible = false"
+      @submitted="handleProposalSubmitted"
+    />
+    
+    <!-- POI Loot Proposal Dialog -->
+    <POILootProposalDialog
+      :visible="lootProposalDialog.visible"
+      :poi="lootProposalDialog.poi"
+      @close="lootProposalDialog.visible = false"
+      @submitted="handleProposalSubmitted"
+    />
+    
+    <!-- Item Proposal Dialog -->
+    <ItemProposalDialog
+      :visible="itemProposalDialog.visible"
+      @close="itemProposalDialog.visible = false"
+      @submitted="handleProposalSubmitted"
+    />
+    
+    <!-- NPC Proposal Dialog -->
+    <NPCProposalDialog
+      :visible="npcProposalDialog.visible"
+      @close="npcProposalDialog.visible = false"
+      @submitted="handleProposalSubmitted"
+    />
+    
+    <!-- NPC Edit Proposal Dialog -->
+    <NPCEditProposalDialog
+      :visible="npcEditProposalDialog.visible"
+      :npc="npcEditProposalDialog.npc"
+      @close="npcEditProposalDialog.visible = false"
+      @submitted="handleProposalSubmitted"
+    />
+    
+    <ItemEditProposalDialog
+      :visible="itemEditProposalDialog.visible"
+      :item="itemEditProposalDialog.item"
+      @close="itemEditProposalDialog.visible = false"
+      @submitted="handleProposalSubmitted"
+    />
+    
+    <!-- Item Search Dialog -->
+    <ItemSearchDialog
+      :visible="itemSearchDialog.visible"
+      @close="itemSearchDialog.visible = false"
+      @select="handleItemSelected"
+    />
+    
     <div class="controls">
       <button class="control-btn" @click="zoomIn" title="Zoom In">+</button>
       <button class="control-btn" @click="zoomOut" title="Zoom Out">-</button>
       <button class="control-btn" @click="resetView" title="Home">🏠</button>
       <button v-if="isAdmin" class="control-btn admin-btn" @click="showMapManager = true" title="Map Manager">🗺️</button>
+      <div v-if="isAuthenticated && !isAdmin" class="control-btn-dropdown">
+        <button class="control-btn proposal-btn" @click="toggleItemDropdown" title="Item Proposals">
+          ⚔️
+          <span class="dropdown-arrow">▼</span>
+        </button>
+        <div v-if="itemDropdownVisible" class="control-dropdown-menu" @click.stop>
+          <button class="dropdown-item" @click="showItemProposalDialog">
+            <span class="dropdown-icon">➕</span>
+            Propose New Item
+          </button>
+          <button class="dropdown-item" @click="showItemEditSelection">
+            <span class="dropdown-icon">✏️</span>
+            Edit Existing Item
+          </button>
+        </div>
+      </div>
+      <button v-if="isAuthenticated && !isAdmin" class="control-btn proposal-btn" @click="showNPCProposalDialog" title="Propose New NPC">
+        💀+
+      </button>
       <div class="zoom-indicator">
         <span>{{ zoomPercent }}%</span>
       </div>
@@ -270,6 +371,14 @@ import ContextMenu from './components/ContextMenu.vue'
 import CustomPOIDialog from './components/CustomPOIDialog.vue'
 import XPBar from './components/XPBar.vue'
 import POISearch from './components/POISearch.vue'
+import POIEditProposalDialog from './components/POIEditProposalDialog.vue'
+import POIDeleteProposalDialog from './components/POIDeleteProposalDialog.vue'
+import POILootProposalDialog from './components/POILootProposalDialog.vue'
+import ItemProposalDialog from './components/ItemProposalDialog.vue'
+import ItemEditProposalDialog from './components/ItemEditProposalDialog.vue'
+import ItemSearchDialog from './components/ItemSearchDialog.vue'
+import NPCProposalDialog from './components/NPCProposalDialog.vue'
+import NPCEditProposalDialog from './components/NPCEditProposalDialog.vue'
 import { useToast } from './composables/useToast'
 import { useAuth } from './composables/useAuth'
 import { useCSRF } from './composables/useCSRF'
@@ -298,7 +407,15 @@ export default {
     ContextMenu,
     CustomPOIDialog,
     XPBar,
-    POISearch
+    POISearch,
+    POIEditProposalDialog,
+    POIDeleteProposalDialog,
+    POILootProposalDialog,
+    ItemProposalDialog,
+    ItemEditProposalDialog,
+    ItemSearchDialog,
+    NPCProposalDialog,
+    NPCEditProposalDialog
   },
   setup() {
     const mapCanvas = ref(null)
@@ -336,6 +453,11 @@ export default {
     const highlightedPOI = ref(null)
     const highlightStartTime = ref(0)
     
+    // Proposal Preview
+    const proposalPreviewPOIs = ref([])
+    const proposalPreviewConnection = ref(null)
+    const isLoadingProposalPreview = ref(false)
+    
     // Toast and dialog
     const { success, error, warning, info } = useToast()
     const confirmDialog = ref({
@@ -346,6 +468,44 @@ export default {
       cancelText: 'Cancel',
       onConfirm: () => {},
       onCancel: () => {}
+    })
+    
+    // Proposal dialogs
+    const editProposalDialog = ref({
+      visible: false,
+      poi: null
+    })
+    
+    const deleteProposalDialog = ref({
+      visible: false,
+      poi: null
+    })
+    
+    const lootProposalDialog = ref({
+      visible: false,
+      poi: null
+    })
+    
+    const itemProposalDialog = ref({
+      visible: false
+    })
+    
+    const npcProposalDialog = ref({
+      visible: false
+    })
+    
+    const npcEditProposalDialog = ref({
+      visible: false,
+      npc: null
+    })
+    
+    const itemEditProposalDialog = ref({
+      visible: false,
+      item: null
+    })
+    
+    const itemSearchDialog = ref({
+      visible: false
     })
     
     // Authentication
@@ -370,6 +530,9 @@ export default {
     
     // User dropdown state
     const showUserDropdown = ref(false)
+    
+    // Item dropdown state
+    const itemDropdownVisible = ref(false)
     
     const {
       scale,
@@ -660,6 +823,11 @@ export default {
       
       // Add custom POIs with prefixed IDs to avoid collisions
       customPOIs.value.forEach(poi => {
+        // Skip the temporarily hidden custom POI
+        if (hiddenCustomPOIId.value && poi.id === hiddenCustomPOIId.value) {
+          return
+        }
+        
         const key = `${poi.x},${poi.y}`
         // Prefix custom POI IDs to ensure uniqueness
         const customPOI = {
@@ -685,6 +853,63 @@ export default {
       // Group all POIs when zoomed out and store for click detection
       currentGroupedPOIs = groupPOIsWhenZoomedOut(allPOIs)
       
+      // Draw dotted line during proposal drag (before POIs so it appears behind)
+      if (draggedItem.value && draggedItem.value.isProposalDrag && dragItemType.value === 'poi') {
+        const originalCanvasPos = imageToCanvas(originalPosition.value.x, originalPosition.value.y)
+        const currentCanvasPos = imageToCanvas(draggedItem.value.x, draggedItem.value.y)
+        
+        // Draw dotted line from original to current position
+        ctx.value.save()
+        
+        // Draw white background line for contrast
+        ctx.value.strokeStyle = 'rgba(255, 255, 255, 0.9)'
+        ctx.value.lineWidth = 6
+        ctx.value.setLineDash([12, 6])
+        ctx.value.beginPath()
+        ctx.value.moveTo(originalCanvasPos.x, originalCanvasPos.y)
+        ctx.value.lineTo(currentCanvasPos.x, currentCanvasPos.y)
+        ctx.value.stroke()
+        
+        // Draw orange line on top
+        ctx.value.strokeStyle = '#FF6B00'
+        ctx.value.lineWidth = 4
+        ctx.value.setLineDash([12, 6])
+        ctx.value.beginPath()
+        ctx.value.moveTo(originalCanvasPos.x, originalCanvasPos.y)
+        ctx.value.lineTo(currentCanvasPos.x, currentCanvasPos.y)
+        ctx.value.stroke()
+        
+        ctx.value.restore()
+      }
+      
+      // Draw dotted line for pending change (after mouse up)
+      if (pendingChange.value && pendingChange.value.item.isProposalDrag) {
+        const originalCanvasPos = imageToCanvas(pendingChange.value.originalPosition.x, pendingChange.value.originalPosition.y)
+        const newCanvasPos = imageToCanvas(pendingChange.value.newPosition.x, pendingChange.value.newPosition.y)
+        
+        // Draw dotted line from original to new position
+        ctx.value.save()
+        
+        // Draw white background line for contrast
+        ctx.value.strokeStyle = 'rgba(255, 255, 255, 0.9)'
+        ctx.value.lineWidth = 6
+        ctx.value.setLineDash([12, 6])
+        ctx.value.beginPath()
+        ctx.value.moveTo(originalCanvasPos.x, originalCanvasPos.y)
+        ctx.value.lineTo(newCanvasPos.x, newCanvasPos.y)
+        ctx.value.stroke()
+        
+        // Draw orange line on top
+        ctx.value.strokeStyle = '#FF6B00'
+        ctx.value.lineWidth = 4
+        ctx.value.setLineDash([12, 6])
+        ctx.value.beginPath()
+        ctx.value.moveTo(originalCanvasPos.x, originalCanvasPos.y)
+        ctx.value.lineTo(newCanvasPos.x, newCanvasPos.y)
+        ctx.value.stroke()
+        
+        ctx.value.restore()
+      }
       
       // Draw all POIs - regular POIs first, then custom POIs on top
       // This ensures custom POIs are always visible
@@ -706,9 +931,218 @@ export default {
         drawPOI(ctx.value, poi, isDragging || isPending)
       })
       
+      // Draw proposal preview connection arrow
+      if (proposalPreviewConnection.value) {
+        const fromCanvas = imageToCanvas(proposalPreviewConnection.value.from.x, proposalPreviewConnection.value.from.y)
+        const toCanvas = imageToCanvas(proposalPreviewConnection.value.to.x, proposalPreviewConnection.value.to.y)
+        
+        ctx.value.save()
+        ctx.value.strokeStyle = '#FFD700'
+        ctx.value.lineWidth = 3
+        ctx.value.setLineDash([10, 5])
+        
+        // Draw arrow line
+        ctx.value.beginPath()
+        ctx.value.moveTo(fromCanvas.x, fromCanvas.y)
+        ctx.value.lineTo(toCanvas.x, toCanvas.y)
+        ctx.value.stroke()
+        
+        // Draw arrowhead
+        const angle = Math.atan2(toCanvas.y - fromCanvas.y, toCanvas.x - fromCanvas.x)
+        const arrowLength = 20
+        const arrowAngle = Math.PI / 6
+        
+        ctx.value.beginPath()
+        ctx.value.moveTo(toCanvas.x, toCanvas.y)
+        ctx.value.lineTo(
+          toCanvas.x - arrowLength * Math.cos(angle - arrowAngle),
+          toCanvas.y - arrowLength * Math.sin(angle - arrowAngle)
+        )
+        ctx.value.moveTo(toCanvas.x, toCanvas.y)
+        ctx.value.lineTo(
+          toCanvas.x - arrowLength * Math.cos(angle + arrowAngle),
+          toCanvas.y - arrowLength * Math.sin(angle + arrowAngle)
+        )
+        ctx.value.stroke()
+        
+        ctx.value.restore()
+      }
+      
+      // Draw proposal preview POIs
+      proposalPreviewPOIs.value.forEach(poi => {
+        ctx.value.save()
+        
+        // Make current POI semi-transparent
+        if (poi.is_current) {
+          ctx.value.globalAlpha = 0.5
+        }
+        
+        // Handle deletion POIs with special styling
+        if (poi.is_deletion) {
+          // Draw red deletion indicator
+          const canvasPos = imageToCanvas(poi.x, poi.y)
+          
+          // Draw pulsing red circle around POI
+          const pulseTime = Date.now() / 1000
+          const pulseScale = 1 + Math.sin(pulseTime * 3) * 0.1
+          const ringRadius = 30 * pulseScale
+          
+          ctx.value.save()
+          ctx.value.translate(canvasPos.x, canvasPos.y)
+          
+          // Red background circle
+          ctx.value.beginPath()
+          ctx.value.arc(0, 0, ringRadius + 5, 0, Math.PI * 2)
+          ctx.value.fillStyle = 'rgba(255, 0, 0, 0.2)'
+          ctx.value.fill()
+          
+          // Red ring
+          ctx.value.strokeStyle = '#ff0000'
+          ctx.value.lineWidth = 3
+          ctx.value.shadowColor = '#ff0000'
+          ctx.value.shadowBlur = 10
+          ctx.value.beginPath()
+          ctx.value.arc(0, 0, ringRadius, 0, Math.PI * 2)
+          ctx.value.stroke()
+          
+          // Draw X mark
+          ctx.value.strokeStyle = '#ff0000'
+          ctx.value.lineWidth = 4
+          ctx.value.shadowColor = 'rgba(0, 0, 0, 0.8)'
+          ctx.value.shadowBlur = 4
+          ctx.value.beginPath()
+          const xSize = 15
+          ctx.value.moveTo(-xSize, -xSize)
+          ctx.value.lineTo(xSize, xSize)
+          ctx.value.moveTo(xSize, -xSize)
+          ctx.value.lineTo(-xSize, xSize)
+          ctx.value.stroke()
+          
+          ctx.value.restore()
+        }
+        
+        // Draw the POI
+        drawPOI(ctx.value, poi, false)
+        
+        // Add special styling for proposal POIs
+        const canvasPos = imageToCanvas(poi.x, poi.y)
+        const iconSize = (poi.icon_size || 24) * scale.value
+        
+        if (poi.is_proposed) {
+          // Draw pulsing green border for proposed POI
+          const time = Date.now() / 1000
+          const pulse = Math.sin(time * 3) * 0.3 + 0.7
+          
+          ctx.value.strokeStyle = `rgba(76, 175, 80, ${pulse})`
+          ctx.value.lineWidth = 3
+          ctx.value.beginPath()
+          ctx.value.arc(canvasPos.x, canvasPos.y, iconSize / 2 + 8, 0, Math.PI * 2)
+          ctx.value.stroke()
+          
+          // Add "PROPOSED" label with better readability
+          const labelY = canvasPos.y - iconSize / 2 - 20
+          const labelText = 'PROPOSED'
+          
+          // Set up text properties
+          ctx.value.font = 'bold 14px Arial'
+          ctx.value.textAlign = 'center'
+          ctx.value.textBaseline = 'middle'
+          
+          // Measure text for background
+          const metrics = ctx.value.measureText(labelText)
+          const padding = 6
+          const bgWidth = metrics.width + padding * 2
+          const bgHeight = 20
+          
+          // Draw background pill
+          ctx.value.fillStyle = 'rgba(0, 0, 0, 0.8)'
+          ctx.value.beginPath()
+          ctx.value.roundRect(canvasPos.x - bgWidth / 2, labelY - bgHeight / 2, bgWidth, bgHeight, bgHeight / 2)
+          ctx.value.fill()
+          
+          // Draw white border
+          ctx.value.strokeStyle = 'rgba(255, 255, 255, 0.3)'
+          ctx.value.lineWidth = 1
+          ctx.value.stroke()
+          
+          // Draw text in white for better contrast
+          ctx.value.fillStyle = '#FFFFFF'
+          ctx.value.fillText(labelText, canvasPos.x, labelY)
+        } else if (poi.is_current) {
+          // Draw red border for current POI
+          ctx.value.strokeStyle = 'rgba(244, 67, 54, 0.8)'
+          ctx.value.lineWidth = 2
+          ctx.value.setLineDash([5, 5])
+          ctx.value.beginPath()
+          ctx.value.arc(canvasPos.x, canvasPos.y, iconSize / 2 + 8, 0, Math.PI * 2)
+          ctx.value.stroke()
+          
+          // Add "CURRENT" label with better readability
+          const currentLabelY = canvasPos.y - iconSize / 2 - 20
+          const currentLabelText = 'CURRENT'
+          
+          // Set up text properties
+          ctx.value.font = 'bold 14px Arial'
+          ctx.value.textAlign = 'center'
+          ctx.value.textBaseline = 'middle'
+          
+          // Measure text for background
+          const currentMetrics = ctx.value.measureText(currentLabelText)
+          const currentPadding = 6
+          const currentBgWidth = currentMetrics.width + currentPadding * 2
+          const currentBgHeight = 20
+          
+          // Draw background pill
+          ctx.value.fillStyle = 'rgba(0, 0, 0, 0.8)'
+          ctx.value.beginPath()
+          ctx.value.roundRect(canvasPos.x - currentBgWidth / 2, currentLabelY - currentBgHeight / 2, currentBgWidth, currentBgHeight, currentBgHeight / 2)
+          ctx.value.fill()
+          
+          // Draw white border
+          ctx.value.strokeStyle = 'rgba(255, 255, 255, 0.3)'
+          ctx.value.lineWidth = 1
+          ctx.value.stroke()
+          
+          // Draw text in white for better contrast
+          ctx.value.fillStyle = '#FFFFFF'
+          ctx.value.fillText(currentLabelText, canvasPos.x, currentLabelY)
+        }
+        
+        ctx.value.restore()
+      })
+      
       // Draw highlight effect for navigated POI
       if (highlightedPOI.value) {
         drawHighlightEffect(ctx.value, highlightedPOI.value)
+      }
+      
+      // Draw proposal indicator while dragging
+      if (draggedItem.value && draggedItem.value.isProposalDrag && dragItemType.value === 'poi') {
+        const canvasPos = imageToCanvas(draggedItem.value.x, draggedItem.value.y)
+        
+        ctx.value.save()
+        ctx.value.font = 'bold 12px Arial'
+        ctx.value.textAlign = 'center'
+        ctx.value.textBaseline = 'bottom'
+        
+        // Draw background for text
+        const text = 'PROPOSAL'
+        const metrics = ctx.value.measureText(text)
+        const padding = 4
+        const bgWidth = metrics.width + padding * 2
+        const bgHeight = 16
+        const textY = canvasPos.y - 30
+        
+        ctx.value.fillStyle = 'rgba(255, 152, 0, 0.9)'
+        ctx.value.beginPath()
+        ctx.value.roundRect(canvasPos.x - bgWidth / 2, textY - bgHeight, bgWidth, bgHeight, 3)
+        ctx.value.fill()
+        
+        // Draw text
+        ctx.value.fillStyle = '#FFFFFF'
+        ctx.value.fillText(text, canvasPos.x, textY)
+        
+        ctx.value.restore()
       }
       
       // Draw all POI tooltips last to ensure they appear on top
@@ -1382,6 +1816,17 @@ export default {
       }
     }
     
+    const handleContextMenu = (e) => {
+      // Prevent context menu while dragging
+      if (draggedItem.value || isDragging.value || pendingChange.value) {
+        e.preventDefault()
+        e.stopPropagation()
+        e.stopImmediatePropagation()
+        return false
+      }
+      handleRightClick(e)
+    }
+    
     const handleRightClick = (e) => {
       e.preventDefault()
       
@@ -1574,6 +2019,11 @@ export default {
     }
     
     const handleMouseDown = (e) => {
+      // Only handle left mouse button
+      if (e.button !== 0) {
+        return
+      }
+      
       // Check if Alt key is held for dragging
       if (e.altKey && !e.shiftKey) {
         const rect = mapCanvas.value.getBoundingClientRect()
@@ -1597,10 +2047,14 @@ export default {
             customPOI.status !== 'pending'
           )
           
-          // Check if it's a regular POI and user is admin
+          // Check if it's a regular POI
           const isRegularPOI = currentMapData.value.pois.some(poi => poi.id === clickedPOI.id)
           
-          if (isCustomPOI || (isAdmin.value && isRegularPOI)) {
+          // Allow dragging if:
+          // 1. It's a custom POI owned by the user
+          // 2. It's a regular POI and user is admin
+          // 3. It's a regular POI and user is authenticated (for proposals)
+          if (isCustomPOI || (isAdmin.value && isRegularPOI) || (isAuthenticated.value && isRegularPOI)) {
             // Use original position if available (for grouped POIs)
             const poiX = clickedPOI.originalX !== undefined ? clickedPOI.originalX : clickedPOI.x
             const poiY = clickedPOI.originalY !== undefined ? clickedPOI.originalY : clickedPOI.y
@@ -1615,6 +2069,8 @@ export default {
               x: poiX,
               y: poiY
             }
+            // Track if this is a proposal drag (non-admin dragging regular POI)
+            draggedItem.value.isProposalDrag = isRegularPOI && !isAdmin.value && isAuthenticated.value
             return
           }
         }
@@ -1804,7 +2260,12 @@ export default {
       render()
     }
     
-    const handleMouseUp = () => {
+    const handleMouseUp = (e) => {
+      // Ignore right-click mouse up events
+      if (e && e.button === 2) {
+        return
+      }
+      
       // Reset potential drag tracking
       potentialDragItem.value = null
       dragHintShown.value = false
@@ -2392,7 +2853,8 @@ export default {
       
       // If we still don't have an icon, fallback to POI's direct icon or default
       if (!icon) {
-        icon = poi.icon || '📍'
+        // For proposal previews, don't add a default pin icon
+        icon = poi.icon || (poi.is_proposal ? '' : '📍')
       }
       
       return {
@@ -3182,6 +3644,129 @@ export default {
       }
     }
     
+    const showEditProposalDialog = async (poi) => {
+      // Check if POI already has a pending proposal
+      if (poi.has_pending_proposal) {
+        warning('This POI already has a pending change proposal')
+        return
+      }
+      
+      // Fetch full POI data with associations
+      try {
+        const response = await fetch(`/api/pois/${poi.id}/full`)
+        if (response.ok) {
+          const fullPOI = await response.json()
+          editProposalDialog.value.poi = fullPOI
+          editProposalDialog.value.visible = true
+        } else {
+          error('Failed to load POI details')
+        }
+      } catch (err) {
+        error('Failed to load POI details')
+      }
+    }
+    
+    const showDeleteProposalDialog = async (poi) => {
+      // Check if POI already has a pending proposal
+      if (poi.has_pending_proposal) {
+        warning('This POI already has a pending change proposal')
+        return
+      }
+      
+      deleteProposalDialog.value.poi = poi
+      deleteProposalDialog.value.visible = true
+    }
+    
+    const showLootProposalDialog = async (poi) => {
+      // Check if POI already has a pending proposal
+      if (poi.has_pending_proposal) {
+        warning('This POI already has a pending change proposal')
+        return
+      }
+      
+      // Ensure POI has an NPC associated
+      if (!poi.npc_id) {
+        warning('This POI must have an NPC associated to propose loot')
+        return
+      }
+      
+      // Fetch full POI data with NPC info
+      try {
+        const response = await fetch(`/api/pois/${poi.id}/full`)
+        if (!response.ok) throw new Error('Failed to fetch POI data')
+        const fullPoiData = await response.json()
+        
+        console.log('Full POI data for loot proposal:', fullPoiData)
+        
+        lootProposalDialog.value.poi = fullPoiData
+        lootProposalDialog.value.visible = true
+      } catch (err) {
+        error('Failed to load POI data')
+        console.error('Error fetching POI:', err)
+      }
+    }
+    
+    const showItemProposalDialog = () => {
+      itemProposalDialog.value.visible = true
+      itemDropdownVisible.value = false
+    }
+    
+    // Item dropdown methods
+    const toggleItemDropdown = () => {
+      itemDropdownVisible.value = !itemDropdownVisible.value
+    }
+    
+    const showItemEditSelection = () => {
+      itemSearchDialog.value.visible = true
+      itemDropdownVisible.value = false
+    }
+    
+    const handleItemSelected = (item) => {
+      // Show the edit proposal dialog with the selected item
+      itemEditProposalDialog.value.item = item
+      itemEditProposalDialog.value.visible = true
+    }
+    
+    const showNPCProposalDialog = () => {
+      npcProposalDialog.value.visible = true
+    }
+    
+    const showNPCEditProposal = async (poi) => {
+      // Check if POI has an NPC associated
+      if (!poi.npc_id) {
+        warning('This POI must have an NPC associated to propose edits')
+        return
+      }
+      
+      // Fetch full NPC data
+      try {
+        const response = await fetch(`/api/npcs/${poi.npc_id}`)
+        if (response.ok) {
+          const npcData = await response.json()
+          npcEditProposalDialog.value.npc = npcData
+          npcEditProposalDialog.value.visible = true
+        } else {
+          error('Failed to load NPC details')
+        }
+      } catch (err) {
+        error('Failed to load NPC details')
+      }
+    }
+    
+    const showItemEditProposal = async (item) => {
+      // Item data is already passed from the tooltip
+      itemEditProposalDialog.value.item = item
+      itemEditProposalDialog.value.visible = true
+    }
+    
+    const handleProposalSubmitted = async () => {
+      // Refresh the POI data to show pending proposal indicator
+      await loadSelectedMap()
+      
+      // Close POI popup if open
+      selectedPOI.value = null
+    }
+    
     const deleteConnection = async (connectionId) => {
       const map = maps.value[selectedMapIndex.value]
       
@@ -3263,12 +3848,56 @@ export default {
       
       try {
         if (pendingChange.value.type === 'poi') {
-          // Update POI position in database
-          await poisAPI.save({
-            ...pendingChange.value.item,
-            x: Math.round(pendingChange.value.newPosition.x),
-            y: Math.round(pendingChange.value.newPosition.y)
-          })
+          // Check if this is a proposal drag
+          if (pendingChange.value.item.isProposalDrag) {
+            // Create a move proposal instead of directly updating
+            const poi = pendingChange.value.item
+            const proposalData = {
+              change_type: 'move_poi',
+              target_type: 'poi',
+              target_id: poi.id,
+              current_data: {
+                poi_id: poi.id,
+                x: pendingChange.value.originalPosition.x,
+                y: pendingChange.value.originalPosition.y,
+                name: poi.name
+              },
+              proposed_data: {
+                poi_id: poi.id,
+                x: Math.round(pendingChange.value.newPosition.x),
+                y: Math.round(pendingChange.value.newPosition.y),
+                name: poi.name,
+                type_id: poi.type_id,
+                map_id: map.id
+              }
+            }
+            
+            const response = await fetchWithCSRF('/api/change-proposals', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(proposalData)
+            })
+            
+            if (!response.ok) {
+              const error = await response.json()
+              throw new Error(error.error || 'Failed to create move proposal')
+            }
+            
+            success(`Move proposal for "${poi.name}" submitted for community voting`)
+            
+            // Reset the POI position to original since it's just a proposal
+            pendingChange.value.item.x = pendingChange.value.originalPosition.x
+            pendingChange.value.item.y = pendingChange.value.originalPosition.y
+          } else {
+            // Admin direct update
+            await poisAPI.save({
+              ...pendingChange.value.item,
+              x: Math.round(pendingChange.value.newPosition.x),
+              y: Math.round(pendingChange.value.newPosition.y)
+            })
+          }
         } else if (pendingChange.value.type === 'customPoi') {
           // Update custom POI position
           const response = await fetch(`/api/custom-pois/${pendingChange.value.item.id}`, {
@@ -3420,9 +4049,16 @@ export default {
           })
         }
         
+        // Show appropriate success message
+        const wasProposalDrag = pendingChange.value?.item?.isProposalDrag
+        
         pendingChange.value = null
         render()
-        success(`${itemType} "${itemName}" moved successfully`)
+        
+        if (!wasProposalDrag) {
+          success(`${itemType} "${itemName}" moved successfully`)
+        }
+        // Proposal success message is already shown in the proposal branch
       } catch (err) {
         console.error('Failed to save position change:', err)
         error(`Failed to save position change: ${err.message || 'Database error'}`)
@@ -3613,6 +4249,8 @@ export default {
     }, { deep: true })
     
     let animationFrameId = null
+    let globalContextMenuHandler = null
+    let globalMouseUpHandler = null
     
     const animate = () => {
       render()
@@ -3977,6 +4615,16 @@ export default {
       if (isAuthenticated.value) {
         loadCustomPOIs()
       }
+      // Clear proposal preview when changing maps
+      proposalPreviewPOIs.value = []
+      proposalPreviewConnection.value = null
+      hiddenCustomPOIId.value = null
+      
+      // Clear temporary pending proposal marking
+      if (tempPendingProposalPOI.value) {
+        tempPendingProposalPOI.value.has_pending_proposal = false
+        tempPendingProposalPOI.value = null
+      }
     })
     
     // Watch for user changes to ensure non-admins can't have admin mode
@@ -4011,9 +4659,340 @@ export default {
       }
     }
     
+    // Store custom POI ID to hide temporarily
+    const hiddenCustomPOIId = ref(null)
+    // Store POI that we temporarily marked as having pending proposal
+    const tempPendingProposalPOI = ref(null)
+    
+    // Show proposal preview on the map
+    const showProposalPreview = (proposed, current, preview) => {
+      proposalPreviewPOIs.value = []
+      hiddenCustomPOIId.value = null // Clear any previously hidden POI
+      
+      // Clear any previous temporary pending proposal marking
+      if (tempPendingProposalPOI.value) {
+        tempPendingProposalPOI.value.has_pending_proposal = false
+        tempPendingProposalPOI.value = null
+      }
+      
+      // Ensure canvas is ready
+      if (!mapCanvas.value) {
+        console.error('Map canvas not ready for proposal preview')
+        return
+      }
+      
+      // Determine center point and zoom level
+      const centerX = mapCanvas.value.width / 2
+      const centerY = mapCanvas.value.height / 2
+      
+      let focusX = proposed.x
+      let focusY = proposed.y
+      let targetScale = 1.5
+      
+      // For move proposals, center between current and proposed locations
+      if (preview.changeType === 'move_poi' && current) {
+        focusX = (current.x + proposed.x) / 2
+        focusY = (current.y + proposed.y) / 2
+        
+        // Calculate appropriate zoom to fit both points
+        const dx = Math.abs(proposed.x - current.x)
+        const dy = Math.abs(proposed.y - current.y)
+        const distance = Math.sqrt(dx * dx + dy * dy)
+        
+        // Adjust zoom based on distance between points
+        if (distance > 200) {
+          targetScale = 0.8
+        } else if (distance > 100) {
+          targetScale = 1.0
+        } else {
+          targetScale = 1.5
+        }
+      }
+      
+      // Apply zoom and center
+      scale.value = targetScale
+      offsetX.value = centerX - (focusX * targetScale)
+      offsetY.value = centerY - (focusY * targetScale)
+      
+      // If this is the user's own custom POI, hide it temporarily
+      if (proposed.custom_poi_id && user.value) {
+        // Find the custom POI by checking coordinates and user ownership
+        const customPOI = customPOIs.value.find(poi => 
+          poi.x === proposed.x && 
+          poi.y === proposed.y && 
+          poi.user_id === user.value.id
+        )
+        if (customPOI) {
+          hiddenCustomPOIId.value = customPOI.id
+        }
+      }
+      
+      // For edit_poi, move_poi, delete_poi, or change_loot, try to find the original POI to get complete type data
+      let originalPOI = null
+      if ((preview.changeType === 'edit_poi' || preview.changeType === 'move_poi' || preview.changeType === 'delete_poi' || preview.changeType === 'change_loot')) {
+        // Use target_id from preview or current data
+        const poiId = preview.targetId || current?.id || proposed.poi_id
+        console.log('Looking for POI with ID:', poiId, 'in map data')
+        if (poiId && currentMapData.value.pois) {
+          // Look for the POI in the current map data
+          originalPOI = currentMapData.value.pois.find(p => p.id === poiId)
+          console.log('Found original POI:', originalPOI)
+        } else {
+          console.log('No POI ID or no map data available')
+        }
+      } else if (preview.changeType === 'edit_npc') {
+        // For edit_npc, we need to use the npcid from the proposed_data, not the target_id
+        // target_id is the npcs.id, but POIs reference npcs.npcid
+        const npcId = preview.proposed?.npcid || preview.current?.npcid
+        console.log('Looking for POI with NPC ID (npcid):', npcId, 'target_id was:', preview.targetId)
+        console.log('Available POIs:', currentMapData.value.pois?.map(p => ({ id: p.id, name: p.name, npc_id: p.npc_id })))
+        
+        if (npcId && currentMapData.value.pois) {
+          // Look for the POI that has this NPC
+          originalPOI = currentMapData.value.pois.find(p => p.npc_id === npcId)
+          console.log('Found POI with NPC:', originalPOI)
+        } else {
+          console.log('No NPC ID or no map data available')
+        }
+      }
+      
+      // Handle delete_poi and change_loot differently - show the existing POI
+      if (preview.changeType === 'delete_poi' || preview.changeType === 'change_loot') {
+        // For delete proposals, use the current POI data
+        const x = proposed.x || current?.x || originalPOI?.x
+        const y = proposed.y || current?.y || originalPOI?.y
+        
+        console.log('Delete POI coordinates:', {
+          proposed_x: proposed.x,
+          proposed_y: proposed.y,
+          current_x: current?.x,
+          current_y: current?.y,
+          original_x: originalPOI?.x,
+          original_y: originalPOI?.y,
+          final_x: x,
+          final_y: y
+        })
+        
+        const poiData = {
+          id: preview.changeType === 'delete_poi' ? `proposal_delete_${preview.proposalId}` : `proposal_loot_${preview.proposalId}`,
+          name: originalPOI?.name || current?.name || current?.poi_name || 'Unnamed POI',
+          description: originalPOI?.description || current?.description,
+          x: x,
+          y: y,
+          type_id: originalPOI?.type_id || current?.type_id,
+          type_name: preview.type_name || originalPOI?.type_name || current?.type_name,
+          // Include the type icon data
+          type_icon_type: preview.type_icon_type || originalPOI?.type_icon_type || originalPOI?.icon_type || 'emoji',
+          type_icon_value: preview.type_icon_value || originalPOI?.type_icon_value || originalPOI?.icon,
+          icon_size: originalPOI?.icon_size || 48,
+          label_visible: originalPOI?.label_visible !== false,
+          label_position: originalPOI?.label_position || 'bottom',
+          is_proposal: true,
+          is_deletion: preview.changeType === 'delete_poi',  // Special flag for deletion
+          proposer_name: preview.proposerName,
+          is_custom: false
+        }
+        
+        // Check if we have valid coordinates
+        if (!poiData.x || !poiData.y) {
+          console.error('POI has no valid coordinates!', poiData)
+          error('Unable to locate POI on map')
+          return
+        }
+        
+        // Process the POI to set up icon properly
+        const displayPOI = processPOI(poiData)
+        
+        console.log('Processed POI for preview:', displayPOI)
+        
+        proposalPreviewPOIs.value.push(displayPOI)
+        
+        // Set this as the selected POI to show popup
+        setTimeout(() => {
+          selectedPOI.value = displayPOI
+          const canvasCoords = imageToCanvas(displayPOI.x, displayPOI.y)
+          console.log('Canvas coordinates for delete POI:', canvasCoords)
+          
+          popupPosition.value = { 
+            x: canvasCoords.x, 
+            y: canvasCoords.y 
+          }
+          popupIsLeftSide.value = canvasCoords.x > mapCanvas.value.width / 2
+          
+          // Add highlight effect
+          highlightedPOI.value = { id: displayPOI.id, x: displayPOI.x, y: displayPOI.y }
+          highlightStartTime.value = Date.now()
+          
+          render()
+        }, 100)
+        
+        return // Don't create the normal proposed POI for delete/loot changes
+      }
+      
+      // Handle edit_npc - just highlight the existing POI without creating a preview
+      if (preview.changeType === 'edit_npc') {
+        // Find the POI with this NPC
+        if (originalPOI) {
+          // Temporarily mark the POI as having a pending proposal for visual effect
+          originalPOI.has_pending_proposal = true
+          tempPendingProposalPOI.value = originalPOI
+          
+          // Set up center position
+          offsetX.value = centerX - (originalPOI.x * targetScale)
+          offsetY.value = centerY - (originalPOI.y * targetScale)
+          scale.value = targetScale
+          
+          // Set this as the selected POI to show popup
+          setTimeout(() => {
+            selectedPOI.value = originalPOI
+            const canvasCoords = imageToCanvas(originalPOI.x, originalPOI.y)
+            
+            popupPosition.value = { 
+              x: canvasCoords.x, 
+              y: canvasCoords.y 
+            }
+            popupIsLeftSide.value = canvasCoords.x > mapCanvas.value.width / 2
+            
+            // Add highlight effect
+            highlightedPOI.value = { id: originalPOI.id, x: originalPOI.x, y: originalPOI.y }
+            highlightStartTime.value = Date.now()
+            
+            // Start the pending proposal animation
+            render()
+          }, 100)
+        } else {
+          console.error('Could not find POI with NPC for edit_npc proposal')
+          error('Unable to locate NPC on map')
+        }
+        
+        return // Don't create any preview POIs for edit_npc
+      }
+      
+      // Create preview POI for the proposed location (for add/edit/move)
+      const proposedPOIData = {
+        id: `proposal_new_${preview.proposalId}`,
+        name: proposed.name || current?.name || originalPOI?.name || 'Unnamed POI',
+        description: proposed.description || current?.description || originalPOI?.description,
+        x: proposed.x,
+        y: proposed.y,
+        type_id: proposed.type_id || originalPOI?.type_id,
+        type_name: proposed.type_name || originalPOI?.type_name,
+        // Include the type icon data - prefer from original POI if available
+        type_icon_type: preview.type_icon_type || originalPOI?.type_icon_type || originalPOI?.icon_type || 'emoji',
+        type_icon_value: preview.type_icon_value || originalPOI?.type_icon_value || originalPOI?.icon,
+        icon_size: proposed.icon_size || originalPOI?.icon_size || 48,
+        label_visible: proposed.label_visible !== false,
+        label_position: proposed.label_position || 'bottom',
+        is_proposal: true,
+        is_proposed: true,
+        proposer_name: preview.proposerName,
+        is_custom: false
+      }
+      
+      // Process the POI to set up icon properly (like regular POIs)
+      const proposedPOI = processPOI(proposedPOIData)
+      
+      proposalPreviewPOIs.value.push(proposedPOI)
+      
+      // If there's a current POI (for moves only), add it too
+      // For edits, don't show current POI since it's at the same location
+      if (current && preview.changeType === 'move_poi') {
+        const currentPOIData = {
+          id: `proposal_current_${preview.proposalId}`,
+          name: current.name,
+          description: current.description,
+          x: current.x,
+          y: current.y,
+          type_id: current.type_id || originalPOI?.type_id,
+          type_name: originalPOI?.type_name || current.type_name,
+          // Include the type icon data - use from original POI if available
+          type_icon_type: originalPOI?.type_icon_type || originalPOI?.icon_type || preview.type_icon_type || 'emoji',
+          type_icon_value: originalPOI?.type_icon_value || originalPOI?.icon || preview.type_icon_value,
+          icon_size: current.icon_size || originalPOI?.icon_size || 48,
+          label_visible: current.label_visible !== false,
+          label_position: current.label_position || 'bottom',
+          is_proposal: true,
+          is_current: true,
+          is_custom: false
+        }
+        
+        // Process the POI to set up icon properly
+        const currentPOI = processPOI(currentPOIData)
+        
+        proposalPreviewPOIs.value.push(currentPOI)
+        
+        // If it's a move, create a connection arrow
+        if (current.x !== proposed.x || current.y !== proposed.y) {
+          proposalPreviewConnection.value = {
+            from: { x: current.x, y: current.y },
+            to: { x: proposed.x, y: proposed.y }
+          }
+        }
+      }
+      
+      // Highlight the proposed POI and optionally show popup
+      setTimeout(() => {
+        // For move_poi, don't show the popup - focus should be on location change
+        if (preview.changeType !== 'move_poi') {
+          selectedPOI.value = proposedPOI
+          const canvasCoords = imageToCanvas(proposed.x, proposed.y)
+          popupPosition.value = { 
+            x: canvasCoords.x, 
+            y: canvasCoords.y 
+          }
+          popupIsLeftSide.value = canvasCoords.x > mapCanvas.value.width / 2
+        }
+        
+        // Add highlight effect (always show this)
+        highlightedPOI.value = { id: proposedPOI.id, x: proposed.x, y: proposed.y }
+        highlightStartTime.value = Date.now()
+        
+        render()
+      }, 100)
+    }
+    
+    // Add visibility change listener to refresh map data when returning to the page
+    // This handles cases where proposals are deleted on the account page
+    const handleVisibilityChange = () => {
+      if (!document.hidden && maps.value[selectedMapIndex.value]?.id) {
+        // Check if we need to refresh due to returning from account page
+        const shouldRefresh = sessionStorage.getItem('refresh_on_return')
+        if (shouldRefresh) {
+          sessionStorage.removeItem('refresh_on_return')
+        }
+        
+        // Only refresh if we have a database-connected map
+        const currentMap = maps.value[selectedMapIndex.value]
+        if (currentMap.id && dbMapData.value[currentMap.id]) {
+          // Force reload map data to get updated proposal status
+          delete dbMapData.value[currentMap.id]
+          loadSelectedMap()
+          
+          // Also clear any proposal preview POIs that might be lingering
+          proposalPreviewPOIs.value = []
+          proposalPreviewConnection.value = null
+        }
+      }
+    }
+    
     onMounted(async () => {
       // Check authentication status
       await checkAuthStatus()
+      
+      document.addEventListener('visibilitychange', handleVisibilityChange)
+      
+      // Close dropdowns when clicking outside
+      const closeDropdowns = (event) => {
+        // Close user dropdown if clicking outside
+        if (showUserDropdown.value && !event.target.closest('.user-dropdown-container')) {
+          showUserDropdown.value = false
+        }
+        // Close item dropdown if clicking outside
+        if (itemDropdownVisible.value && !event.target.closest('.control-btn-dropdown')) {
+          itemDropdownVisible.value = false
+        }
+      }
+      document.addEventListener('click', closeDropdowns)
       
       // Initialize CSRF token if authenticated
       if (isAuthenticated.value) {
@@ -4021,6 +5000,13 @@ export default {
       }
       
       // Admin mode state is now handled by the watcher on adminModeEnabled
+      
+      // Check if we need to show a POI proposal preview BEFORE loading maps
+      const proposalPreviewData = sessionStorage.getItem('poi_proposal_preview')
+      if (proposalPreviewData) {
+        // Show loading state immediately
+        isLoadingProposalPreview.value = true
+      }
       
       // Load maps from database
       maps.value = await loadMapsFromDatabase()
@@ -4035,10 +5021,59 @@ export default {
         await loadAllCustomPOIs()
       }
       
+      // Start animation loop for pending proposals
+      let animationFrameId = null
+      const animatePendingProposals = () => {
+        // Check if we need to refresh POIs
+        const shouldRefreshPOIs = sessionStorage.getItem('refresh_pois')
+        if (shouldRefreshPOIs) {
+          sessionStorage.removeItem('refresh_pois')
+          if (maps.value[selectedMapIndex.value]?.id) {
+            const currentMap = maps.value[selectedMapIndex.value]
+            if (currentMap.id && dbMapData.value[currentMap.id]) {
+              delete dbMapData.value[currentMap.id]
+              loadSelectedMap()
+            }
+          }
+        }
+        
+        // Check if any POIs have pending proposals
+        const hasPendingProposals = currentMapData.value.pois.some(poi => poi.has_pending_proposal)
+        
+        if (hasPendingProposals) {
+          render()
+          animationFrameId = requestAnimationFrame(animatePendingProposals)
+        } else {
+          // Check again in 1 second
+          setTimeout(() => {
+            animationFrameId = requestAnimationFrame(animatePendingProposals)
+          }, 1000)
+        }
+      }
+      animatePendingProposals()
+      
       initCanvas(mapCanvas.value)
       resizeCanvas()
       window.addEventListener('resize', resizeCanvas)
       window.addEventListener('keydown', handleKeyboardShortcut)
+      
+      // Global context menu prevention during drag
+      globalContextMenuHandler = (e) => {
+        if (draggedItem.value || isDragging.value || pendingChange.value) {
+          e.preventDefault()
+          e.stopPropagation()
+        }
+      }
+      document.addEventListener('contextmenu', globalContextMenuHandler, true)
+      
+      // Global mouseup handler to ensure drag state is cleaned up
+      globalMouseUpHandler = (e) => {
+        // Only handle left mouse button
+        if (e.button === 0 && (draggedItem.value || isDragging.value)) {
+          handleMouseUp(e)
+        }
+      }
+      window.addEventListener('mouseup', globalMouseUpHandler)
       
       // Listen for avatar updates from account page
       window.addEventListener('avatar-updated', async () => {
@@ -4089,6 +5124,61 @@ export default {
             }
           })
         }
+      }
+      
+      // Now handle the POI proposal preview if we have one
+      if (proposalPreviewData) {
+        const preview = JSON.parse(proposalPreviewData)
+        console.log('Proposal preview data received:', preview)
+        console.log('Preview mapId:', preview.mapId)
+        console.log('Preview proposed.map_id:', preview.proposed?.map_id)
+        console.log('Preview current.map_id:', preview.current?.map_id)
+        sessionStorage.removeItem('poi_proposal_preview')
+        
+        // Find and select the map - check top-level mapId first, then fall back to nested values
+        const mapId = preview.mapId || preview.proposed.map_id || preview.current?.map_id
+        
+        if (mapId) {
+          const mapIndex = maps.value.findIndex(m => m.id === mapId)
+          
+          if (mapIndex !== -1) {
+            selectedMapIndex.value = mapIndex
+            await loadSelectedMap()
+            
+            // Wait for map to be ready then show the preview
+            nextTick(() => {
+              // Hide loading state regardless
+              isLoadingProposalPreview.value = false
+              
+              if (image.value && mapCanvas.value) {
+                // Add a small delay to ensure canvas is fully initialized
+                setTimeout(() => {
+                  // Show proposal preview based on change type
+                  if (preview.changeType === 'add_poi') {
+                    // For new POIs, show proposed location
+                    showProposalPreview(preview.proposed, null, preview)
+                  } else if (preview.changeType === 'edit_poi' || preview.changeType === 'move_poi' || preview.changeType === 'delete_poi' || preview.changeType === 'change_loot' || preview.changeType === 'edit_npc') {
+                    // For edits/moves/deletes/loot changes/npc edits, show both current and proposed
+                    showProposalPreview(preview.proposed, preview.current, preview)
+                  }
+                }, 100)
+              }
+            })
+          } else {
+            // Map not found, hide loading state
+            isLoadingProposalPreview.value = false
+            console.error('Map not found:', mapId)
+          }
+        } else {
+          // This should not happen anymore since we're passing mapId from account.html
+          console.error('No map_id in proposal preview data')
+          isLoadingProposalPreview.value = false
+          
+          // Load first map as fallback
+          if (maps.value.length > 0) {
+            await loadSelectedMap()
+          }
+        }
       } else {
         // Load the first map if available
         if (maps.value.length > 0) {
@@ -4101,16 +5191,34 @@ export default {
     })
     
     onUnmounted(() => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      document.removeEventListener('click', closeDropdowns)
       window.removeEventListener('resize', resizeCanvas)
       window.removeEventListener('keydown', handleKeyboardShortcut)
       window.removeEventListener('avatar-updated', async () => {
         await checkAuthStatus()
       })
+      if (globalContextMenuHandler) {
+        document.removeEventListener('contextmenu', globalContextMenuHandler, true)
+      }
+      if (globalMouseUpHandler) {
+        window.removeEventListener('mouseup', globalMouseUpHandler)
+      }
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId)
       }
       if (xpPollingInterval) {
         clearInterval(xpPollingInterval)
+      }
+      // Clear any hidden custom POI when component unmounts
+      hiddenCustomPOIId.value = null
+      proposalPreviewPOIs.value = []
+      proposalPreviewConnection.value = null
+      
+      // Clear temporary pending proposal marking
+      if (tempPendingProposalPOI.value) {
+        tempPendingProposalPOI.value.has_pending_proposal = false
+        tempPendingProposalPOI.value = null
       }
     })
     
@@ -4240,6 +5348,7 @@ export default {
       dbMapData,
       loadSelectedMap,
       handleMapClick,
+      handleContextMenu,
       handleRightClick,
       handleMouseDown,
       handleMouseMove,
@@ -4263,6 +5372,17 @@ export default {
       handleConnectorSettingsChange,
       deletePOI,
       handlePOIUpdate,
+      showEditProposalDialog,
+      showDeleteProposalDialog,
+      showLootProposalDialog,
+      showItemProposalDialog,
+      showNPCProposalDialog,
+      toggleItemDropdown,
+      showItemEditSelection,
+      itemDropdownVisible,
+      showNPCEditProposal,
+      showItemEditProposal,
+      handleProposalSubmitted,
       handleAdminPopupUpdate,
       handleAdminPopupActivate,
       handleAdminPopupDelete,
@@ -4300,7 +5420,19 @@ export default {
       // Search
       allSearchablePOIs,
       currentMapId,
-      handlePOISelected
+      handlePOISelected,
+      // Proposal preview loading
+      isLoadingProposalPreview,
+      // Proposal dialogs
+      editProposalDialog,
+      deleteProposalDialog,
+      lootProposalDialog,
+      itemProposalDialog,
+      npcProposalDialog,
+      npcEditProposalDialog,
+      itemEditProposalDialog,
+      itemSearchDialog,
+      handleItemSelected
     }
   }
 }
@@ -4336,6 +5468,47 @@ export default {
   0% { opacity: 1; }
   50% { opacity: 0.5; }
   100% { opacity: 1; }
+}
+
+/* Proposal Preview Loading */
+.proposal-preview-loading {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.loading-content {
+  text-align: center;
+  color: #fff;
+}
+
+.loading-spinner {
+  width: 60px;
+  height: 60px;
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  border-top: 4px solid #4CAF50;
+  border-radius: 50%;
+  margin: 0 auto 1rem;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-content p {
+  font-size: 1.1rem;
+  color: #e0e0e0;
+  margin: 0;
 }
 
 .admin-text {
@@ -4577,5 +5750,181 @@ export default {
 
 .dropdown-icon {
   font-size: 16px;
+}
+
+/* Map Controls */
+.controls {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  z-index: 100;
+}
+
+.control-btn {
+  width: 50px;
+  height: 50px;
+  background: rgba(0, 0, 0, 0.8);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: white;
+  font-size: 1.2rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.control-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+.control-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.admin-btn {
+  background: linear-gradient(135deg, rgba(74, 124, 89, 0.9), rgba(58, 98, 69, 0.9));
+  border-color: rgba(74, 124, 89, 0.6);
+}
+
+.admin-btn:hover {
+  background: linear-gradient(135deg, rgba(74, 124, 89, 1), rgba(58, 98, 69, 1));
+  border-color: rgba(74, 124, 89, 0.8);
+}
+
+.zoom-indicator {
+  background: rgba(0, 0, 0, 0.8);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: white;
+  padding: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: center;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  min-width: 50px;
+}
+
+.proposal-btn {
+  background: rgba(34, 197, 94, 0.2) !important;
+  border-color: rgba(34, 197, 94, 0.4) !important;
+  font-size: 1.1rem !important;
+  font-weight: 600 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+}
+
+.proposal-btn:hover {
+  background: rgba(34, 197, 94, 0.3) !important;
+  border-color: rgba(34, 197, 94, 0.6) !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Control button dropdown */
+.control-btn-dropdown {
+  position: relative;
+}
+
+.control-btn-dropdown .control-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  padding: 0 0.5rem;
+}
+
+.dropdown-arrow {
+  font-size: 0.6rem;
+  opacity: 0.7;
+  transition: transform 0.2s ease;
+}
+
+.control-btn-dropdown:hover .dropdown-arrow {
+  transform: translateY(1px);
+}
+
+.control-dropdown-menu {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  right: 0;
+  background: rgba(0, 0, 0, 0.95);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  overflow: hidden;
+  min-width: 180px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  animation: dropdownSlideUp 0.2s ease-out;
+}
+
+@keyframes dropdownSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.control-dropdown-menu .dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: none;
+  border: none;
+  color: #e0e0e0;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  width: 100%;
+  text-align: left;
+}
+
+.control-dropdown-menu .dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.control-dropdown-menu .dropdown-item .dropdown-icon {
+  font-size: 1.1rem;
+  width: 1.2rem;
+  text-align: center;
+}
+
+.control-dropdown-menu .dropdown-item:not(:last-child) {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .controls {
+    bottom: 0.5rem;
+    right: 0.5rem;
+  }
+  
+  .control-btn {
+    width: 45px;
+    height: 45px;
+    font-size: 1.1rem;
+  }
+  
+  .proposal-btn {
+    font-size: 1rem !important;
+  }
 }
 </style>

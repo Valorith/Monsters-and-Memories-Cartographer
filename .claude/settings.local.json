@@ -39,7 +39,12 @@
       "Bash(find:*)",
       "Bash(ss:*)",
       "Bash(echo:*)",
-      "Bash(npx vue-tsc:*)"
+      "Bash(npx vue-tsc:*)",
+      "Bash(awk:*)",
+      "Bash(cd:*)",
+      "Bash(cd:*)",
+      "Bash(sed:*)",
+      "Bash(cd:*)"
     ],
     "deny": []
   }

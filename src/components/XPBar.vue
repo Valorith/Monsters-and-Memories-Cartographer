@@ -136,6 +136,25 @@ export default {
       }, 2500);
 
       animationInProgress.value = false;
+      
+      // Refresh leaderboard if it's open
+      if (showLeaderboard.value) {
+        await refreshLeaderboard();
+      }
+    };
+
+    // Refresh leaderboard data
+    const refreshLeaderboard = async () => {
+      try {
+        const response = await fetch('/api/leaderboard/top10');
+        if (!response.ok) throw new Error('Failed to fetch leaderboard');
+        
+        const data = await response.json();
+        leaderboardData.value = data;
+      } catch (error) {
+        console.error('Error fetching leaderboard:', error);
+        leaderboardError.value = true;
+      }
     };
 
     // Toggle leaderboard dropdown

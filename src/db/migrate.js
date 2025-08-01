@@ -238,6 +238,86 @@ async function migrate() {
       console.log('Removed icon_size from custom POIs for consistent sizing');
     }
     
+    // Create items table
+    const createItemsTablePath = path.join(__dirname, 'create-items-table.sql');
+    if (fs.existsSync(createItemsTablePath)) {
+      const createItemsTableSchema = fs.readFileSync(createItemsTablePath, 'utf8');
+      await pool.query(createItemsTableSchema);
+      console.log('Items table created');
+    }
+    
+    // Add AC field to items table
+    const addAcPath = path.join(__dirname, 'add-ac-to-items.sql');
+    if (fs.existsSync(addAcPath)) {
+      const addAcSchema = fs.readFileSync(addAcPath, 'utf8');
+      await pool.query(addAcSchema);
+      console.log('Added AC field to items table');
+    }
+    
+    // Remove dropped_by from items table (moved to NPC table)
+    const removeDroppedByPath = path.join(__dirname, 'remove-dropped-by-from-items.sql');
+    if (fs.existsSync(removeDroppedByPath)) {
+      const removeDroppedBySchema = fs.readFileSync(removeDroppedByPath, 'utf8');
+      await pool.query(removeDroppedBySchema);
+      console.log('Removed dropped_by from items table (will be in NPC table instead)');
+    }
+    
+    // Create NPCs table
+    const createNpcsTablePath = path.join(__dirname, 'create-npcs-table.sql');
+    if (fs.existsSync(createNpcsTablePath)) {
+      const createNpcsTableSchema = fs.readFileSync(createNpcsTablePath, 'utf8');
+      await pool.query(createNpcsTableSchema);
+      console.log('NPCs table created');
+    }
+    
+    // Add npcid column to NPCs table
+    const addNpcIdPath = path.join(__dirname, 'add-npcid-to-npcs.sql');
+    if (fs.existsSync(addNpcIdPath)) {
+      const addNpcIdSchema = fs.readFileSync(addNpcIdPath, 'utf8');
+      await pool.query(addNpcIdSchema);
+      console.log('Added npcid column to NPCs table');
+    }
+    
+    // Add npc_id and item_id to POIs tables
+    const addNpcItemIdsToPoisPath = path.join(__dirname, 'add-npc-item-ids-to-pois.sql');
+    if (fs.existsSync(addNpcItemIdsToPoisPath)) {
+      const addNpcItemIdsToPoisSchema = fs.readFileSync(addNpcItemIdsToPoisPath, 'utf8');
+      await pool.query(addNpcItemIdsToPoisSchema);
+      console.log('Added npc_id and item_id columns to POIs tables');
+    }
+    
+    // Create change proposals table for voting system
+    const changeProposalsPath = path.join(__dirname, 'create-change-proposals-table.sql');
+    if (fs.existsSync(changeProposalsPath)) {
+      const changeProposalsSchema = fs.readFileSync(changeProposalsPath, 'utf8');
+      await pool.query(changeProposalsSchema);
+      console.log('Created change proposals voting system tables');
+    }
+    
+    // Migrate pending POIs to change proposals
+    const migratePendingPoisPath = path.join(__dirname, 'migrate-pending-pois-to-change-proposals.sql');
+    if (fs.existsSync(migratePendingPoisPath)) {
+      const migratePendingPoisSchema = fs.readFileSync(migratePendingPoisPath, 'utf8');
+      await pool.query(migratePendingPoisSchema);
+      console.log('Migrated pending POIs to change proposals system');
+    }
+    
+    // Optimize change proposals for performance
+    const optimizeProposalsPath = path.join(__dirname, 'optimize-change-proposals.sql');
+    if (fs.existsSync(optimizeProposalsPath)) {
+      const optimizeProposalsSchema = fs.readFileSync(optimizeProposalsPath, 'utf8');
+      await pool.query(optimizeProposalsSchema);
+      console.log('Optimized change proposals system for performance');
+    }
+    
+    // Add shared POI invalidation reason tracking
+    const sharedPoiInvalidationPath = path.join(__dirname, 'add-shared-poi-invalidation-reason.sql');
+    if (fs.existsSync(sharedPoiInvalidationPath)) {
+      const sharedPoiInvalidationSchema = fs.readFileSync(sharedPoiInvalidationPath, 'utf8');
+      await pool.query(sharedPoiInvalidationSchema);
+      console.log('Added shared POI invalidation reason tracking');
+    }
+    
     console.log('Database migration completed successfully!');
     
     // Check tables after migration
