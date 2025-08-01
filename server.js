@@ -224,6 +224,23 @@ const skipAdminRateLimit = (limiter) => {
   };
 };
 
+// Security headers middleware
+app.use((req, res, next) => {
+  // Only set CSP if not already set by hosting provider
+  if (!res.getHeader('Content-Security-Policy')) {
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; " +
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://cdn.jsdelivr.net https://code.iconify.design; " +
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+      "font-src 'self' https://fonts.gstatic.com; " +
+      "img-src 'self' data: https: blob:; " +
+      "connect-src 'self' https://api.iconify.design"
+    );
+  }
+  next();
+});
+
 // Middleware
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));

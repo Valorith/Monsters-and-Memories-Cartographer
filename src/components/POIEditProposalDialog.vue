@@ -211,10 +211,13 @@ export default {
           poiTypes.value = await typesResponse.json()
         }
         
-        // Load NPCs
+        // Load NPCs (only if authenticated)
         const npcsResponse = await fetch('/api/npcs')
         if (npcsResponse.ok) {
           npcs.value = await npcsResponse.json()
+        } else if (npcsResponse.status === 403) {
+          // User not authenticated or not admin, skip loading NPCs
+          npcs.value = []
         }
         
         // Load items

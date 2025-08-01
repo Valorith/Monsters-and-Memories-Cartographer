@@ -10,7 +10,11 @@ export default function npcsRouter(app, validateCSRF) {
   };
 
   // GET /api/npcs - Get all NPCs
-  app.get('/api/npcs', requireAdmin, async (req, res) => {
+  app.get('/api/npcs', async (req, res) => {
+    // For non-authenticated users, return empty array
+    if (!req.isAuthenticated()) {
+      return res.json([]);
+    }
     try {
     const result = await pool.query(`
       SELECT 
