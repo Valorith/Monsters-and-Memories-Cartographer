@@ -3284,6 +3284,7 @@ export default {
         // Handle custom POI deletion
         const actualId = poiToDelete.id
         console.log('Custom POI deletion - actualId:', actualId)
+        console.log('Selected POI for comparison:', selectedPOI.value?.id)
         
         const confirmed = await showConfirm(
           'Delete Custom POI',
@@ -3305,8 +3306,12 @@ export default {
             await loadAllCustomPOIs() // Update global search
             
             // Clear selected POI if it's the one being deleted
-            if (selectedPOI.value && isSameEntity(selectedPOI.value.id, actualId)) {
-              selectedPOI.value = null
+            // Need to handle both prefixed and non-prefixed IDs
+            if (selectedPOI.value) {
+              const selectedId = selectedPOI.value.id.toString().replace('custom_', '')
+              if (selectedId === actualId.toString()) {
+                selectedPOI.value = null
+              }
             }
             render()
           } else {
