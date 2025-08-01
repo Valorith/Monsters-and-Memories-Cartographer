@@ -2840,8 +2840,13 @@
               <select id="proposal-filter" class="form-control">
                 <option value="all">All Proposals</option>
                 <option value="mine">My Proposals</option>
-                <option value="not-voted">Not Voted</option>
+                <option value="not-voted" selected>Not Voted</option>
               </select>
+            </div>
+            <div class="filter-group">
+              <button class="btn btn-sm" onclick="refreshProposals()" style="background: #4a7c59; padding: 0.5rem 1rem;">
+                <span style="margin-right: 0.5rem;">🔄</span>Refresh
+              </button>
             </div>
           </div>
 
@@ -8232,7 +8237,7 @@
     let currentProposals = [];
     let proposalFilters = {
       type: '',
-      show: 'all'
+      show: 'not-voted'  // Default to showing only proposals not voted on
     };
     let proposalsPage = 1;
     const proposalsPerPage = 2;
@@ -8265,6 +8270,12 @@
       }
     }
 
+    function refreshProposals() {
+      // Reset page to 1 when refreshing
+      proposalsPage = 1;
+      loadProposals();
+    }
+
     async function loadProposals() {
       const loading = document.getElementById('proposals-loading');
       const container = document.getElementById('proposals-container');
@@ -8288,7 +8299,8 @@
           if (proposalFilters.show === 'mine') {
             filtered = filtered.filter(p => p.proposer_id === currentUser.id);
           } else if (proposalFilters.show === 'not-voted') {
-            filtered = filtered.filter(p => p.user_vote === null || p.user_vote === 0);
+            // Only show proposals the user hasn't voted on
+            filtered = filtered.filter(p => !p.user_vote || p.user_vote === 0);
           }
           
           // Pagination
