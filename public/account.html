@@ -2620,13 +2620,6 @@
               </div>
             </div>
             <div class="stat-card">
-              <div class="stat-icon">⏳</div>
-              <div class="stat-info">
-                <div class="stat-value" id="pending-pois">0</div>
-                <div class="stat-label">Pending POIs</div>
-              </div>
-            </div>
-            <div class="stat-card">
               <div class="stat-icon">🗳️</div>
               <div class="stat-info">
                 <div class="stat-value" id="total-votes">0</div>
@@ -2793,37 +2786,6 @@
               </div>
             </div>
             
-            <!-- Pending POIs Section -->
-            <div id="pending-pois-section" style="display: block; margin-top: 3rem;">
-              <h3 class="sub-header">Pending Community POIs</h3>
-              <p style="color: #999; margin-bottom: 1rem; font-size: 0.9rem;">Vote on POIs submitted by the community. POIs need 10 total upvotes to be approved (creator's vote counts as 1). POIs with -10 total score get rejected.</p>
-              
-              <div id="pending-pois-loading" style="display: none; text-align: center; padding: 2rem;">
-                Loading pending POIs...
-              </div>
-              
-              <table id="pending-pois-table" class="admin-table">
-                <thead>
-                  <tr>
-                    <th>Icon</th>
-                    <th>Name</th>
-                    <th>Map</th>
-                    <th>Submitted By</th>
-                    <th>Vote Score</th>
-                    <th>Your Vote</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="pending-pois-tbody"></tbody>
-              </table>
-              
-              <!-- Pending POIs Pagination -->
-              <div id="pending-pois-pagination" class="pagination" style="display: none;">
-                <button class="pagination-btn" id="pending-pois-prev">Previous</button>
-                <span class="pagination-info" id="pending-pois-page-info">Page 1 of 1</span>
-                <button class="pagination-btn" id="pending-pois-next">Next</button>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -3356,28 +3318,6 @@
   </div>
 
   <!-- Vote Inspect Modal -->
-  <div id="vote-inspect-modal" class="modal" style="display: none;">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2>Vote Details</h2>
-        <button class="close-btn" data-action="closeVoteModal">&times;</button>
-      </div>
-      <div class="modal-body">
-        <h3 id="inspect-poi-name"></h3>
-        <p id="inspect-poi-stats"></p>
-        <table class="admin-table">
-          <thead>
-            <tr>
-              <th>Voter</th>
-              <th>Vote</th>
-              <th>Date</th>
-            </tr>
-          </thead>
-          <tbody id="vote-details-tbody"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
 
   <!-- XP Adjustment Modal -->
   <div id="xp-adjustment-modal" class="modal" style="display: none; z-index: 1001;">
@@ -3451,7 +3391,6 @@
               <h4 style="color: #FFD700; margin-top: 0;">Activity Statistics</h4>
               <p><strong>Total POIs Created:</strong> <span id="detail-user-total-pois"></span></p>
               <p><strong>Published POIs:</strong> <span id="detail-user-published-pois"></span></p>
-              <p><strong>Pending POIs:</strong> <span id="detail-user-pending-pois"></span></p>
               <p><strong>Votes Cast:</strong> <span id="detail-user-votes"></span></p>
             </div>
             
@@ -3874,7 +3813,6 @@
           const stats = await statsResponse.json();
           document.getElementById('total-pois').textContent = stats.totalPois || 0;
           document.getElementById('approved-pois').textContent = stats.approvedPois || 0;
-          document.getElementById('pending-pois').textContent = stats.pendingPois || 0;
           document.getElementById('total-votes').textContent = stats.totalVotes || 0;
         }
         
@@ -4089,10 +4027,8 @@
 
     // Custom POIs functionality
     let customPois = [];
-    let pendingPois = [];
     let myPoisCurrentPage = 1;
     let sharedPoisCurrentPage = 1;
-    let pendingPoisCurrentPage = 1;
     const ITEMS_PER_PAGE = 10;
 
     async function loadCustomPois() {
@@ -4596,15 +4532,6 @@
       displaySharedPois(sharedPois);
     }
     
-    function changePendingPoisPage(direction) {
-      const totalPages = Math.ceil(pendingPois.length / ITEMS_PER_PAGE);
-      
-      pendingPoisCurrentPage += direction;
-      pendingPoisCurrentPage = Math.max(1, Math.min(pendingPoisCurrentPage, totalPages));
-      
-      displayPendingPois();
-    }
-    
     // Pending POIs functionality
     async function loadPendingPois() {
       document.getElementById('pending-pois-loading').style.display = 'block';
@@ -4967,7 +4894,6 @@
       if (tabName === 'custom-pois') {
         // Always reload to get fresh data
         loadCustomPois();
-        loadPendingPois();
       } else if (tabName === 'admin' && currentUser?.is_admin) {
         loadXPConfig();
         loadUsers();
@@ -6314,7 +6240,6 @@
       
       document.getElementById('detail-user-total-pois').textContent = user.total_pois || 0;
       document.getElementById('detail-user-published-pois').textContent = user.published_pois || 0;
-      document.getElementById('detail-user-pending-pois').textContent = user.pending_pois || 0;
       document.getElementById('detail-user-votes').textContent = user.votes_cast || 0;
       
       // Update status
@@ -6539,13 +6464,10 @@
     
     // Update close modal handler
     window.onclick = function(event) {
-      const voteModal = document.getElementById('vote-inspect-modal');
       const userModal = document.getElementById('user-detail-modal');
       const xpModal = document.getElementById('xp-adjustment-modal');
       
-      if (event.target === voteModal) {
-        closeVoteModal();
-      } else if (event.target === userModal) {
+      if (event.target === userModal) {
         closeUserModal();
       } else if (event.target === xpModal) {
         closeXPModal();
@@ -6978,17 +6900,6 @@
       const adminSearchBtn = document.querySelector('.admin-controls button');
       if (adminSearchBtn && adminSearchBtn.textContent === 'Search') {
         adminSearchBtn.addEventListener('click', searchUsers);
-      }
-      
-      // Pending POIs pagination
-      const pendingPoisPrev = document.getElementById('pending-pois-prev');
-      if (pendingPoisPrev) {
-        pendingPoisPrev.addEventListener('click', () => changePendingPoisPage(-1));
-      }
-      
-      const pendingPoisNext = document.getElementById('pending-pois-next');
-      if (pendingPoisNext) {
-        pendingPoisNext.addEventListener('click', () => changePendingPoisPage(1));
       }
       
       // Users pagination
