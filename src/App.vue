@@ -91,6 +91,8 @@
         :current-map-id="currentMapId"
         :maps="maps"
         @select-poi="handlePOISelected"
+        @select-item="handleItemSelected"
+        @select-npc="handleNPCSelected"
       />
     </div>
     
@@ -109,9 +111,9 @@
         @touchend="handleTouchEnd"
       ></canvas>
       
-      <div class="loading-overlay" v-if="isLoading">
+      <div class="loading-overlay" v-if="isLoading || isTransitioningMap">
         <div class="spinner"></div>
-        <p>Loading map...</p>
+        <p>{{ isTransitioningMap ? 'Navigating to POI...' : 'Loading map...' }}</p>
       </div>
       
       
@@ -324,7 +326,23 @@
     <ItemSearchDialog
       :visible="itemSearchDialog.visible"
       @close="itemSearchDialog.visible = false"
-      @select="handleItemSelected"
+      @select="handleItemProposalSelected"
+    />
+    
+    <!-- Item Info Modal -->
+    <ItemInfoModal
+      :visible="itemInfoModal.visible"
+      :item="itemInfoModal.item"
+      @close="itemInfoModal.visible = false"
+      @select-npc="handleNPCSelected"
+    />
+    
+    <!-- NPC List Modal -->
+    <NPCListModal
+      :visible="npcListModal.visible"
+      :npc="npcListModal.npc"
+      @close="npcListModal.visible = false"
+      @select-poi="handlePOINavigation"
     />
     
     <div class="controls">
@@ -387,6 +405,8 @@ import { useMapInteractions } from './composables/useMapInteractions'
 import { mapsAPI, poisAPI, connectionsAPI, pointConnectorsAPI, zoneConnectorsAPI } from './services/api'
 import POIPopup from './components/POIPopup.vue'
 import AdminPanel from './components/AdminPanel.vue'
+import ItemInfoModal from './components/ItemInfoModal.vue'
+import NPCListModal from './components/NPCListModal.vue'
 import AdminPopup from './components/AdminPopup.vue'
 import MapManager from './components/MapManager.vue'
 import ToastContainer from './components/ToastContainer.vue'
@@ -439,7 +459,9 @@ export default {
     ItemEditProposalDialog,
     ItemSearchDialog,
     NPCProposalDialog,
-    NPCEditProposalDialog
+    NPCEditProposalDialog,
+    ItemInfoModal,
+    NPCListModal
   },
   setup() {
     const mapCanvas = ref(null)
@@ -545,6 +567,20 @@ export default {
     const itemSearchDialog = ref({
       visible: false
     })
+    
+    // Item and NPC modals
+    const itemInfoModal = ref({
+      visible: false,
+      item: null
+    })
+    
+    const npcListModal = ref({
+      visible: false,
+      npc: null
+    })
+    
+    // Loading state for map transitions
+    const isTransitioningMap = ref(false)
     
     // Authentication
     const { user, isAuthenticated, isAdmin: isUserAdmin, adminModeEnabled, checkAuthStatus } = useAuth()
@@ -4003,10 +4039,43 @@ export default {
       itemDropdownVisible.value = false
     }
     
-    const handleItemSelected = (item) => {
+    const handleItemProposalSelected = (item) => {
       // Show the edit proposal dialog with the selected item
       itemEditProposalDialog.value.item = item
       itemEditProposalDialog.value.visible = true
+    }
+    
+    // Handle item selection from search (shows item info modal)
+    const handleItemSelected = (item) => {
+      itemInfoModal.value.item = item
+      itemInfoModal.value.visible = true
+    }
+    
+    // Handle NPC selection from search or item modal
+    const handleNPCSelected = (npc) => {
+      // Close item modal if open
+      if (itemInfoModal.value.visible) {
+        itemInfoModal.value.visible = false
+      }
+      npcListModal.value.npc = npc
+      npcListModal.value.visible = true
+    }
+    
+    // Handle POI navigation from NPC modal
+    const handlePOINavigation = async (poi) => {
+      // Close the NPC modal
+      npcListModal.value.visible = false
+      
+      // Show loading state if switching maps
+      if (poi.map_id !== currentMapId.value) {
+        isTransitioningMap.value = true
+      }
+      
+      // Use existing handlePOISelected logic
+      await handlePOISelected(poi)
+      
+      // Clear loading state
+      isTransitioningMap.value = false
     }
     
     const showNPCProposalDialog = () => {
@@ -5747,7 +5816,14 @@ export default {
       npcEditProposalDialog,
       itemEditProposalDialog,
       itemSearchDialog,
-      handleItemSelected
+      handleItemProposalSelected,
+      // New modal handlers
+      itemInfoModal,
+      npcListModal,
+      handleItemSelected,
+      handleNPCSelected,
+      handlePOINavigation,
+      isTransitioningMap
     }
   }
 }

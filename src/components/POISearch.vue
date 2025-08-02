@@ -8,16 +8,19 @@
         @focus="handleFocus"
         @keydown="handleKeydown"
         type="text"
-        placeholder="Search for POIs..."
+        placeholder="Search for POIs, items, NPCs..."
         class="poi-search-input"
       />
       <span v-if="searchQuery" @click="clearSearch" class="search-clear">×</span>
       <span v-else class="search-icon">🔍</span>
     </div>
     
-    <div v-if="showResults && (filteredResults.length > 0 || searchQuery.length > 0)" class="poi-search-results">
-      <div v-if="filteredResults.length === 0" class="no-results">
-        No POIs found matching "{{ searchQuery }}"
+    <div v-if="showResults && (filteredResults.length > 0 || searchQuery.length > 0 || isSearching)" class="poi-search-results">
+      <div v-if="isSearching" class="searching">
+        <span class="search-spinner">⟳</span> Searching...
+      </div>
+      <div v-else-if="filteredResults.length === 0" class="no-results">
+        No results found matching "{{ searchQuery }}"
       </div>
       <div
         v-else
@@ -25,11 +28,17 @@
         :key="`${result.id}-${result.type}`"
         @click="selectPOI(result)"
         :class="['poi-search-result', { highlighted: highlightedIndex === index }]"
-        @mouseenter="highlightedIndex = index"
+        @mouseenter="handleResultHover(result, index, $event)"
+        @mouseleave="handleResultLeave(result)"
       >
         <div class="result-icon" :style="{ color: result.color || '#FFD700' }" v-html="getResultIcon(result)"></div>
         <div class="result-content">
-          <div class="result-name">{{ result.name }}</div>
+          <div class="result-header">
+            <div class="result-name">{{ result.name }}</div>
+            <span class="result-type-badge" :class="getResultTypeBadgeClass(result)">
+              {{ getResultTypeBadgeText(result) }}
+            </span>
+          </div>
           <div class="result-details">
             <span class="result-type">{{ formatPOIType(result) }}</span>
             <span v-if="result.map_name" class="result-map">• {{ result.map_name }}</span>
@@ -38,14 +47,29 @@
         </div>
       </div>
     </div>
+    
+    <!-- Item Tooltip -->
+    <ItemTooltip
+      :item="hoveredItem"
+      :visible="tooltipVisible"
+      :position="tooltipPosition"
+      :show-actions="false"
+      @mouseenter="cancelTooltipHide"
+      @mouseleave="hideTooltip"
+      @close="hideTooltip"
+    />
   </div>
 </template>
 
 <script>
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
+import ItemTooltip from './ItemTooltip.vue';
 
 export default {
   name: 'POISearch',
+  components: {
+    ItemTooltip
+  },
   directives: {
     clickOutside: {
       mounted(el, binding) {
@@ -75,212 +99,160 @@ export default {
       default: () => []
     }
   },
-  emits: ['select-poi'],
+  emits: ['select-poi', 'select-item', 'select-npc'],
   setup(props, { emit }) {
     const searchQuery = ref('');
     const showResults = ref(false);
     const highlightedIndex = ref(-1);
     const searchInput = ref(null);
-    const poiTypes = ref([]);
+    const searchResults = ref([]);
+    const isSearching = ref(false);
+    let searchTimeout = null;
+    
+    // Tooltip state
+    const hoveredItem = ref(null);
+    const tooltipVisible = ref(false);
+    const tooltipPosition = ref({ x: 0, y: 0 });
+    let tooltipTimeout = null;
 
-    // Fuzzy search scoring function
-    const calculateScore = (poi, query) => {
-      const lowerQuery = query.toLowerCase();
-      const lowerName = poi.name.toLowerCase();
-      const lowerDesc = (poi.description || '').toLowerCase();
+    // Perform search via API
+    const performSearch = async () => {
+      if (!searchQuery.value || searchQuery.value.length < 2) {
+        searchResults.value = [];
+        return;
+      }
+
+      isSearching.value = true;
       
-      let score = 0;
-      let matchType = null;
-      
-      // Exact match
-      if (lowerName === lowerQuery) {
-        score = 100;
-        matchType = 'exact';
-      }
-      // Starts with query
-      else if (lowerName.startsWith(lowerQuery)) {
-        score = 90;
-        matchType = 'starts';
-      }
-      // Contains query as whole word
-      else if (lowerName.match(new RegExp(`\\b${lowerQuery}\\b`))) {
-        score = 80;
-        matchType = 'word';
-      }
-      // Contains query
-      else if (lowerName.includes(lowerQuery)) {
-        score = 70;
-        matchType = 'contains';
-      }
-      // Fuzzy match in name
-      else {
-        const nameScore = fuzzyMatch(lowerName, lowerQuery);
-        if (nameScore > 0) {
-          score = nameScore * 60;
-          matchType = 'fuzzy';
-        }
-      }
-      
-      // Check description if no good name match
-      if (score < 70 && lowerDesc) {
-        if (lowerDesc.includes(lowerQuery)) {
-          score = Math.max(score, 50);
-          matchType = 'description';
+      try {
+        const response = await fetch(`/api/search?q=${encodeURIComponent(searchQuery.value)}`);
+        if (response.ok) {
+          const results = await response.json();
+          searchResults.value = results;
         } else {
-          const descScore = fuzzyMatch(lowerDesc, lowerQuery);
-          if (descScore > 0.5) {
-            score = Math.max(score, descScore * 40);
-            matchType = 'description';
-          }
+          searchResults.value = [];
         }
+      } catch (error) {
+        console.error('Search error:', error);
+        searchResults.value = [];
+      } finally {
+        isSearching.value = false;
       }
-      
-      // Bonus for current map
-      if (poi.map_id === props.currentMapId) {
-        score += 10;
-      }
-      
-      return { score, matchType };
-    };
-
-    // Simple fuzzy matching algorithm
-    const fuzzyMatch = (str, query) => {
-      let queryIndex = 0;
-      let strIndex = 0;
-      let matchedChars = 0;
-      
-      while (queryIndex < query.length && strIndex < str.length) {
-        if (str[strIndex] === query[queryIndex]) {
-          matchedChars++;
-          queryIndex++;
-        }
-        strIndex++;
-      }
-      
-      return matchedChars / query.length;
     };
 
     const filteredResults = computed(() => {
-      if (!searchQuery.value || searchQuery.value.length < 2) {
-        return [];
-      }
-
-      const results = props.allPois
-        .map(poi => {
-          const { score, matchType } = calculateScore(poi, searchQuery.value);
-          if (score > 0) {
-            return {
-              ...poi,
-              score,
-              match_type: matchType,
-              map_name: props.maps.find(m => m.id === poi.map_id)?.name
-            };
-          }
-          return null;
-        })
-        .filter(Boolean)
-        .sort((a, b) => {
-          // Sort by score first
-          if (b.score !== a.score) {
-            return b.score - a.score;
-          }
-          // Then by current map
-          if (a.map_id === props.currentMapId && b.map_id !== props.currentMapId) {
-            return -1;
-          }
-          if (b.map_id === props.currentMapId && a.map_id !== props.currentMapId) {
-            return 1;
-          }
-          // Finally by name
-          return a.name.localeCompare(b.name);
-        })
-        .slice(0, 10); // Limit to top 10 results
-
-      return results;
+      return searchResults.value;
     });
 
-    const formatPOIType = (poi) => {
-      if (poi.is_custom) {
-        if (poi.is_pending) {
-          return 'Pending Custom POI';
-        } else if (poi.is_shared) {
-          return 'Shared Custom POI';
+    const formatPOIType = (result) => {
+      // Handle different result types
+      if (result.result_type === 'item') {
+        return `${result.item_type || 'Unknown'} • ${result.slot || 'N/A'}`;
+      } else if (result.result_type === 'npc') {
+        return `Level ${result.level} • ${result.location_count || 0} location${result.location_count === 1 ? '' : 's'}`;
+      } else if (result.result_type === 'custom_poi') {
+        if (result.is_pending) {
+          return 'Pending';
+        } else if (result.is_shared) {
+          return 'Shared';
         } else {
-          return 'My Custom POI';
+          return result.owner_name || 'My POI';
         }
       }
       
-      // Use POI type name if available
-      if (poi.type_id && poiTypes.value.length > 0) {
-        const poiType = poiTypes.value.find(t => t.id === poi.type_id);
-        if (poiType) {
-          return poiType.name;
-        }
+      // Regular POI - use type name if available
+      if (result.type_name) {
+        return result.type_name;
       }
       
-      // Fallback to old type format
-      if (poi.type) {
-        return poi.type.charAt(0).toUpperCase() + poi.type.slice(1);
-      }
-      return 'POI';
+      // Fallback
+      return 'Point of Interest';
     };
 
-    const getResultIcon = (poi) => {
-      // For custom POIs, use their custom icon if available
-      if (poi.is_custom && poi.icon) {
-        return poi.icon;
-      }
-      
-      // Use POI type icon if available
-      if (poi.type_id && poiTypes.value.length > 0) {
-        const poiType = poiTypes.value.find(t => t.id === poi.type_id);
-        if (poiType) {
-          if (poiType.icon_type === 'emoji') {
-            return poiType.icon_value;
-          } else if (poiType.icon_type === 'iconify' || poiType.icon_type === 'fontawesome') {
-            // Return Iconify web component HTML
-            return `<iconify-icon icon="${poiType.icon_value}" width="20" height="20"></iconify-icon>`;
-          } else if (poiType.icon_type === 'upload' && poiType.icon_value) {
-            // Return image HTML for uploaded icons
-            return `<img src="${poiType.icon_value}" alt="${poiType.name}" style="width: 20px; height: 20px; object-fit: contain;">`;
-          }
-          // For other icon types, return a default
-          return '📍';
+    const getResultIcon = (result) => {
+      // For regular POIs - use the type icon
+      if (result.result_type === 'poi' && result.type_icon_value) {
+        if (result.type_icon_type === 'emoji') {
+          return result.type_icon_value;
+        } else if (result.type_icon_type === 'iconify') {
+          return `<iconify-icon icon="${result.type_icon_value}" width="20" height="20"></iconify-icon>`;
         }
       }
       
-      // Fallback to old type-based icons for backward compatibility
-      if (!poi.type) return '📍';
+      // For custom POIs - use their custom icon
+      if (result.result_type === 'custom_poi' && result.icon_value) {
+        return result.icon_value; // Custom POIs are always emoji
+      }
       
-      const icons = {
-        landmark: '🏛️',
-        quest: '❗',
-        merchant: '💰',
-        npc: '💀',
-        dungeon: '⚔️',
-        other: '📍'
-      };
+      // For items - use their icon
+      if (result.result_type === 'item' && result.icon_value) {
+        if (result.icon_type === 'emoji') {
+          return result.icon_value;
+        } else if (result.icon_type === 'iconify') {
+          return `<iconify-icon icon="${result.icon_value}" width="20" height="20"></iconify-icon>`;
+        }
+      }
       
-      return icons[poi.type] || '📍';
-    };
-    
-    const loadPoiTypes = async () => {
-      try {
-        const response = await fetch('/api/poi-types');
-        if (!response.ok) throw new Error('Failed to load POI types');
-        poiTypes.value = await response.json();
-      } catch (error) {
-        console.error('Error loading POI types:', error);
+      // For NPCs - they don't have custom icons in the database
+      if (result.result_type === 'npc') {
+        return '💀'; // Default NPC icon
+      }
+      
+      // Fallback icons based on type
+      switch (result.result_type) {
+        case 'item':
+          return '📦';
+        case 'npc':
+          return '💀';
+        case 'custom_poi':
+          return '📍';
+        default:
+          return '📍';
       }
     };
     
-    onMounted(() => {
-      loadPoiTypes();
-    });
+    const getResultTypeBadgeClass = (result) => {
+      switch (result.result_type) {
+        case 'item':
+          return 'badge-item';
+        case 'npc':
+          return 'badge-npc';
+        case 'custom_poi':
+          return 'badge-custom-poi';
+        default:
+          return 'badge-poi';
+      }
+    };
+    
+    const getResultTypeBadgeText = (result) => {
+      switch (result.result_type) {
+        case 'item':
+          return 'ITEM';
+        case 'npc':
+          return 'NPC';
+        case 'custom_poi':
+          return 'CUSTOM';
+        default:
+          return 'POI';
+      }
+    };
 
     const handleSearch = () => {
-      showResults.value = true;
+      showResults.value = searchQuery.value.length >= 2;
       highlightedIndex.value = -1;
+      
+      // Debounce search
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+      
+      if (searchQuery.value.length >= 2) {
+        searchTimeout = setTimeout(() => {
+          performSearch();
+        }, 300);
+      } else {
+        searchResults.value = [];
+      }
     };
 
     const handleFocus = () => {
@@ -315,8 +287,19 @@ export default {
       }
     };
 
-    const selectPOI = (poi) => {
-      emit('select-poi', poi);
+    const selectPOI = (result) => {
+      // Hide tooltip if showing
+      hideTooltip();
+      
+      // Emit different events based on result type
+      if (result.result_type === 'item') {
+        emit('select-item', result);
+      } else if (result.result_type === 'npc') {
+        emit('select-npc', result);
+      } else {
+        // POI or custom POI
+        emit('select-poi', result);
+      }
       clearSearch();
     };
 
@@ -324,13 +307,94 @@ export default {
       searchQuery.value = '';
       showResults.value = false;
       highlightedIndex.value = -1;
+      hideTooltip();
     };
 
     const closeResults = () => {
       showResults.value = false;
       highlightedIndex.value = -1;
+      hideTooltip();
     };
 
+    // Tooltip functions
+    const handleResultHover = async (result, index, event) => {
+      highlightedIndex.value = index;
+      
+      // Only show tooltip for items
+      if (result.result_type !== 'item') {
+        return;
+      }
+      
+      // Clear any existing timeout
+      if (tooltipTimeout) {
+        clearTimeout(tooltipTimeout);
+        tooltipTimeout = null;
+      }
+      
+      // Show tooltip after a short delay
+      tooltipTimeout = setTimeout(async () => {
+        hoveredItem.value = result;
+        
+        // Calculate tooltip position
+        const rect = event.target.getBoundingClientRect();
+        const tooltipWidth = 300; // Approximate tooltip width
+        
+        // Position tooltip to the right of the result, or left if not enough space
+        let x = rect.right + 10;
+        if (x + tooltipWidth > window.innerWidth - 20) {
+          x = rect.left - tooltipWidth - 10;
+        }
+        
+        tooltipPosition.value = {
+          x: x,
+          y: rect.top
+        };
+        
+        await nextTick();
+        tooltipVisible.value = true;
+      }, 300); // 300ms delay
+    };
+    
+    const handleResultLeave = (result) => {
+      if (result.result_type !== 'item') {
+        return;
+      }
+      
+      // Clear timeout if hovering away before tooltip shows
+      if (tooltipTimeout) {
+        clearTimeout(tooltipTimeout);
+        tooltipTimeout = null;
+      }
+      
+      // Start hide timer
+      startTooltipHideTimer();
+    };
+    
+    const startTooltipHideTimer = () => {
+      if (tooltipTimeout) {
+        clearTimeout(tooltipTimeout);
+      }
+      
+      tooltipTimeout = setTimeout(() => {
+        hideTooltip();
+      }, 200); // 200ms delay before hiding
+    };
+    
+    const cancelTooltipHide = () => {
+      if (tooltipTimeout) {
+        clearTimeout(tooltipTimeout);
+        tooltipTimeout = null;
+      }
+    };
+    
+    const hideTooltip = () => {
+      tooltipVisible.value = false;
+      hoveredItem.value = null;
+      if (tooltipTimeout) {
+        clearTimeout(tooltipTimeout);
+        tooltipTimeout = null;
+      }
+    };
 
     return {
       searchQuery,
@@ -338,6 +402,7 @@ export default {
       filteredResults,
       highlightedIndex,
       searchInput,
+      isSearching,
       handleSearch,
       handleFocus,
       handleKeydown,
@@ -345,7 +410,17 @@ export default {
       clearSearch,
       closeResults,
       formatPOIType,
-      getResultIcon
+      getResultIcon,
+      getResultTypeBadgeClass,
+      getResultTypeBadgeText,
+      // Tooltip
+      hoveredItem,
+      tooltipVisible,
+      tooltipPosition,
+      handleResultHover,
+      handleResultLeave,
+      cancelTooltipHide,
+      hideTooltip
     };
   }
 };
@@ -431,6 +506,22 @@ export default {
   font-style: italic;
 }
 
+.searching {
+  padding: 20px;
+  text-align: center;
+  color: #FFD700;
+}
+
+.search-spinner {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .poi-search-result {
   display: flex;
   align-items: center;
@@ -476,13 +567,55 @@ export default {
   overflow: hidden;
 }
 
+.result-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
 .result-name {
   font-weight: bold;
   color: #FFD700;
-  margin-bottom: 2px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 1;
+}
+
+/* Type Badges */
+.result-type-badge {
+  font-size: 10px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.badge-poi {
+  background: rgba(74, 124, 89, 0.3);
+  color: #4dff4d;
+  border: 1px solid rgba(74, 124, 89, 0.5);
+}
+
+.badge-item {
+  background: rgba(138, 43, 226, 0.3);
+  color: #da70d6;
+  border: 1px solid rgba(138, 43, 226, 0.5);
+}
+
+.badge-npc {
+  background: rgba(220, 20, 60, 0.3);
+  color: #ff6b6b;
+  border: 1px solid rgba(220, 20, 60, 0.5);
+}
+
+.badge-custom-poi {
+  background: rgba(255, 165, 0, 0.3);
+  color: #ffa500;
+  border: 1px solid rgba(255, 165, 0, 0.5);
 }
 
 .result-details {

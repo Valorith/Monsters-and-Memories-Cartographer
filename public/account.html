@@ -2593,6 +2593,95 @@
         padding: 1rem;
       }
     }
+    
+    /* Custom Confirmation Dialog */
+    .confirm-dialog-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(5px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      animation: fadeIn 0.2s ease-out;
+    }
+    
+    .confirm-dialog {
+      background: #2d2d2d;
+      border: 2px solid #4a7c59;
+      border-radius: 8px;
+      padding: 2rem;
+      max-width: 400px;
+      width: 90%;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      animation: slideIn 0.3s ease-out;
+    }
+    
+    .confirm-dialog-title {
+      color: #FFD700;
+      margin: 0 0 1rem 0;
+      font-size: 1.5rem;
+      font-family: 'Cinzel', serif;
+    }
+    
+    .confirm-dialog-message {
+      color: #e0e0e0;
+      margin: 0 0 1.5rem 0;
+      line-height: 1.5;
+    }
+    
+    .confirm-dialog-buttons {
+      display: flex;
+      gap: 1rem;
+      justify-content: flex-end;
+    }
+    
+    .confirm-dialog-btn {
+      padding: 0.5rem 1.5rem;
+      border: none;
+      border-radius: 4px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .confirm-dialog-btn-cancel {
+      background: #555;
+      color: #fff;
+    }
+    
+    .confirm-dialog-btn-cancel:hover {
+      background: #666;
+    }
+    
+    .confirm-dialog-btn-confirm {
+      background: #dc3545;
+      color: #fff;
+    }
+    
+    .confirm-dialog-btn-confirm:hover {
+      background: #c82333;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    @keyframes slideIn {
+      from { 
+        transform: translateY(-20px);
+        opacity: 0;
+      }
+      to { 
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
   </style>
   <script src="/safe-html.js"></script>
   <script src="/csrf-helper.js"></script>
@@ -4129,6 +4218,40 @@
       }
     }
 
+    // Custom confirmation dialog
+    function showConfirmDialog(message, onConfirm) {
+      const dialog = document.getElementById('confirmDialog');
+      const messageEl = dialog.querySelector('.confirm-dialog-message');
+      const confirmBtn = dialog.querySelector('.confirm-dialog-btn-confirm');
+      const cancelBtn = dialog.querySelector('.confirm-dialog-btn-cancel');
+      
+      messageEl.textContent = message;
+      dialog.style.display = 'flex';
+      
+      // Remove any existing event listeners
+      const newConfirmBtn = confirmBtn.cloneNode(true);
+      const newCancelBtn = cancelBtn.cloneNode(true);
+      confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+      cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+      
+      // Add new event listeners
+      newConfirmBtn.addEventListener('click', () => {
+        dialog.style.display = 'none';
+        onConfirm();
+      });
+      
+      newCancelBtn.addEventListener('click', () => {
+        dialog.style.display = 'none';
+      });
+      
+      // Also close on overlay click
+      dialog.addEventListener('click', (e) => {
+        if (e.target === dialog) {
+          dialog.style.display = 'none';
+        }
+      });
+    }
+    
     function showMessage(text, type) {
       // Create a floating toast notification
       const toast = document.createElement('div');
@@ -9230,33 +9353,51 @@
 
     async function voteProposal(proposalId, vote) {
       try {
-        const response = await window.csrfHelper.fetchWithCSRF(`/api/change-proposals/${proposalId}/vote`, {
-          method: 'POST',
-          body: { vote }
-        });
-        
-        if (response.ok) {
-          const result = await response.json();
-          
-          if (result.withdrawn) {
-            showMessage('Proposal withdrawn', 'info');
-          } else if (result.approved) {
-            showMessage('Proposal approved!', 'success');
-          } else if (result.rejected) {
-            showMessage('Proposal rejected', 'info');
-          }
-          
-          // Reload proposals and update count
-          loadProposals();
-          loadVotingStats();
-          loadInitialProposalCount();
-        } else {
-          const error = await response.json();
-          showMessage(error.error || 'Failed to vote', 'error');
+        // Check if this is the proposer trying to downvote their own proposal
+        const proposal = currentProposals.find(p => p.id === proposalId);
+        if (proposal && proposal.proposer_id === currentUser.id && vote === -1) {
+          showConfirmDialog(
+            'Are you sure you want to withdraw your proposal? This action cannot be undone.',
+            async () => {
+              // Proceed with the vote
+              await performVote(proposalId, vote);
+            }
+          );
+          return;
         }
+        
+        // Normal vote - proceed directly
+        await performVote(proposalId, vote);
       } catch (error) {
         console.error('Error voting:', error);
         showMessage('Failed to vote', 'error');
+      }
+    }
+    
+    async function performVote(proposalId, vote) {
+      const response = await window.csrfHelper.fetchWithCSRF(`/api/change-proposals/${proposalId}/vote`, {
+        method: 'POST',
+        body: { vote }
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        
+        if (result.withdrawn) {
+          showMessage('Proposal withdrawn', 'info');
+        } else if (result.approved) {
+          showMessage('Proposal approved!', 'success');
+        } else if (result.rejected) {
+          showMessage('Proposal rejected', 'info');
+        }
+        
+        // Reload proposals and update count
+        loadProposals();
+        loadVotingStats();
+        loadInitialProposalCount();
+      } else {
+        const error = await response.json();
+        showMessage(error.error || 'Failed to vote', 'error');
       }
     }
 
@@ -11986,6 +12127,18 @@
       </div>
       <div class="modal-body" id="admin-proposal-content">
         <!-- Content loaded dynamically -->
+      </div>
+    </div>
+  </div>
+  
+  <!-- Custom Confirmation Dialog -->
+  <div id="confirmDialog" class="confirm-dialog-overlay" style="display: none;">
+    <div class="confirm-dialog">
+      <h3 class="confirm-dialog-title">Confirm Action</h3>
+      <p class="confirm-dialog-message"></p>
+      <div class="confirm-dialog-buttons">
+        <button class="confirm-dialog-btn confirm-dialog-btn-cancel">Cancel</button>
+        <button class="confirm-dialog-btn confirm-dialog-btn-confirm">Confirm</button>
       </div>
     </div>
   </div>

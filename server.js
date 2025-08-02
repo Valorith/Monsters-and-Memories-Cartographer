@@ -22,6 +22,7 @@ import poiTypesRouter from './src/api/poi-types.js';
 import itemsRouter from './src/api/items.js';
 import npcsRouter from './src/api/npcs.js';
 import changeProposalsRouter from './src/api/change-proposals.js';
+import searchRouter from './src/api/search.js';
 
 // Try to load sharp, but make it optional
 let sharp;
@@ -570,6 +571,9 @@ npcsRouter(app, validateCSRF);
 // Change Proposals routes
 changeProposalsRouter(app, validateCSRF, { updateUserXP, getXPConfig });
 
+// Search routes
+searchRouter(app);
+
 // Get all maps - cached for 5 minutes
 app.get('/api/maps', 
   cacheMiddleware(mapsCache, 'maps-list', 5 * 60 * 1000), // 5 minutes
@@ -956,6 +960,46 @@ app.get('/api/pois/all', async (req, res) => {
   } catch (error) {
     console.error('Error fetching all POIs:', error);
     res.status(500).json({ error: 'Failed to fetch POIs' });
+  }
+});
+
+// Get active change proposals for a specific POI
+app.get('/api/pois/:poiId/active-proposals', async (req, res) => {
+  const { poiId } = req.params;
+  
+  try {
+    const result = await pool.query(`
+      SELECT 
+        cp.id,
+        cp.change_type,
+        cp.vote_score,
+        cp.status,
+        cp.proposer_id,
+        u.nickname as proposer_name,
+        cp.proposed_data,
+        cp.current_data,
+        cp.created_at,
+        (SELECT COUNT(*) FROM change_proposal_votes WHERE proposal_id = cp.id AND vote = 1) as upvotes,
+        (SELECT COUNT(*) FROM change_proposal_votes WHERE proposal_id = cp.id AND vote = -1) as downvotes,
+        CASE 
+          WHEN $1::integer IS NOT NULL THEN (
+            SELECT vote FROM change_proposal_votes 
+            WHERE proposal_id = cp.id AND user_id = $1
+          )
+          ELSE NULL
+        END as user_vote
+      FROM change_proposals cp
+      LEFT JOIN users u ON cp.proposer_id = u.id
+      WHERE cp.target_type = 'poi' 
+        AND cp.target_id = $2
+        AND cp.status = 'pending'
+      ORDER BY cp.created_at DESC
+    `, [req.user?.id || null, poiId]);
+    
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching POI proposals:', error);
+    res.status(500).json({ error: 'Failed to fetch proposals' });
   }
 });
 

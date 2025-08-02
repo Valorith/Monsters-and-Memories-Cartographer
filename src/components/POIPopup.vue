@@ -175,6 +175,27 @@
         </span>
       </div>
       
+      <!-- Active change proposals for regular POIs -->
+      <div v-if="!isCustomPOI && !localPoi.is_proposal && proposalVoteStats" class="poi-active-proposals">
+        <div class="proposal-header">
+          <span class="proposal-icon">📋</span>
+          <span class="proposal-label">Active Proposals ({{ proposalVoteStats.count }})</span>
+        </div>
+        <div class="vote-stats">
+          <span class="vote-item">
+            <span class="vote-icon">👍</span>
+            <span class="vote-count upvote">{{ proposalVoteStats.upvotes }}</span>
+          </span>
+          <span class="vote-item">
+            <span class="vote-icon">👎</span>
+            <span class="vote-count downvote">{{ proposalVoteStats.downvotes }}</span>
+          </span>
+          <span class="vote-total" :class="proposalVoteStats.score > 0 ? 'positive' : proposalVoteStats.score < 0 ? 'negative' : ''">
+            ({{ proposalVoteStats.score > 0 ? '+' : '' }}{{ proposalVoteStats.score }})
+          </span>
+        </div>
+      </div>
+      
       <!-- Shared indicator -->
       <div v-if="isSharedPOI" class="poi-shared">
         <span class="shared-icon">🔗</span>
@@ -357,6 +378,7 @@ export default {
     // Data for NPC and Item
     const npcData = ref(null)
     const itemData = ref(null)
+    const activeProposals = ref([])
     
     // Tooltip data
     const tooltipItem = ref(null)
@@ -374,6 +396,7 @@ export default {
       // Fetch new NPC/Item data when POI changes
       fetchNPCData()
       fetchItemData()
+      fetchActiveProposals()
     }, { deep: true })
     
     // Fetch NPC data when npc_id changes
@@ -440,10 +463,49 @@ export default {
       }
     }
     
+    // Fetch active change proposals for this POI
+    const fetchActiveProposals = async () => {
+      // Only fetch for regular POIs (not custom or proposal POIs)
+      if (!localPoi.value.id || isCustomPOI.value || localPoi.value.is_proposal) {
+        activeProposals.value = []
+        return
+      }
+      
+      try {
+        const response = await fetch(`/api/pois/${localPoi.value.id}/active-proposals`)
+        if (response.ok) {
+          activeProposals.value = await response.json()
+        } else {
+          activeProposals.value = []
+        }
+      } catch (error) {
+        console.error('Error fetching active proposals:', error)
+        activeProposals.value = []
+      }
+    }
+    
+    // Compute total votes for active proposals
+    const proposalVoteStats = computed(() => {
+      if (activeProposals.value.length === 0) return null
+      
+      // Aggregate votes across all active proposals
+      const totalUpvotes = activeProposals.value.reduce((sum, p) => sum + (p.upvotes || 0), 0)
+      const totalDownvotes = activeProposals.value.reduce((sum, p) => sum + (p.downvotes || 0), 0)
+      const totalScore = activeProposals.value.reduce((sum, p) => sum + (p.vote_score || 0), 0)
+      
+      return {
+        upvotes: totalUpvotes,
+        downvotes: totalDownvotes,
+        score: totalScore,
+        count: activeProposals.value.length
+      }
+    })
+    
     // Initial fetch
     onMounted(() => {
       fetchNPCData()
       fetchItemData()
+      fetchActiveProposals()
     })
     
     // Cleanup on unmount
@@ -879,7 +941,9 @@ export default {
       editDropdown,
       showEditDropdown,
       toggleEditDropdown,
-      handleProposalAction
+      handleProposalAction,
+      activeProposals,
+      proposalVoteStats
     }
   }
 }
@@ -1319,6 +1383,34 @@ export default {
   margin-top: 0.5rem;
 }
 
+/* Active proposals display for regular POIs */
+.poi-active-proposals {
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.poi-active-proposals .proposal-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  color: #FFD700;
+}
+
+.poi-active-proposals .proposal-icon {
+  font-size: 1rem;
+}
+
+.poi-active-proposals .proposal-label {
+  font-weight: 600;
+}
+
+.poi-active-proposals .vote-stats {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .poi-voting-inline .vote-item {
   display: flex;
   align-items: center;
@@ -1353,6 +1445,44 @@ export default {
 }
 
 .poi-voting-inline .vote-total.negative {
+  color: #dc3545;
+}
+
+/* Copy vote item styles for active proposals */
+.poi-active-proposals .vote-item {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.poi-active-proposals .vote-icon {
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+.poi-active-proposals .vote-count {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.poi-active-proposals .vote-count.upvote {
+  color: #28a745;
+}
+
+.poi-active-proposals .vote-count.downvote {
+  color: #dc3545;
+}
+
+.poi-active-proposals .vote-total {
+  font-weight: 600;
+  color: #999;
+}
+
+.poi-active-proposals .vote-total.positive {
+  color: #28a745;
+}
+
+.poi-active-proposals .vote-total.negative {
   color: #dc3545;
 }
 

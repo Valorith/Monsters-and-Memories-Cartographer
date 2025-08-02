@@ -21,14 +21,47 @@ async function migrate() {
     
     if (existingTables.rows.length > 0) {
       console.log('Found existing tables:', existingTables.rows.map(r => r.table_name).join(', '));
+      
+      // Check if core tables exist
+      const coreTableNames = ['maps', 'pois', 'connections', 'point_connectors', 'zone_connectors'];
+      const existingTableNames = existingTables.rows.map(r => r.table_name);
+      const hasCoreTables = coreTableNames.every(table => existingTableNames.includes(table));
+      
+      if (hasCoreTables) {
+        console.log('Core tables already exist, skipping schema.sql');
+      } else {
+        // Read and execute schema file
+        const schemaPath = path.join(__dirname, 'schema.sql');
+        const schema = fs.readFileSync(schemaPath, 'utf8');
+        
+        console.log('Executing schema.sql...');
+        try {
+          await pool.query(schema);
+          console.log('Schema.sql completed');
+        } catch (error) {
+          console.error('Error executing schema.sql:', error.message);
+          if (error.position) {
+            const position = parseInt(error.position);
+            const nearError = schema.substring(Math.max(0, position - 50), position + 50);
+            console.error('Error near:', nearError);
+          }
+          throw error;
+        }
+      }
+    } else {
+      // No tables exist, run schema
+      const schemaPath = path.join(__dirname, 'schema.sql');
+      const schema = fs.readFileSync(schemaPath, 'utf8');
+      
+      console.log('Executing schema.sql...');
+      try {
+        await pool.query(schema);
+        console.log('Schema.sql completed');
+      } catch (error) {
+        console.error('Error executing schema.sql:', error.message);
+        throw error;
+      }
     }
-    
-    // Read the schema file
-    const schemaPath = path.join(__dirname, 'schema.sql');
-    const schema = fs.readFileSync(schemaPath, 'utf8');
-    
-    // Execute the schema
-    await pool.query(schema);
     
     // Execute the users table migration
     const usersSchemaPath = path.join(__dirname, 'create-users-table.sql');
@@ -49,25 +82,41 @@ async function migrate() {
     // Execute the custom POIs table migration
     const customPoisSchemaPath = path.join(__dirname, 'create-custom-pois-table.sql');
     if (fs.existsSync(customPoisSchemaPath)) {
-      const customPoisSchema = fs.readFileSync(customPoisSchemaPath, 'utf8');
-      await pool.query(customPoisSchema);
-      console.log('Custom POIs table migration completed');
+      try {
+        console.log('Running custom POIs table migration...');
+        const customPoisSchema = fs.readFileSync(customPoisSchemaPath, 'utf8');
+        await pool.query(customPoisSchema);
+        console.log('Custom POIs table migration completed');
+      } catch (error) {
+        console.error('Error in custom POIs migration:', error.message);
+        // Skip this migration if it fails (table might already exist)
+      }
     }
     
     // Execute the share code update migration
     const shareCodePath = path.join(__dirname, 'update-share-code.sql');
     if (fs.existsSync(shareCodePath)) {
-      const shareCodeSchema = fs.readFileSync(shareCodePath, 'utf8');
-      await pool.query(shareCodeSchema);
-      console.log('Share code migration completed');
+      try {
+        console.log('Running share code migration...');
+        const shareCodeSchema = fs.readFileSync(shareCodePath, 'utf8');
+        await pool.query(shareCodeSchema);
+        console.log('Share code migration completed');
+      } catch (error) {
+        console.error('Error in share code migration:', error.message);
+      }
     }
     
     // Execute the XP field migration
     const xpFieldPath = path.join(__dirname, 'add-xp-field.sql');
     if (fs.existsSync(xpFieldPath)) {
-      const xpFieldSchema = fs.readFileSync(xpFieldPath, 'utf8');
-      await pool.query(xpFieldSchema);
-      console.log('XP field migration completed');
+      try {
+        console.log('Running XP field migration...');
+        const xpFieldSchema = fs.readFileSync(xpFieldPath, 'utf8');
+        await pool.query(xpFieldSchema);
+        console.log('XP field migration completed');
+      } catch (error) {
+        console.error('Error in XP field migration:', error.message);
+      }
     }
     
     // Execute the pending POIs migration

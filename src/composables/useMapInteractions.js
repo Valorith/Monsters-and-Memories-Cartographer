@@ -431,30 +431,42 @@ export function useMapInteractions(scale, offsetX, offsetY) {
     
     // Draw pending proposal indicator
     if (poi.has_pending_proposal) {
-      // Draw a subtle pulsing orange ring around the POI
+      // Draw a subtle pulsing orange glow beneath the icon
       const pulseTime = Date.now() / 1000
-      const pulseScale = 1 + Math.sin(pulseTime * 3) * 0.05  // Reduced pulse amplitude
-      const ringRadius = (iconSize / 2 + 6) * pulseScale  // Slightly smaller ring
+      const pulseIntensity = 0.4 + Math.sin(pulseTime * 3) * 0.2  // Gentle pulsing between 0.2 and 0.6 opacity
       
       ctx.save()
-      ctx.strokeStyle = '#ff9800'
-      ctx.lineWidth = 2  // Thinner line
-      ctx.shadowColor = '#ff9800'
-      ctx.shadowBlur = 4  // Less glow
-      ctx.globalAlpha = 0.5  // More transparent
       
+      // Create elliptical glow beneath the icon
+      const glowWidth = iconSize * 0.8
+      const glowHeight = iconSize * 0.3
+      const glowOffsetY = iconSize / 2 + 5  // Position below the icon
+      
+      // Draw the glow using radial gradient
+      const gradient = ctx.createRadialGradient(0, glowOffsetY, 0, 0, glowOffsetY, glowWidth)
+      gradient.addColorStop(0, `rgba(255, 152, 0, ${pulseIntensity})`)
+      gradient.addColorStop(0.5, `rgba(255, 152, 0, ${pulseIntensity * 0.5})`)
+      gradient.addColorStop(1, 'rgba(255, 152, 0, 0)')
+      
+      ctx.fillStyle = gradient
+      ctx.globalAlpha = 0.8
+      
+      // Draw elliptical glow
       ctx.beginPath()
-      ctx.arc(0, 0, ringRadius, 0, Math.PI * 2)
-      ctx.stroke()
+      ctx.ellipse(0, glowOffsetY, glowWidth, glowHeight, 0, 0, Math.PI * 2)
+      ctx.fill()
       
-      // Add small proposal icon
-      ctx.font = 'bold 16px sans-serif'
+      // Add small proposal icon below
+      ctx.font = 'bold 14px sans-serif'
       ctx.fillStyle = '#ff9800'
       ctx.shadowColor = 'rgba(0, 0, 0, 0.8)'
       ctx.shadowBlur = 4
       ctx.shadowOffsetX = 1
       ctx.shadowOffsetY = 1
-      ctx.fillText('📋', iconSize / 2 + 5, -iconSize / 2 - 5)
+      ctx.globalAlpha = pulseIntensity + 0.3  // Ensure icon is visible
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('📋', 0, glowOffsetY + glowHeight + 10)
       
       ctx.restore()
     }
