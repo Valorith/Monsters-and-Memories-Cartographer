@@ -181,11 +181,19 @@
         <span class="shared-text">Shared by {{ localPoi.owner_name || 'Unknown' }}</span>
       </div>
       
-      <p v-if="canEdit && !localPoi.is_proposal" class="edit-hint">{{ isAdmin ? 'Click any field to edit' : 'Alt+drag to move' }}</p>
-      <p v-else-if="isAuthenticated && !isCustomPOI && !localPoi.is_proposal && !isAdmin" class="edit-hint">Alt+drag to propose location change</p>
+      <div v-if="canEdit && !localPoi.is_proposal" class="edit-hints">
+        <p class="edit-hint">{{ isAdmin ? 'Click any field to edit' : 'Alt+drag to move' }}</p>
+        <p class="edit-hint">C+drag to copy</p>
+      </div>
+      <div v-else-if="isAuthenticated && !isCustomPOI && !localPoi.is_proposal && !isAdmin" class="edit-hints">
+        <p class="edit-hint">Alt+drag to propose location change</p>
+        <p class="edit-hint">C+drag to copy</p>
+      </div>
       <p v-else-if="isOwnCustomPOI && localPoi.status === 'pending'" class="edit-hint pending-hint">
         POI can not be edited while pending publication.
       </p>
+      <!-- Show copy hint for all authenticated users even if they can't edit -->
+      <p v-else-if="isAuthenticated && !localPoi.is_proposal" class="edit-hint">C+drag to copy</p>
       
       <!-- Action buttons for custom POIs -->
       <div v-if="isOwnCustomPOI && localPoi.status !== 'pending'" class="custom-poi-actions">
@@ -1119,6 +1127,14 @@ export default {
 .edit-input:focus, .edit-textarea:focus, .edit-select:focus {
   border-color: #4a7c59;
   background: #4a4a4a;
+}
+
+.edit-hints {
+  margin: 0.5rem 0;
+}
+
+.edit-hints .edit-hint {
+  margin: 0.2rem 0;
 }
 
 .edit-hint {

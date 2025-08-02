@@ -1750,22 +1750,80 @@
     /* Voting Tab Styles */
     .voting-stats-container {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 1rem;
-      margin-bottom: 2rem;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
     }
     
     .voting-stat-card {
       background: #3a3a3a;
+      border: 2px solid transparent;
       border-radius: 8px;
-      padding: 1.5rem;
+      padding: 0;
       display: flex;
+      flex-direction: column;
       align-items: center;
-      gap: 1rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .voting-stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    }
+    
+    .voting-stat-card.active {
+      border-color: #FFD700;
+      background: #4a4a4a;
+    }
+    
+    .voting-stat-card .stat-main {
+      padding: 1rem;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      width: 100%;
     }
     
     .voting-stat-card .stat-icon {
-      font-size: 2rem;
+      font-size: 1.5rem;
+    }
+    
+    .voting-stat-card .stat-info {
+      text-align: center;
+      width: 100%;
+    }
+    
+    .voting-stat-card .stat-value {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #FFD700;
+      line-height: 1;
+    }
+    
+    .voting-stat-card .stat-label {
+      font-size: 0.8rem;
+      color: #ccc;
+      margin-top: 0.2rem;
+    }
+    
+    .voting-stat-card .stat-pending {
+      background: #FF6B00;
+      color: white;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.75rem;
+      font-weight: bold;
+      text-align: center;
+      width: 100%;
+    }
+    
+    .voting-stat-card .stat-pending.none {
+      background: #2d5a2d;
+      color: #a8d5a8;
     }
     
     .voting-controls {
@@ -2796,26 +2854,104 @@
           
           <!-- Voting Stats -->
           <div class="voting-stats-container">
-            <div class="voting-stat-card">
-              <div class="stat-icon">🗳️</div>
-              <div class="stat-info">
-                <div class="stat-value" id="my-proposals-count">0</div>
-                <div class="stat-label">My Proposals</div>
+            <div class="voting-stat-card" onclick="filterByCard('mine')" data-filter-type="mine" style="padding-bottom: 1rem;">
+              <div class="stat-main">
+                <div class="stat-icon">🗳️</div>
+                <div class="stat-info">
+                  <div class="stat-value" id="my-proposals-count">0</div>
+                  <div class="stat-label">My Proposals</div>
+                </div>
               </div>
             </div>
-            <div class="voting-stat-card">
-              <div class="stat-icon">✅</div>
-              <div class="stat-info">
-                <div class="stat-value" id="approved-proposals-count">0</div>
-                <div class="stat-label">Approved</div>
+            <div class="voting-stat-card" onclick="filterByCard('add_poi')" data-filter-type="add_poi">
+              <div class="stat-main">
+                <div class="stat-icon">📍</div>
+                <div class="stat-info">
+                  <div class="stat-value" id="add-poi-total">0</div>
+                  <div class="stat-label">New POIs</div>
+                </div>
               </div>
+              <div class="stat-pending" id="add-poi-pending">0 pending vote!</div>
             </div>
-            <div class="voting-stat-card">
-              <div class="stat-icon">👍</div>
-              <div class="stat-info">
-                <div class="stat-value" id="votes-cast-count">0</div>
-                <div class="stat-label">Votes Cast</div>
+            <div class="voting-stat-card" onclick="filterByCard('edit_poi')" data-filter-type="edit_poi">
+              <div class="stat-main">
+                <div class="stat-icon">✏️</div>
+                <div class="stat-info">
+                  <div class="stat-value" id="edit-poi-total">0</div>
+                  <div class="stat-label">POI Edits</div>
+                </div>
               </div>
+              <div class="stat-pending" id="edit-poi-pending">0 pending vote!</div>
+            </div>
+            <div class="voting-stat-card" onclick="filterByCard('move_poi')" data-filter-type="move_poi">
+              <div class="stat-main">
+                <div class="stat-icon">🔄</div>
+                <div class="stat-info">
+                  <div class="stat-value" id="move-poi-total">0</div>
+                  <div class="stat-label">POI Moves</div>
+                </div>
+              </div>
+              <div class="stat-pending" id="move-poi-pending">0 pending vote!</div>
+            </div>
+            <div class="voting-stat-card" onclick="filterByCard('delete_poi')" data-filter-type="delete_poi">
+              <div class="stat-main">
+                <div class="stat-icon">🗑️</div>
+                <div class="stat-info">
+                  <div class="stat-value" id="delete-poi-total">0</div>
+                  <div class="stat-label">POI Deletions</div>
+                </div>
+              </div>
+              <div class="stat-pending" id="delete-poi-pending">0 pending vote!</div>
+            </div>
+            <div class="voting-stat-card" onclick="filterByCard('add_npc')" data-filter-type="add_npc">
+              <div class="stat-main">
+                <div class="stat-icon">🐉</div>
+                <div class="stat-info">
+                  <div class="stat-value" id="add-npc-total">0</div>
+                  <div class="stat-label">New NPCs</div>
+                </div>
+              </div>
+              <div class="stat-pending" id="add-npc-pending">0 pending vote!</div>
+            </div>
+            <div class="voting-stat-card" onclick="filterByCard('edit_npc')" data-filter-type="edit_npc">
+              <div class="stat-main">
+                <div class="stat-icon">👾</div>
+                <div class="stat-info">
+                  <div class="stat-value" id="edit-npc-total">0</div>
+                  <div class="stat-label">NPC Edits</div>
+                </div>
+              </div>
+              <div class="stat-pending" id="edit-npc-pending">0 pending vote!</div>
+            </div>
+            <div class="voting-stat-card" onclick="filterByCard('change_loot')" data-filter-type="change_loot">
+              <div class="stat-main">
+                <div class="stat-icon">💎</div>
+                <div class="stat-info">
+                  <div class="stat-value" id="change-loot-total">0</div>
+                  <div class="stat-label">Loot Changes</div>
+                </div>
+              </div>
+              <div class="stat-pending" id="change-loot-pending">0 pending vote!</div>
+            </div>
+            <div class="voting-stat-card" onclick="filterByCard('add_item')" data-filter-type="add_item">
+              <div class="stat-main">
+                <div class="stat-icon">⚔️</div>
+                <div class="stat-info">
+                  <div class="stat-value" id="add-item-total">0</div>
+                  <div class="stat-label">New Items</div>
+                </div>
+              </div>
+              <div class="stat-pending" id="add-item-pending">0 pending vote!</div>
+            </div>
+            <div class="voting-stat-card" onclick="filterByCard('edit_item')" data-filter-type="edit_item">
+              <div class="stat-main">
+                <div class="stat-icon">🛡️</div>
+                <div class="stat-info">
+                  <div class="stat-value" id="edit-item-total">0</div>
+                  <div class="stat-label">Item Edits</div>
+                </div>
+              </div>
+              <div class="stat-pending" id="edit-item-pending">0 pending vote!</div>
             </div>
           </div>
 
@@ -2829,8 +2965,9 @@
                 <option value="edit_poi">Edit POI</option>
                 <option value="move_poi">Move POI</option>
                 <option value="delete_poi">Delete POI</option>
-                <option value="change_loot">Change NPC Loot</option>
+                <option value="add_npc">New NPC</option>
                 <option value="edit_npc">Edit NPC</option>
+                <option value="change_loot">Change NPC Loot</option>
                 <option value="add_item">New Item</option>
                 <option value="edit_item">Edit Item</option>
               </select>
@@ -8267,12 +8404,33 @@
           
           // Calculate stats
           const myProposals = proposals.filter(p => p.proposer_id === currentUser.id);
-          const approvedProposals = myProposals.filter(p => p.status === 'approved');
-          const votescast = proposals.filter(p => p.user_vote !== null && p.user_vote !== 0);
-          
           document.getElementById('my-proposals-count').textContent = myProposals.length;
-          document.getElementById('approved-proposals-count').textContent = approvedProposals.length;
-          document.getElementById('votes-cast-count').textContent = votescast.length;
+          
+          // Calculate stats for each proposal type
+          const proposalTypes = ['add_poi', 'edit_poi', 'move_poi', 'delete_poi', 
+                                'add_npc', 'edit_npc', 'change_loot', 
+                                'add_item', 'edit_item'];
+          
+          proposalTypes.forEach(type => {
+            const typeProposals = proposals.filter(p => p.change_type === type);
+            const unvotedTypeProposals = typeProposals.filter(p => !p.user_vote || p.user_vote === 0);
+            
+            const totalElement = document.getElementById(`${type.replace('_', '-')}-total`);
+            const pendingElement = document.getElementById(`${type.replace('_', '-')}-pending`);
+            
+            if (totalElement) totalElement.textContent = typeProposals.length;
+            
+            if (pendingElement) {
+              const pendingCount = unvotedTypeProposals.length;
+              if (pendingCount === 0) {
+                pendingElement.textContent = 'All voted!';
+                pendingElement.classList.add('none');
+              } else {
+                pendingElement.textContent = `${pendingCount} pending vote!`;
+                pendingElement.classList.remove('none');
+              }
+            }
+          });
         }
       } catch (error) {
         console.error('Error loading voting stats:', error);
@@ -8294,9 +8452,59 @@
       proposalFilters.type = '';
       proposalFilters.show = 'not-voted';
       
+      // Clear active card states
+      clearActiveCards();
+      
       // Reset page and reload
       proposalsPage = 1;
       loadProposals();
+    }
+    
+    function filterByCard(filterType) {
+      // Clear active states
+      clearActiveCards();
+      
+      // Set the clicked card as active
+      const clickedCard = document.querySelector(`[data-filter-type="${filterType}"]`);
+      if (clickedCard) {
+        clickedCard.classList.add('active');
+      }
+      
+      if (filterType === 'mine') {
+        // For "My Proposals", set show filter to "mine" and clear type filter
+        document.getElementById('proposal-filter').value = 'mine';
+        document.getElementById('proposal-type-filter').value = '';
+        proposalFilters.show = 'mine';
+        proposalFilters.type = '';
+      } else {
+        // For type-specific cards, check if there are pending votes
+        const pendingElement = document.getElementById(`${filterType.replace('_', '-')}-pending`);
+        const hasPendingVotes = pendingElement && !pendingElement.classList.contains('none');
+        
+        // Set type filter
+        document.getElementById('proposal-type-filter').value = filterType;
+        proposalFilters.type = filterType;
+        
+        // If there are pending votes, show only unvoted proposals
+        // If no pending votes, show all proposals of that type
+        if (hasPendingVotes) {
+          document.getElementById('proposal-filter').value = 'not-voted';
+          proposalFilters.show = 'not-voted';
+        } else {
+          document.getElementById('proposal-filter').value = 'all';
+          proposalFilters.show = 'all';
+        }
+      }
+      
+      // Reset page and reload
+      proposalsPage = 1;
+      loadProposals();
+    }
+    
+    function clearActiveCards() {
+      document.querySelectorAll('.voting-stat-card').forEach(card => {
+        card.classList.remove('active');
+      });
     }
 
     async function loadProposals() {
@@ -8408,7 +8616,7 @@
               ${proposal.vote_score >= 10 ? '<span class="proposal-status approved">Auto-Approval Pending</span>' : ''}
               
               <div class="proposal-actions">
-                ${['add_poi', 'edit_poi', 'move_poi', 'delete_poi', 'change_loot', 'edit_npc'].includes(proposal.change_type) ? 
+                ${['add_poi', 'edit_poi', 'move_poi', 'delete_poi', 'change_loot', 'add_npc', 'edit_npc'].includes(proposal.change_type) ? 
                   `<button class="small-btn info-btn" onclick="viewProposalPOI(${proposal.id})">View on Map</button>` : ''}
                 ${isOwner && proposal.status === 'pending' ? 
                   `<button class="small-btn danger-btn" onclick="deleteProposal(${proposal.id})">Delete</button>` : ''}
@@ -9148,6 +9356,13 @@
       
       // Navigate to the map page in a new tab
       window.open(`/?map_id=${mapId}`, '_blank');
+      
+      // Clear the preview data from this tab's sessionStorage after a short delay
+      // This prevents the preview from showing if the user navigates to the map in this tab
+      setTimeout(() => {
+        sessionStorage.removeItem('poi_proposal_preview');
+        sessionStorage.removeItem('refresh_on_return');
+      }, 100);
     }
     
     function updateProposalsPagination(totalPages) {
@@ -9186,12 +9401,14 @@
     document.getElementById('proposal-type-filter')?.addEventListener('change', (e) => {
       proposalFilters.type = e.target.value;
       proposalsPage = 1;
+      clearActiveCards(); // Clear active card states when filter changes
       loadProposals();
     });
 
     document.getElementById('proposal-filter')?.addEventListener('change', (e) => {
       proposalFilters.show = e.target.value;
       proposalsPage = 1;
+      clearActiveCards(); // Clear active card states when filter changes
       loadProposals();
     });
 
@@ -9506,6 +9723,7 @@
     window.adminApproveProposal = adminApproveProposal;
     window.adminRejectProposal = adminRejectProposal;
     window.viewProposalPOI = viewProposalPOI;
+    window.filterByCard = filterByCard;
 
     async function loadAdminData() {
       // Load users

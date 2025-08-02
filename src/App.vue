@@ -243,6 +243,30 @@
       @cancel="confirmDialog.onCancel"
     />
     
+    <!-- Prompt Dialog -->
+    <div v-if="promptDialog.show" class="prompt-dialog-overlay" @click="promptDialog.onCancel">
+      <div class="prompt-dialog" @click.stop>
+        <h3 class="prompt-title">{{ promptDialog.title }}</h3>
+        <p class="prompt-message">{{ promptDialog.message }}</p>
+        <input 
+          v-model="promptDialog.value"
+          type="text"
+          class="prompt-input"
+          @keyup.enter="promptDialog.onConfirm"
+          @keyup.esc="promptDialog.onCancel"
+          ref="promptInput"
+        />
+        <div class="prompt-buttons">
+          <button @click="promptDialog.onConfirm" class="prompt-confirm-btn">
+            {{ promptDialog.confirmText }}
+          </button>
+          <button @click="promptDialog.onCancel" class="prompt-cancel-btn">
+            {{ promptDialog.cancelText }}
+          </button>
+        </div>
+      </div>
+    </div>
+    
     <!-- POI Edit Proposal Dialog -->
     <POIEditProposalDialog
       :visible="editProposalDialog.visible"
@@ -445,6 +469,7 @@ export default {
     const originalPosition = ref({ x: 0, y: 0 })
     const pendingChange = ref(null) // For showing confirm/cancel UI
     const activeConnectorArrow = ref(null) // For showing arrow to paired connector
+    const isCopyMode = ref(false) // Track if C key is held for copy mode
     const arrowTimeoutId = ref(null) // For clearing arrow timeout
     const potentialDragItem = ref(null) // Track item clicked without Alt for drag hint
     const dragHintShown = ref(false) // Prevent multiple hints
@@ -469,6 +494,19 @@ export default {
       onConfirm: () => {},
       onCancel: () => {}
     })
+    
+    const promptDialog = ref({
+      show: false,
+      title: '',
+      message: '',
+      value: '',
+      confirmText: 'OK',
+      cancelText: 'Cancel',
+      onConfirm: () => {},
+      onCancel: () => {}
+    })
+    
+    const promptInput = ref(null)
     
     // Proposal dialogs
     const editProposalDialog = ref({
@@ -623,6 +661,64 @@ export default {
             resolve(false)
           }
         }
+      })
+    }
+    
+    const showPrompt = (title, message, defaultValue = '', confirmText = 'OK', cancelText = 'Cancel') => {
+      return new Promise((resolve) => {
+        // Wait for C key to be released if it's currently held
+        let waitingForCRelease = isCopyMode.value
+        
+        promptDialog.value = {
+          show: true,
+          title,
+          message,
+          value: defaultValue,
+          confirmText,
+          cancelText,
+          onConfirm: () => {
+            const value = promptDialog.value.value
+            promptDialog.value.show = false
+            promptDialog.value.value = ''
+            resolve(value)
+          },
+          onCancel: () => {
+            promptDialog.value.show = false
+            promptDialog.value.value = ''
+            resolve(null)
+          }
+        }
+        
+        // Focus the input after Vue updates the DOM
+        nextTick(() => {
+          const input = document.querySelector('.prompt-input')
+          if (input) {
+            if (waitingForCRelease) {
+              // Temporarily disable the input until C is released
+              input.disabled = true
+              input.placeholder = 'Release C key to edit...'
+              
+              // Watch for C key release
+              const checkCRelease = () => {
+                if (!isCopyMode.value) {
+                  input.disabled = false
+                  input.placeholder = ''
+                  input.focus()
+                  input.select()
+                  // Remove the watcher
+                  stopWatcher()
+                }
+              }
+              
+              // Set up a watcher for isCopyMode
+              const stopWatcher = watch(isCopyMode, checkCRelease, { immediate: true })
+            } else {
+              // C key not held, proceed normally
+              input.focus()
+              input.select()
+            }
+          }
+        })
       })
     }
     
@@ -859,8 +955,8 @@ export default {
       currentGroupedPOIs = groupPOIsWhenZoomedOut(allPOIs)
       
       // Draw dotted line during drag (before POIs so it appears behind)
-      // Show for both proposal drags (regular POIs) and custom POI drags
-      if (draggedItem.value && (draggedItem.value.isProposalDrag || dragItemType.value === 'customPoi')) {
+      // Show for proposal drags, custom POI drags, and copy drags
+      if (draggedItem.value && (draggedItem.value.isProposalDrag || dragItemType.value === 'customPoi' || draggedItem.value.isCopyDrag)) {
         const originalCanvasPos = imageToCanvas(originalPosition.value.x, originalPosition.value.y)
         const currentCanvasPos = imageToCanvas(draggedItem.value.x, draggedItem.value.y)
         
@@ -2033,8 +2129,8 @@ export default {
         return
       }
       
-      // Check if Alt key is held for dragging
-      if (e.altKey && !e.shiftKey) {
+      // Check if Alt key is held for dragging or C key is held for copying
+      if ((e.altKey || isCopyMode.value) && !e.shiftKey) {
         const rect = mapCanvas.value.getBoundingClientRect()
         const canvasX = e.clientX - rect.left
         const canvasY = e.clientY - rect.top
@@ -2061,10 +2157,11 @@ export default {
           const isRegularPOI = currentMapData.value.pois.some(poi => poi.id.toString() === actualClickedId.toString())
           
           // Allow dragging if:
-          // 1. It's a custom POI owned by the user
+          // 1. It's a custom POI owned by the user (for moving)
           // 2. It's a regular POI and user is admin
           // 3. It's a regular POI and user is authenticated (for proposals)
-          if (isCustomPOI || (isAdmin.value && isRegularPOI) || (isAuthenticated.value && isRegularPOI)) {
+          // 4. It's a copy operation (C key held) - allow copying any POI
+          if (isCopyMode.value || isCustomPOI || (isAdmin.value && isRegularPOI) || (isAuthenticated.value && isRegularPOI)) {
             // Check if POI already has a pending proposal
             if (clickedPOI.has_pending_proposal) {
               warning('This POI already has a pending change proposal')
@@ -2100,6 +2197,8 @@ export default {
             }
             // Track if this is a proposal drag (non-admin dragging regular POI)
             draggedItem.value.isProposalDrag = isRegularPOI && !isAdmin.value && isAuthenticated.value
+            // Track if this is a copy operation
+            draggedItem.value.isCopyDrag = isCopyMode.value
             return
           }
         }
@@ -2289,7 +2388,7 @@ export default {
       render()
     }
     
-    const handleMouseUp = (e) => {
+    const handleMouseUp = async (e) => {
       // Ignore right-click mouse up events
       if (e && e.button === 2) {
         return
@@ -2305,14 +2404,20 @@ export default {
                      draggedItem.value.y !== originalPosition.value.y
         
         if (moved) {
-          // Only show pending change if the item was actually moved
-          pendingChange.value = {
-            item: draggedItem.value,
-            type: dragItemType.value,
-            originalPosition: { ...originalPosition.value },
-            newPosition: {
-              x: draggedItem.value.x,
-              y: draggedItem.value.y
+          // Check if this is a copy operation
+          if (draggedItem.value.isCopyDrag) {
+            // Handle copy operation - await it before clearing drag state
+            await handlePOICopy()
+          } else {
+            // Regular move operation
+            pendingChange.value = {
+              item: draggedItem.value,
+              type: dragItemType.value,
+              originalPosition: { ...originalPosition.value },
+              newPosition: {
+                x: draggedItem.value.x,
+                y: draggedItem.value.y
+              }
             }
           }
         }
@@ -2827,6 +2932,13 @@ export default {
     }
     
     const handleKeyboardShortcut = (e) => {
+      // Track C key for copy mode
+      if (e.key === 'c' || e.key === 'C') {
+        if (!e.ctrlKey && !e.metaKey) { // Don't interfere with Ctrl+C
+          isCopyMode.value = true
+        }
+      }
+      
       // Ctrl+Shift+A to toggle admin mode
       if (e.ctrlKey && e.shiftKey && e.key === 'A') {
         e.preventDefault()
@@ -2858,6 +2970,142 @@ export default {
           selectedPOI.value = null
           return
         }
+      }
+    }
+    
+    const handleKeyUp = (e) => {
+      // Clear C key copy mode when released
+      if (e.key === 'c' || e.key === 'C') {
+        isCopyMode.value = false
+      }
+    }
+    
+    // Handle POI copy operation
+    const handlePOICopy = async () => {
+      console.log('handlePOICopy called', { 
+        draggedItem: draggedItem.value, 
+        dragItemType: dragItemType.value 
+      })
+      
+      if (!draggedItem.value) {
+        console.log('No dragged item')
+        return
+      }
+      
+      // Accept both 'poi' and 'customPoi' types for copying
+      if (dragItemType.value !== 'poi' && dragItemType.value !== 'customPoi') {
+        console.log('Invalid drag item type:', dragItemType.value)
+        return
+      }
+      
+      const poi = draggedItem.value
+      const newX = Math.round(poi.x)
+      const newY = Math.round(poi.y)
+      
+      // Restore original position since we're copying, not moving
+      poi.x = originalPosition.value.x
+      poi.y = originalPosition.value.y
+      
+      // Determine the appropriate message based on POI type
+      const isCustom = poi.is_custom || poi.id.toString().startsWith('custom_') || dragItemType.value === 'customPoi'
+      const promptMessage = isCustom 
+        ? 'Enter a name for the copied POI (will be created immediately):'
+        : 'Enter a name for the copied POI (will create a change proposal for community voting):'
+      
+      // Show custom prompt for POI name with current name pre-filled
+      const newName = await showPrompt(
+        'Copy POI',
+        promptMessage,
+        poi.name,
+        'Copy',
+        'Cancel'
+      )
+      
+      if (!newName || newName.trim() === '') {
+        render()
+        return
+      }
+      
+      try {
+        // Check if it's a custom POI (either by is_custom flag or by ID prefix)
+        const isCustom = poi.is_custom || poi.id.toString().startsWith('custom_') || dragItemType.value === 'customPoi'
+        
+        if (isCustom) {
+          // Copy custom POI - create new custom POI immediately
+          // Get the numeric custom POI ID
+          const customPoiId = poi.id.toString().replace('custom_', '')
+          const customPoiData = customPOIs.value.find(cp => cp.id.toString() === customPoiId)
+          
+          const response = await fetchWithCSRF('/api/custom-pois', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              map_id: maps.value[selectedMapIndex.value].id,
+              x: newX,
+              y: newY,
+              name: newName.trim(),
+              description: poi.description || '',
+              icon: poi.icon,
+              icon_type: poi.icon_type,
+              icon_size: poi.icon_size || 24,
+              label_visible: poi.label_visible !== false,
+              label_position: poi.label_position || 'bottom',
+              poi_type_id: customPoiData?.poi_type_id || poi.poi_type_id || null
+            })
+          })
+          
+          if (!response.ok) {
+            throw new Error('Failed to copy custom POI')
+          }
+          
+          const newPoi = await response.json()
+          
+          // Add the new custom POI to our local state
+          // The response from the API should already have the correct structure
+          customPOIs.value.push(newPoi)
+          success(`Custom POI "${poi.name}" copied successfully`)
+        } else {
+          // Copy regular POI - create new POI proposal
+          const proposalData = {
+            change_type: 'add_poi',
+            target_type: 'map',
+            target_id: maps.value[selectedMapIndex.value].id,
+            proposed_data: {
+              map_id: maps.value[selectedMapIndex.value].id,
+              x: newX,
+              y: newY,
+              name: newName.trim(),
+              description: poi.description || '',
+              type_id: poi.type_id || poi.type || null,
+              icon_size: poi.icon_size || 48,
+              label_visible: poi.label_visible !== false,
+              label_position: poi.label_position || 'bottom'
+            }
+          }
+          
+          const response = await fetchWithCSRF('/api/change-proposals', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(proposalData)
+          })
+          
+          if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.error || 'Failed to create copy proposal')
+          }
+          
+          success(`Copy proposal for "${poi.name}" submitted for community voting`)
+        }
+        
+        render()
+      } catch (err) {
+        console.error('Failed to copy POI:', err)
+        error(`Failed to copy POI: ${err.message}`)
+        render()
       }
     }
     
@@ -4294,6 +4542,18 @@ export default {
     let globalContextMenuHandler = null
     let globalMouseUpHandler = null
     
+    // Close dropdowns when clicking outside
+    const closeDropdowns = (event) => {
+      // Close user dropdown if clicking outside
+      if (showUserDropdown.value && !event.target.closest('.user-dropdown-container')) {
+        showUserDropdown.value = false
+      }
+      // Close item dropdown if clicking outside
+      if (itemDropdownVisible.value && !event.target.closest('.control-btn-dropdown')) {
+        itemDropdownVisible.value = false
+      }
+    }
+    
     const animate = () => {
       render()
       animationFrameId = requestAnimationFrame(animate)
@@ -5024,23 +5284,24 @@ export default {
       }
     }
     
+    // Handle focus changes to clear proposal preview when returning to tab
+    const handleFocusChange = () => {
+      // Clear any lingering proposal preview when tab gains focus
+      if (proposalPreviewPOIs.value.length > 0 || proposalPreviewConnection.value) {
+        proposalPreviewPOIs.value = []
+        proposalPreviewConnection.value = null
+        render() // Re-render to clear the preview
+      }
+    }
+    
     onMounted(async () => {
       // Check authentication status
       await checkAuthStatus()
       
       document.addEventListener('visibilitychange', handleVisibilityChange)
+      window.addEventListener('focus', handleFocusChange)
       
-      // Close dropdowns when clicking outside
-      const closeDropdowns = (event) => {
-        // Close user dropdown if clicking outside
-        if (showUserDropdown.value && !event.target.closest('.user-dropdown-container')) {
-          showUserDropdown.value = false
-        }
-        // Close item dropdown if clicking outside
-        if (itemDropdownVisible.value && !event.target.closest('.control-btn-dropdown')) {
-          itemDropdownVisible.value = false
-        }
-      }
+      // Add click listener for closing dropdowns
       document.addEventListener('click', closeDropdowns)
       
       // Initialize CSRF token if authenticated
@@ -5105,6 +5366,7 @@ export default {
       resizeCanvas()
       window.addEventListener('resize', resizeCanvas)
       window.addEventListener('keydown', handleKeyboardShortcut)
+      window.addEventListener('keyup', handleKeyUp)
       
       // Global context menu prevention during drag
       globalContextMenuHandler = (e) => {
@@ -5241,9 +5503,11 @@ export default {
     
     onUnmounted(() => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocusChange)
       document.removeEventListener('click', closeDropdowns)
       window.removeEventListener('resize', resizeCanvas)
       window.removeEventListener('keydown', handleKeyboardShortcut)
+      window.removeEventListener('keyup', handleKeyUp)
       window.removeEventListener('avatar-updated', async () => {
         await checkAuthStatus()
       })
@@ -5392,6 +5656,8 @@ export default {
       adminPopupPosition,
       showMapManager,
       confirmDialog,
+      promptDialog,
+      promptInput,
       isDragging,
       zoomPercent,
       dbMapData,
@@ -5517,6 +5783,105 @@ export default {
   0% { opacity: 1; }
   50% { opacity: 0.5; }
   100% { opacity: 1; }
+}
+
+/* Prompt Dialog Styles */
+.prompt-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.prompt-dialog {
+  background: #2d2d2d;
+  border: 2px solid #4a7c59;
+  border-radius: 8px;
+  padding: 1.5rem;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.prompt-title {
+  color: #FFD700;
+  font-size: 1.25rem;
+  margin: 0 0 0.5rem 0;
+  font-family: 'Cinzel', serif;
+}
+
+.prompt-message {
+  color: #e0e0e0;
+  margin: 0 0 1rem 0;
+  font-size: 0.95rem;
+}
+
+.prompt-input {
+  width: 100%;
+  padding: 0.75rem;
+  background: #1a1a1a;
+  border: 1px solid #4a7c59;
+  border-radius: 4px;
+  color: #e0e0e0;
+  font-size: 1rem;
+  margin-bottom: 1rem;
+  transition: border-color 0.2s;
+}
+
+.prompt-input:focus {
+  outline: none;
+  border-color: #5fa772;
+  box-shadow: 0 0 0 2px rgba(95, 167, 114, 0.2);
+}
+
+.prompt-input:disabled {
+  background: #0d0d0d;
+  color: #666;
+  cursor: not-allowed;
+  border-color: #333;
+}
+
+.prompt-buttons {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+.prompt-confirm-btn,
+.prompt-cancel-btn {
+  padding: 0.5rem 1.25rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.prompt-confirm-btn {
+  background: #4a7c59;
+  color: white;
+}
+
+.prompt-confirm-btn:hover {
+  background: #5fa772;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(74, 124, 89, 0.3);
+}
+
+.prompt-cancel-btn {
+  background: #444;
+  color: #e0e0e0;
+}
+
+.prompt-cancel-btn:hover {
+  background: #555;
 }
 
 /* Proposal Preview Loading */
