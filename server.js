@@ -2294,6 +2294,7 @@ app.get('/api/leaderboard/top10',
         FROM users u
         LEFT JOIN donation_tiers dt ON u.current_donation_tier_id = dt.id
         WHERE u.xp >= 0
+          AND (u.visible IS NULL OR u.visible = true)
         ORDER BY u.xp DESC
         LIMIT 10
       `);
@@ -2393,9 +2394,9 @@ app.get('/api/user/rank', async (req, res) => {
     const userId = req.user.id;
     const userXP = req.user.xp || 0;
     
-    // Get the rank by counting users with more XP
+    // Get the rank by counting visible users with more XP
     const rankResult = await pool.query(
-      'SELECT COUNT(*) + 1 as rank FROM users WHERE xp > $1',
+      'SELECT COUNT(*) + 1 as rank FROM users WHERE xp > $1 AND (visible IS NULL OR visible = true)',
       [userXP]
     );
     
@@ -2470,6 +2471,45 @@ app.post('/api/auth/logout-all', validateCSRF, async (req, res) => {
   }
 });
 
+// Get single user details (admin only)
+app.get('/api/users/:userId', async (req, res) => {
+  if (!req.isAuthenticated() || !req.user.is_admin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  try {
+    const { userId } = req.params;
+    const result = await pool.query(
+      `SELECT 
+        u.id, u.name, u.nickname, COALESCE(u.nickname, u.name) as display_name, 
+        u.email, u.picture, u.avatar_filename, u.avatar_version, u.is_admin, u.xp, 
+        u.created_at, u.last_visit, u.is_banned, u.ban_reason, u.banned_at, 
+        u.visible,
+        (SELECT COUNT(*) FROM custom_pois WHERE user_id = u.id) as poi_count,
+        (SELECT COUNT(*) FROM pending_pois WHERE user_id = u.id) as pending_poi_count,
+        (SELECT COUNT(*) FROM pending_poi_votes WHERE user_id = u.id) as votes_cast
+      FROM users u
+      WHERE u.id = $1`,
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = result.rows[0];
+    // Add custom_avatar URL if user has avatar_filename
+    user.custom_avatar = user.avatar_filename 
+      ? `/avatars/${user.avatar_filename}?v=${user.avatar_version || 1}`
+      : null;
+
+    res.json(user);
+  } catch (error) {
+    console.error('Error fetching user details:', error);
+    res.status(500).json({ error: 'Failed to fetch user details' });
+  }
+});
+
 // Admin endpoints
 app.get('/api/admin/users', async (req, res) => {
   if (!req.isAuthenticated() || !req.user.is_admin) {
@@ -2481,7 +2521,7 @@ app.get('/api/admin/users', async (req, res) => {
       `SELECT 
         u.id, u.name, u.nickname, COALESCE(u.nickname, u.name) as display_name, 
         u.email, u.picture, u.avatar_filename, u.avatar_version, u.is_admin, u.xp, u.created_at, u.last_visit,
-        u.is_banned, u.ban_reason, u.banned_at,
+        u.is_banned, u.ban_reason, u.banned_at, COALESCE(u.visible, true) as visible,
         (SELECT COUNT(*) FROM custom_pois WHERE user_id = u.id) as poi_count,
         (SELECT COUNT(*) FROM pending_pois WHERE user_id = u.id) as pending_poi_count,
         (SELECT COUNT(*) FROM pending_poi_votes WHERE user_id = u.id) as votes_cast,
@@ -2519,6 +2559,7 @@ app.get('/api/admin/users/:userId', async (req, res) => {
         u.email, u.picture, u.avatar_filename, u.avatar_version,
         u.is_admin, u.xp, u.created_at, u.last_visit,
         u.is_banned, u.ban_reason, u.banned_at, 
+        COALESCE(u.visible, true) as visible,
         b.name as banned_by_name
       FROM users u
       LEFT JOIN users b ON u.banned_by = b.id
@@ -2802,6 +2843,46 @@ app.put('/api/admin/users/:userId/admin', validateCSRF, async (req, res) => {
   }
 });
 
+// Toggle user visibility
+app.patch('/api/admin/users/:userId/visibility', validateCSRF, async (req, res) => {
+  if (!req.isAuthenticated() || !req.user.is_admin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  const { userId } = req.params;
+
+  try {
+    // Get current visibility state
+    const userResult = await pool.query('SELECT visible FROM users WHERE id = $1', [userId]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Toggle visibility (null is treated as true)
+    const currentVisibility = userResult.rows[0].visible;
+    const newVisibility = currentVisibility === false ? true : false;
+
+    // Prevent users from hiding themselves
+    if (parseInt(userId) === req.user.id && !newVisibility) {
+      return res.status(400).json({ error: 'You cannot hide yourself' });
+    }
+
+    await pool.query('UPDATE users SET visible = $1 WHERE id = $2', [newVisibility, userId]);
+    
+    // Clear cache
+    leaderboardCache.delete('top10');
+
+    res.json({ 
+      success: true, 
+      visible: newVisibility,
+      message: newVisibility ? 'User is now visible' : 'User is now hidden'
+    });
+  } catch (error) {
+    console.error('Error toggling user visibility:', error);
+    res.status(500).json({ error: 'Failed to toggle user visibility' });
+  }
+});
+
 // Toggle admin status
 app.post('/api/admin/users/:userId/toggle-admin', validateCSRF, async (req, res) => {
   if (!req.isAuthenticated() || !req.user.is_admin) {
@@ -2968,6 +3049,190 @@ app.put('/api/admin/users/:userId/xp', validateCSRF, async (req, res) => {
     res.status(500).json({ error: 'Failed to update XP' });
   }
 });
+
+// NOTE: The following duplicate admin endpoints have been commented out
+// as they are properly implemented later in the file (around line 4461+)
+/*
+// Update user field (admin only)
+app.patch('/api/admin/users/:userId/update-field', validateCSRF, async (req, res) => {
+  if (!req.isAuthenticated() || !req.user.is_admin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  const { userId } = req.params;
+  const { field, value } = req.body;
+
+  // Validate field name
+  const allowedFields = ['name', 'email', 'nickname'];
+  if (!allowedFields.includes(field)) {
+    return res.status(400).json({ error: 'Invalid field' });
+  }
+
+  try {
+    // Check if user exists
+    const userCheck = await pool.query('SELECT id FROM users WHERE id = $1', [userId]);
+    if (userCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Validate email uniqueness if updating email
+    if (field === 'email' && value) {
+      const emailCheck = await pool.query(
+        'SELECT id FROM users WHERE email = $1 AND id != $2',
+        [value, userId]
+      );
+      if (emailCheck.rows.length > 0) {
+        return res.status(400).json({ error: 'Email already in use' });
+      }
+    }
+
+    // Update the field
+    const query = `UPDATE users SET ${field} = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *`;
+    const result = await pool.query(query, [value || null, userId]);
+
+    res.json({ 
+      success: true, 
+      user: result.rows[0],
+      message: `${field.charAt(0).toUpperCase() + field.slice(1)} updated successfully`
+    });
+  } catch (error) {
+    console.error('Error updating user field:', error);
+    res.status(500).json({ error: `Failed to update ${field}` });
+  }
+});
+
+// Upload avatar for another user (admin only)
+app.post('/api/admin/users/:userId/avatar', validateCSRF, upload.single('avatar'), async (req, res) => {
+  if (!req.isAuthenticated() || !req.user.is_admin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  const { userId } = req.params;
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+
+  try {
+    // Check if user exists
+    const userCheck = await pool.query('SELECT id, avatar_filename FROM users WHERE id = $1', [userId]);
+    if (userCheck.rows.length === 0) {
+      // Clean up uploaded file
+      await fs.unlink(req.file.path);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const oldAvatarFilename = userCheck.rows[0].avatar_filename;
+
+    // Process image with sharp if available
+    let finalFilename = req.file.filename;
+    
+    if (sharp) {
+      try {
+        const processedFilename = `processed-${req.file.filename}`;
+        const processedPath = join(dirname(req.file.path), processedFilename);
+        
+        await sharp(req.file.path)
+          .resize(400, 400, {
+            fit: 'cover',
+            position: 'center'
+          })
+          .jpeg({ quality: 90 })
+          .toFile(processedPath);
+        
+        // Remove original and use processed version
+        await fs.unlink(req.file.path);
+        finalFilename = processedFilename;
+      } catch (sharpError) {
+        console.error('Sharp processing failed, using original:', sharpError);
+        // Continue with original file
+      }
+    }
+
+    // Update user record
+    const updateResult = await pool.query(
+      'UPDATE users SET avatar_filename = $1, avatar_version = COALESCE(avatar_version, 0) + 1 WHERE id = $2 RETURNING avatar_version',
+      [finalFilename, userId]
+    );
+
+    // Delete old avatar if it exists
+    if (oldAvatarFilename) {
+      const oldPath = join(__dirname, 'public', 'avatars', oldAvatarFilename);
+      try {
+        await fs.unlink(oldPath);
+      } catch (err) {
+        console.error('Failed to delete old avatar:', err);
+      }
+    }
+
+    const avatarUrl = `/avatars/${finalFilename}?v=${updateResult.rows[0].avatar_version}`;
+    res.json({ 
+      success: true, 
+      avatarUrl,
+      message: 'Avatar updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating user avatar:', error);
+    // Try to clean up uploaded file
+    try {
+      await fs.unlink(req.file.path);
+    } catch (cleanupErr) {
+      console.error('Failed to clean up file:', cleanupErr);
+    }
+    res.status(500).json({ error: 'Failed to update avatar' });
+  }
+});
+
+// Reset user avatar to Google picture (admin only)
+app.post('/api/admin/users/:userId/avatar/reset', validateCSRF, async (req, res) => {
+  if (!req.isAuthenticated() || !req.user.is_admin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  const { userId } = req.params;
+
+  try {
+    // Get user's avatar filename
+    const userResult = await pool.query(
+      'SELECT avatar_filename FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const avatarFilename = userResult.rows[0].avatar_filename;
+
+    // Update user record to remove avatar
+    await pool.query(
+      'UPDATE users SET avatar_filename = NULL, avatar_version = 0 WHERE id = $1',
+      [userId]
+    );
+
+    // Delete avatar file if it exists
+    let filesDeleted = 0;
+    if (avatarFilename) {
+      const avatarPath = join(__dirname, 'public', 'avatars', avatarFilename);
+      try {
+        await fs.unlink(avatarPath);
+        filesDeleted++;
+      } catch (err) {
+        console.error('Failed to delete avatar file:', err);
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      filesDeleted,
+      message: 'Avatar reset to Google picture'
+    });
+  } catch (error) {
+    console.error('Error resetting user avatar:', error);
+    res.status(500).json({ error: 'Failed to reset avatar' });
+  }
+});
+*/ // End of commented duplicate endpoints
 
 // Toggle admin mode (visual mode only, permissions always checked server-side)
 app.post('/api/admin/toggle-mode', validateCSRF, (req, res) => {
@@ -4135,6 +4400,53 @@ app.post('/api/pending-pois/:id/force-reject', validateCSRF, async (req, res) =>
   }
 });
 
+// Toggle user visibility
+app.patch('/api/admin/users/:userId/visibility', validateCSRF, async (req, res) => {
+  if (!req.isAuthenticated() || !req.user.is_admin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  try {
+    const { userId } = req.params;
+    
+    // Prevent users from hiding themselves
+    if (parseInt(userId) === req.user.id) {
+      return res.status(400).json({ error: 'You cannot hide yourself' });
+    }
+
+    // Get current visibility status
+    const userResult = await pool.query(
+      'SELECT visible FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const currentVisibility = userResult.rows[0].visible ?? true;
+    const newVisibility = !currentVisibility;
+
+    // Update visibility
+    await pool.query(
+      'UPDATE users SET visible = $1 WHERE id = $2',
+      [newVisibility, userId]
+    );
+
+    // Clear leaderboard cache since visibility affects it
+    leaderboardCache.delete('top10');
+
+    res.json({ 
+      success: true, 
+      visible: newVisibility,
+      message: newVisibility ? 'User is now visible' : 'User is now hidden'
+    });
+  } catch (error) {
+    console.error('Error toggling user visibility:', error);
+    res.status(500).json({ error: 'Failed to toggle user visibility' });
+  }
+});
+
 // Admin database health monitoring
 app.get('/api/admin/db-health', async (req, res) => {
   if (!req.isAuthenticated() || !req.user.is_admin) {
@@ -4147,6 +4459,186 @@ app.get('/api/admin/db-health', async (req, res) => {
   } catch (error) {
     console.error('Error checking database health:', error);
     res.status(500).json({ error: 'Failed to check database health' });
+  }
+});
+
+// Update user field (admin only)
+app.patch('/api/admin/users/:userId/update-field', validateCSRF, async (req, res) => {
+  if (!req.isAuthenticated() || !req.user.is_admin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  try {
+    const { userId } = req.params;
+    const { field, value } = req.body;
+    
+    // Validate field
+    const allowedFields = ['name', 'email', 'nickname'];
+    if (!allowedFields.includes(field)) {
+      return res.status(400).json({ error: 'Invalid field' });
+    }
+    
+    // For email, check uniqueness
+    if (field === 'email' && value) {
+      const existingUser = await pool.query(
+        'SELECT id FROM users WHERE email = $1 AND id != $2',
+        [value, userId]
+      );
+      
+      if (existingUser.rows.length > 0) {
+        return res.status(400).json({ error: 'Email already in use' });
+      }
+    }
+    
+    // Update the field
+    const query = `UPDATE users SET ${field} = $1 WHERE id = $2 RETURNING id, name, email, nickname`;
+    const result = await pool.query(query, [value || null, userId]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Clear caches that might be affected
+    leaderboardCache.delete('top10');
+    userStatsCache.delete(`user-stats-${userId}`);
+    
+    res.json({ 
+      success: true, 
+      user: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error updating user field:', error);
+    res.status(500).json({ error: 'Failed to update user field' });
+  }
+});
+
+// Upload avatar for another user (admin only)
+app.post('/api/admin/users/:userId/avatar', validateCSRF, upload.single('avatar'), async (req, res) => {
+  if (!req.isAuthenticated() || !req.user.is_admin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+
+  try {
+    const { userId } = req.params;
+    
+    // Check if user exists
+    const userCheck = await pool.query('SELECT id, avatar_filename FROM users WHERE id = $1', [userId]);
+    if (userCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const oldAvatarFilename = userCheck.rows[0].avatar_filename;
+    
+    // Process the image
+    let processedBuffer;
+    let fileExtension;
+    
+    if (sharp) {
+      try {
+        // Process with sharp
+        processedBuffer = await sharp(req.file.buffer)
+          .resize(200, 200, {
+            fit: 'cover',
+            position: 'center'
+          })
+          .jpeg({ quality: 85 })
+          .toBuffer();
+        fileExtension = 'jpg';
+      } catch (err) {
+        console.warn('Sharp processing failed, using original:', err.message);
+        processedBuffer = req.file.buffer;
+        fileExtension = req.file.mimetype.split('/')[1] || 'jpg';
+      }
+    } else {
+      // Use original if sharp not available
+      processedBuffer = req.file.buffer;
+      fileExtension = req.file.mimetype.split('/')[1] || 'jpg';
+    }
+    
+    // Generate filename
+    const isProduction = process.env.NODE_ENV === 'production';
+    const envPrefix = isProduction ? 'prod' : 'dev';
+    const filename = `${envPrefix}_${userId}_${Date.now()}.${fileExtension}`;
+    const avatarsDir = join(__dirname, 'public', 'avatars');
+    const filepath = join(avatarsDir, filename);
+    
+    // Save file
+    await fs.mkdir(avatarsDir, { recursive: true });
+    await fs.writeFile(filepath, processedBuffer);
+    
+    // Update database
+    await pool.query(
+      'UPDATE users SET avatar_filename = $1, avatar_version = COALESCE(avatar_version, 1) + 1, avatar_updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [filename, userId]
+    );
+    
+    // Delete old avatar if exists
+    if (oldAvatarFilename) {
+      const oldFilepath = join(avatarsDir, oldAvatarFilename);
+      fs.unlink(oldFilepath).catch(() => {});
+    }
+    
+    // Clear user stats cache
+    userStatsCache.delete(`user-stats-${userId}`);
+    
+    res.json({ 
+      success: true, 
+      avatarUrl: `/avatars/${filename}`,
+      filename
+    });
+  } catch (error) {
+    console.error('Error uploading avatar for user:', error);
+    res.status(500).json({ error: 'Failed to upload avatar' });
+  }
+});
+
+// Reset user avatar to Google picture (admin only)
+app.post('/api/admin/users/:userId/avatar/reset', validateCSRF, async (req, res) => {
+  if (!req.isAuthenticated() || !req.user.is_admin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  try {
+    const { userId } = req.params;
+    
+    // Get current avatar filename
+    const userResult = await pool.query(
+      'SELECT avatar_filename FROM users WHERE id = $1',
+      [userId]
+    );
+    
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const oldAvatarFilename = userResult.rows[0].avatar_filename;
+    
+    // Delete avatar file if exists
+    if (oldAvatarFilename) {
+      const filepath = join(__dirname, 'public', 'avatars', oldAvatarFilename);
+      await fs.unlink(filepath).catch(() => {}); // Ignore errors if file doesn't exist
+    }
+    
+    // Clear avatar from database
+    await pool.query(
+      'UPDATE users SET avatar_filename = NULL, avatar_version = NULL, avatar_updated_at = NULL WHERE id = $1',
+      [userId]
+    );
+    
+    // Clear user stats cache
+    userStatsCache.delete(`user-stats-${userId}`);
+    
+    res.json({ 
+      success: true, 
+      message: 'Avatar reset to Google picture'
+    });
+  } catch (error) {
+    console.error('Error resetting user avatar:', error);
+    res.status(500).json({ error: 'Failed to reset avatar' });
   }
 });
 

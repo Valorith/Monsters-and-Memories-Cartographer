@@ -4367,87 +4367,622 @@
 
   <!-- User Detail Modal -->
   <div id="user-detail-modal" class="modal" style="display: none;">
-    <div class="modal-content" style="max-width: 800px;">
-      <div class="modal-header">
-        <h2>User Details</h2>
+    <div class="modal-content" style="max-width: 900px;">
+      <div class="modal-header" style="background: linear-gradient(135deg, #2d2d2d 0%, #3a3a3a 100%); border-bottom: 2px solid #4a7c59;">
+        <h2 style="font-family: 'Cinzel', serif; background: linear-gradient(135deg, #FFD700, #FFA500); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">User Details</h2>
         <button class="close-btn" data-action="closeUserModal">&times;</button>
       </div>
-      <div class="modal-body">
-        <div style="display: flex; gap: 2rem; margin-bottom: 2rem;">
-          <div style="flex: 1;">
-            <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
-              <img id="detail-user-avatar" style="width: 80px; height: 80px; border-radius: 50%; border: 3px solid #4a7c59;">
-              <div>
-                <h3 id="detail-user-name" style="margin: 0; color: #FFD700;"></h3>
-                <p id="detail-user-email" style="margin: 0.25rem 0; color: #999;"></p>
-                <span id="detail-user-status" style="display: inline-block; padding: 0.25rem 0.75rem; border-radius: 4px; font-size: 0.85rem;"></span>
+      <div class="modal-body" style="padding: 1.5rem;">
+        <!-- User Header Section -->
+        <div style="background: linear-gradient(135deg, #2d2d2d 0%, #1a1a1a 100%); padding: 1.5rem; border-radius: 12px; margin-bottom: 1.5rem; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);">
+          <div style="display: flex; align-items: center; gap: 1.5rem;">
+            <div style="position: relative;">
+              <img id="detail-user-avatar" style="width: 100px; height: 100px; border-radius: 50%; border: 4px solid #4a7c59; box-shadow: 0 0 20px rgba(74, 124, 89, 0.5); cursor: pointer;" onclick="editUserField('avatar')" title="Click to edit avatar">
+              <div id="detail-user-level" style="position: absolute; bottom: -5px; right: -5px; background: #FFD700; color: #1a1a1a; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.9rem; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);"></div>
+              <button class="edit-btn" onclick="editUserField('avatar')" style="position: absolute; top: -5px; right: -5px; background: #4a7c59; border: 2px solid #2d2d2d; color: white; cursor: pointer; padding: 0.3rem; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);" title="Edit avatar">
+                📷
+              </button>
+            </div>
+            <div style="flex: 1;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                <h3 id="detail-user-name" style="margin: 0; color: #FFD700; font-size: 1.5rem; font-weight: 600;"></h3>
+                <button class="edit-btn" onclick="editUserField('name')" style="background: none; border: none; color: #7fb069; cursor: pointer; padding: 0.2rem; opacity: 0.7; transition: opacity 0.2s;" title="Edit name">
+                  ✏️
+                </button>
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                <p id="detail-user-email" style="margin: 0; color: #999; font-size: 0.95rem;"></p>
+                <button class="edit-btn" onclick="editUserField('email')" style="background: none; border: none; color: #7fb069; cursor: pointer; padding: 0.2rem; opacity: 0.7; transition: opacity 0.2s;" title="Edit email">
+                  ✏️
+                </button>
+              </div>
+              <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <span id="detail-user-status" style="display: inline-block; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem; font-weight: 500;"></span>
+                <span id="detail-user-tier" style="display: inline-block; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem; font-weight: 500;"></span>
               </div>
             </div>
-            
-            <div style="background: #2d2d2d; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
-              <h4 style="color: #FFD700; margin-top: 0;">Account Information</h4>
-              <p><strong>User ID:</strong> <span id="detail-user-id"></span></p>
-              <p><strong>Joined:</strong> <span id="detail-user-joined"></span></p>
-              <p><strong>Last Active:</strong> <span id="detail-user-last-active"></span></p>
-              <p style="display: flex; justify-content: space-between; align-items: center;">
-                <strong>XP:</strong> 
-                <span style="display: flex; align-items: center; gap: 0.5rem;">
-                  <span id="detail-user-xp" style="color: #FFD700; font-weight: bold;"></span>
-                  <button class="small-btn" data-action="showXPAdjustment" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; background: #FFD700; color: #2a1810;">
-                    <span class="btn-icon">✏️</span>Edit
-                  </button>
-                </span>
-              </p>
-              <p><strong>Admin:</strong> <span id="detail-user-admin"></span></p>
+          </div>
+        </div>
+        
+        <!-- Main Content Grid -->
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; margin-bottom: 1.5rem;">
+          <!-- Account Information -->
+          <div class="detail-card" style="background: #2d2d2d; padding: 1.25rem; border-radius: 10px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); border: 1px solid #3a3a3a;">
+            <h4 style="color: #FFD700; margin-top: 0; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+              <span style="font-size: 1.2rem;">📋</span> Account Information
+            </h4>
+            <div class="info-row" style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid #3a3a3a;">
+              <strong style="color: #999;">User ID:</strong>
+              <span id="detail-user-id" style="color: #e0e0e0; font-family: monospace;"></span>
+            </div>
+            <div class="info-row" style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid #3a3a3a;">
+              <strong style="color: #999;">Nickname:</strong>
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <span id="detail-user-nickname" style="color: #e0e0e0;"></span>
+                <button class="edit-btn" onclick="editUserField('nickname')" style="background: none; border: none; color: #7fb069; cursor: pointer; padding: 0.2rem; opacity: 0.7; transition: opacity 0.2s;" title="Edit nickname">
+                  ✏️
+                </button>
+              </div>
+            </div>
+            <div class="info-row" style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid #3a3a3a;">
+              <strong style="color: #999;">Joined:</strong>
+              <span id="detail-user-joined" style="color: #e0e0e0;"></span>
+            </div>
+            <div class="info-row" style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid #3a3a3a;">
+              <strong style="color: #999;">Last Active:</strong>
+              <span id="detail-user-last-active" style="color: #e0e0e0;"></span>
+            </div>
+            <div class="info-row" style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0;">
+              <strong style="color: #999;">Experience:</strong>
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <span id="detail-user-xp" style="color: #FFD700; font-weight: bold; font-size: 1.1rem;"></span>
+                <button class="small-btn" data-action="showXPAdjustment" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; background: linear-gradient(135deg, #FFD700, #FFA500); color: #1a1a1a; border: none; border-radius: 4px; cursor: pointer;">
+                  <span class="btn-icon">✏️</span>Edit
+                </button>
+              </div>
             </div>
           </div>
           
-          <div style="flex: 1;">
-            <div style="background: #2d2d2d; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
-              <h4 style="color: #FFD700; margin-top: 0;">Activity Statistics</h4>
-              <p><strong>Total POIs Created:</strong> <span id="detail-user-total-pois"></span></p>
-              <p><strong>Published POIs:</strong> <span id="detail-user-published-pois"></span></p>
-              <p><strong>Votes Cast:</strong> <span id="detail-user-votes"></span></p>
+          <!-- Activity Statistics -->
+          <div class="detail-card" style="background: #2d2d2d; padding: 1.25rem; border-radius: 10px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); border: 1px solid #3a3a3a;">
+            <h4 style="color: #FFD700; margin-top: 0; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+              <span style="font-size: 1.2rem;">📊</span> Activity Statistics
+            </h4>
+            <div class="stat-row" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: #1a1a1a; border-radius: 6px; margin-bottom: 0.5rem;">
+              <span style="color: #999;">POIs Created</span>
+              <span id="detail-user-total-pois" style="color: #4ade80; font-weight: bold; font-size: 1.2rem;"></span>
             </div>
-            
-            <div style="background: #2d2d2d; padding: 1rem; border-radius: 8px;">
-              <h4 style="color: #FFD700; margin-top: 0;">Admin Actions</h4>
-              <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
-                <button id="ban-user-btn" class="small-btn danger-btn" data-action="banUser">
-                  <span class="btn-icon">🚫</span>Ban User
-                </button>
-                <button id="unban-user-btn" class="small-btn success-btn" data-action="unbanUser" style="display: none;">
-                  <span class="btn-icon">✅</span>Unban User
-                </button>
-                <button class="small-btn warning-btn" data-action="warnUser">
-                  <span class="btn-icon">⚠️</span>Warn User
-                </button>
-                <button class="small-btn secondary-btn" data-action="logoutUser">
-                  <span class="btn-icon">🚪</span>Force Logout
-                </button>
-                <button class="small-btn info-btn" data-action="viewUserPois">
-                  <span class="btn-icon">📍</span>View POIs
-                </button>
-                <button id="toggle-admin-btn" class="small-btn" data-action="toggleAdminStatus">
-                  <span class="btn-icon">👑</span><span id="toggle-admin-text">Make Admin</span>
-                </button>
-              </div>
+            <div class="stat-row" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: #1a1a1a; border-radius: 6px; margin-bottom: 0.5rem;">
+              <span style="color: #999;">Published POIs</span>
+              <span id="detail-user-published-pois" style="color: #60a5fa; font-weight: bold; font-size: 1.2rem;"></span>
+            </div>
+            <div class="stat-row" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: #1a1a1a; border-radius: 6px;">
+              <span style="color: #999;">Votes Cast</span>
+              <span id="detail-user-votes" style="color: #f59e0b; font-weight: bold; font-size: 1.2rem;"></span>
             </div>
           </div>
         </div>
         
-        <div id="user-warnings-section" style="display: none;">
-          <h4 style="color: #FFD700;">Previous Warnings</h4>
-          <div id="user-warnings-list" style="background: #2d2d2d; padding: 1rem; border-radius: 8px; max-height: 200px; overflow-y: auto;"></div>
+        <!-- Admin Actions -->
+        <div class="detail-card" style="background: #2d2d2d; padding: 1.25rem; border-radius: 10px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); border: 1px solid #3a3a3a;">
+          <h4 style="color: #FFD700; margin-top: 0; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+            <span style="font-size: 1.2rem;">⚡</span> Admin Actions
+          </h4>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem;">
+            <button id="ban-user-btn" class="admin-action-btn danger" data-action="banUser">
+              <span class="btn-icon">🚫</span>
+              <span>Ban User</span>
+            </button>
+            <button id="unban-user-btn" class="admin-action-btn success" data-action="unbanUser" style="display: none;">
+              <span class="btn-icon">✅</span>
+              <span>Unban User</span>
+            </button>
+            <button class="admin-action-btn warning" data-action="warnUser">
+              <span class="btn-icon">⚠️</span>
+              <span>Warn User</span>
+            </button>
+            <button class="admin-action-btn secondary" data-action="logoutUser">
+              <span class="btn-icon">🚪</span>
+              <span>Force Logout</span>
+            </button>
+            <button class="admin-action-btn info" data-action="viewUserPois">
+              <span class="btn-icon">📍</span>
+              <span>View POIs</span>
+            </button>
+            <button id="toggle-admin-btn" class="admin-action-btn special" data-action="toggleAdminStatus">
+              <span class="btn-icon">👑</span>
+              <span id="toggle-admin-text">Make Admin</span>
+            </button>
+            <button id="toggle-visibility-btn" class="admin-action-btn secondary" data-action="toggleVisibility">
+              <span class="btn-icon">👁️</span>
+              <span id="toggle-visibility-text">Hide User</span>
+            </button>
+          </div>
         </div>
         
-        <div id="user-ban-history-section" style="display: none;">
-          <h4 style="color: #FFD700;">Ban History</h4>
-          <div id="user-ban-history-list" style="background: #2d2d2d; padding: 1rem; border-radius: 8px; max-height: 200px; overflow-y: auto;"></div>
+        <!-- Warnings and Ban History (Hidden by default) -->
+        <div id="user-warnings-section" style="display: none; margin-top: 1.5rem;">
+          <div class="detail-card" style="background: #2d2d2d; padding: 1.25rem; border-radius: 10px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); border: 1px solid #3a3a3a;">
+            <h4 style="color: #FFD700; margin-top: 0; margin-bottom: 1rem;">⚠️ Previous Warnings</h4>
+            <div id="user-warnings-list" style="max-height: 200px; overflow-y: auto;"></div>
+          </div>
+        </div>
+        
+        <div id="user-ban-history-section" style="display: none; margin-top: 1.5rem;">
+          <div class="detail-card" style="background: #2d2d2d; padding: 1.25rem; border-radius: 10px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); border: 1px solid #3a3a3a;">
+            <h4 style="color: #FFD700; margin-top: 0; margin-bottom: 1rem;">🚫 Ban History</h4>
+            <div id="user-ban-history-list" style="max-height: 200px; overflow-y: auto;"></div>
+          </div>
         </div>
       </div>
     </div>
   </div>
+  
+  <style>
+    /* Admin Action Button Styles */
+    .admin-action-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.75rem 1rem;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-align: center;
+    }
+    
+    .admin-action-btn .btn-icon {
+      font-size: 1.25rem;
+    }
+    
+    .admin-action-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
+    
+    .admin-action-btn.danger {
+      background: linear-gradient(135deg, #dc3545, #c82333);
+      color: white;
+    }
+    
+    .admin-action-btn.success {
+      background: linear-gradient(135deg, #28a745, #218838);
+      color: white;
+    }
+    
+    .admin-action-btn.warning {
+      background: linear-gradient(135deg, #ffc107, #e0a800);
+      color: #212529;
+    }
+    
+    .admin-action-btn.info {
+      background: linear-gradient(135deg, #17a2b8, #138496);
+      color: white;
+    }
+    
+    .admin-action-btn.secondary {
+      background: linear-gradient(135deg, #6c757d, #5a6268);
+      color: white;
+    }
+    
+    .admin-action-btn.special {
+      background: linear-gradient(135deg, #FFD700, #FFA500);
+      color: #1a1a1a;
+    }
+    
+    .edit-btn:hover {
+      opacity: 1 !important;
+    }
+    
+    /* Info row hover effect */
+    .info-row:hover {
+      background: rgba(74, 124, 89, 0.1);
+      margin: 0 -0.5rem;
+      padding-left: 0.5rem;
+      padding-right: 0.5rem;
+    }
+  </style>
+  
+  <script>
+    // Wait for DOM to be ready
+    document.addEventListener('DOMContentLoaded', function() {
+    
+    // Edit user field function
+    window.editUserField = async function(field) {
+      const userId = document.getElementById('detail-user-id').textContent;
+      let currentValue = '';
+      let promptText = '';
+      
+      switch(field) {
+        case 'name':
+          currentValue = document.getElementById('detail-user-name').textContent;
+          promptText = 'Enter new name:';
+          break;
+        case 'email':
+          currentValue = document.getElementById('detail-user-email').textContent;
+          promptText = 'Enter new email address:';
+          break;
+        case 'nickname':
+          currentValue = document.getElementById('detail-user-nickname')?.textContent || '';
+          promptText = 'Enter new nickname (leave empty to remove):';
+          break;
+        case 'avatar':
+          // Handle avatar editing differently
+          showAvatarEditModal(userId);
+          return;
+        default:
+          return;
+      }
+      
+      const newValue = prompt(promptText, currentValue);
+      if (newValue === null) return; // User cancelled
+      
+      try {
+        const response = await window.csrfHelper.fetchWithCSRF(`/api/admin/users/${userId}/update-field`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ field, value: newValue })
+        });
+        
+        if (response.ok) {
+          showMessage(`${field.charAt(0).toUpperCase() + field.slice(1)} updated successfully`, 'success');
+          // Refresh user details
+          viewUserDetails(userId);
+        } else {
+          const error = await response.json();
+          showMessage(error.error || `Failed to update ${field}`, 'error');
+        }
+      } catch (error) {
+        showMessage(`Failed to update ${field}`, 'error');
+      }
+    };
+    
+    // Show avatar edit modal
+    window.showAvatarEditModal = function(userId) {
+      // Create modal for avatar editing
+      const modal = document.createElement('div');
+      modal.className = 'modal';
+      modal.style.cssText = 'display: flex; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); align-items: center; justify-content: center;';
+      
+      const modalContent = document.createElement('div');
+      modalContent.className = 'modal-content';
+      modalContent.style.cssText = 'max-width: 500px; background: #2d2d2d; border-radius: 12px; overflow: hidden;';
+      
+      modalContent.innerHTML = `
+        <div class="modal-header" style="background: linear-gradient(135deg, #2d2d2d 0%, #3a3a3a 100%); border-bottom: 2px solid #4a7c59;">
+          <h2>Edit User Avatar</h2>
+          <button class="close-btn" onclick="this.closest('.modal').remove()">&times;</button>
+        </div>
+        <div class="modal-body" style="padding: 1.5rem;">
+          <div style="text-align: center; margin-bottom: 1.5rem;">
+            <img id="edit-avatar-preview" src="${document.getElementById('detail-user-avatar').src}" 
+                 style="width: 120px; height: 120px; border-radius: 50%; border: 4px solid #4a7c59; 
+                        box-shadow: 0 0 20px rgba(74, 124, 89, 0.5); margin-bottom: 1rem;">
+            <p style="color: #999; margin: 0;">Current Avatar</p>
+          </div>
+          
+          <div style="margin-bottom: 1.5rem;">
+            <label class="btn primary-btn" style="display: block; text-align: center; cursor: pointer;">
+              <input type="file" accept="image/*" onchange="handleAdminAvatarUpload(event, '${userId}')" 
+                     style="display: none;">
+              <span>📤 Upload New Avatar</span>
+            </label>
+          </div>
+          
+          <div style="margin-bottom: 1.5rem;">
+            <button class="btn secondary-btn" onclick="resetUserAvatar('${userId}')" style="width: 100%;">
+              <span>🔄 Reset to Google Avatar</span>
+            </button>
+          </div>
+          
+          <div id="avatar-upload-progress" style="display: none; margin-top: 1rem;">
+            <div style="background: #1a1a1a; border-radius: 8px; overflow: hidden; height: 8px;">
+              <div id="avatar-progress-bar" style="height: 100%; background: linear-gradient(90deg, #4a7c59, #5fa772); 
+                   width: 0%; transition: width 0.3s ease;"></div>
+            </div>
+            <p id="avatar-upload-status" style="text-align: center; color: #999; margin-top: 0.5rem;"></p>
+          </div>
+        </div>
+      `;
+      
+      modal.appendChild(modalContent);
+      document.body.appendChild(modal);
+    };
+    
+    // Handle admin avatar upload
+    window.handleAdminAvatarUpload = async function(event, userId) {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      // Validate file size
+      if (file.size > 5 * 1024 * 1024) {
+        showMessage('File size must be less than 5MB', 'error');
+        return;
+      }
+      
+      const progressDiv = document.getElementById('avatar-upload-progress');
+      const progressBar = document.getElementById('avatar-progress-bar');
+      const statusText = document.getElementById('avatar-upload-status');
+      
+      progressDiv.style.display = 'block';
+      progressBar.style.width = '0%';
+      statusText.textContent = 'Uploading...';
+      
+      const formData = new FormData();
+      formData.append('avatar', file);
+      
+      try {
+        // Create XMLHttpRequest for progress tracking
+        const xhr = new XMLHttpRequest();
+        
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            const percentComplete = Math.round((e.loaded / e.total) * 100);
+            progressBar.style.width = percentComplete + '%';
+          }
+        });
+        
+        const uploadPromise = new Promise((resolve, reject) => {
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve(JSON.parse(xhr.responseText));
+            } else {
+              reject(new Error(xhr.responseText));
+            }
+          };
+          xhr.onerror = () => reject(new Error('Network error'));
+        });
+        
+        // Get CSRF token
+        const csrfToken = await window.getCSRFToken();
+        
+        xhr.open('POST', `/api/admin/users/${userId}/avatar`);
+        xhr.setRequestHeader('X-CSRF-Token', csrfToken);
+        xhr.send(formData);
+        
+        const result = await uploadPromise;
+        
+        statusText.textContent = 'Upload complete!';
+        progressBar.style.width = '100%';
+        
+        // Update preview
+        document.getElementById('edit-avatar-preview').src = result.avatarUrl + '?t=' + Date.now();
+        
+        showMessage('Avatar updated successfully', 'success');
+        
+        // Refresh user details after a short delay
+        setTimeout(() => {
+          document.querySelector('.modal').remove();
+          viewUserDetails(userId);
+        }, 1000);
+        
+      } catch (error) {
+        progressDiv.style.display = 'none';
+        showMessage('Failed to upload avatar: ' + error.message, 'error');
+      }
+    };
+    
+    // Reset user avatar to Google
+    window.resetUserAvatar = async function(userId) {
+      if (!confirm('Reset this user\'s avatar to their Google profile picture?')) return;
+      
+      try {
+        const response = await window.csrfHelper.fetchWithCSRF(`/api/admin/users/${userId}/avatar/reset`, {
+          method: 'POST'
+        });
+        
+        if (response.ok) {
+          showMessage('Avatar reset to Google picture', 'success');
+          document.querySelector('.modal').remove();
+          viewUserDetails(userId);
+        } else {
+          const error = await response.json();
+          showMessage(error.error || 'Failed to reset avatar', 'error');
+        }
+      } catch (error) {
+        showMessage('Failed to reset avatar', 'error');
+      }
+    };
+    
+    // Toggle user visibility function
+    window.toggleUserVisibility = async function(userId) {
+      try {
+        // Use the global CSRF helper
+        const csrfToken = await window.getCSRFToken();
+        const response = await fetch(`/api/admin/users/${userId}/visibility`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrfToken
+          }
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to toggle visibility');
+        }
+        
+        const result = await response.json();
+        
+        if (typeof showMessage === 'function') {
+          showMessage(result.message, 'success');
+        }
+        
+        // Update the UI to reflect the new visibility status
+        const toggleBtn = document.getElementById('toggle-visibility-btn');
+        if (toggleBtn) {
+          const newText = result.visible ? 'Hide User' : 'Show User';
+          const newIcon = result.visible ? '👁️' : '👁️‍🗨️';
+          toggleBtn.innerHTML = `<span class="btn-icon">${newIcon}</span><span id="toggle-visibility-text">${newText}</span>`;
+        }
+        
+        // Update the status display if the user is hidden
+        updateUserStatusDisplay(userId, result.visible);
+        
+        // Refresh the user list if we're on the admin tab
+        if (document.getElementById('admin-tab').classList.contains('active')) {
+          // Refresh users list
+          if (typeof loadUsers === 'function') {
+            loadUsers();
+          }
+        }
+      } catch (error) {
+        console.error('Error toggling user visibility:', error);
+        if (typeof showMessage === 'function') {
+          showMessage(error.message || 'Failed to toggle user visibility', 'error');
+        } else {
+          alert(error.message || 'Failed to toggle user visibility');
+        }
+      }
+    }
+    
+    // Create wrapper function for the existing event handler
+    window.toggleVisibility = function() {
+      // Get userId from the modal
+      const userIdElement = document.getElementById('detail-user-id');
+      if (userIdElement && userIdElement.textContent) {
+        window.toggleUserVisibility(userIdElement.textContent);
+      } else {
+        console.error('Cannot find user ID for visibility toggle');
+      }
+    };
+    
+    // Update user status display to show if hidden
+    function updateUserStatusDisplay(userId, isVisible) {
+      const statusElement = document.getElementById('detail-user-status');
+      if (!statusElement) return;
+      
+      // Get current user data to check other status
+      const userRow = document.querySelector(`tr[data-user-id="${userId}"]`);
+      if (!userRow) return;
+      
+      const isBanned = userRow.querySelector('.ban-status')?.textContent.includes('Banned');
+      const isAdmin = userRow.querySelector('.admin-badge')?.style.display !== 'none';
+      
+      let statusHTML = '';
+      if (isBanned) {
+        statusHTML = '<span style="background: #dc3545; color: white; padding: 0.25rem 0.5rem; border-radius: 4px;">🚫 Banned</span>';
+      } else if (!isVisible) {
+        statusHTML = '<span style="background: #6c757d; color: white; padding: 0.25rem 0.5rem; border-radius: 4px;">🚫 Hidden</span>';
+      } else if (isAdmin) {
+        statusHTML = '<span style="background: #ffc107; color: #212529; padding: 0.25rem 0.5rem; border-radius: 4px;">👑 Admin</span>';
+      } else {
+        statusHTML = '<span style="background: #28a745; color: white; padding: 0.25rem 0.5rem; border-radius: 4px;">✓ Active</span>';
+      }
+      
+      statusElement.innerHTML = statusHTML;
+    }
+    
+    }); // End of DOMContentLoaded
+    
+    // Override showUserDetails after page load to ensure it exists
+    window.addEventListener('load', function() {
+      const originalShowUserDetails = window.showUserDetails;
+      
+      window.showUserDetails = async function(userOrId) {
+        let user = userOrId;
+        
+        // Always fetch fresh user data to ensure we have the latest visibility status
+        const userId = (typeof userOrId === 'object' && userOrId.id) ? userOrId.id : userOrId;
+        try {
+          const response = await fetch(`/api/users/${userId}`);
+          if (response.ok) {
+            user = await response.json();
+          } else {
+            console.error('Failed to fetch user details');
+            if (originalShowUserDetails) {
+              originalShowUserDetails(userOrId);
+            }
+            return;
+          }
+        } catch (error) {
+          console.error('Error fetching user:', error);
+          if (originalShowUserDetails) {
+            originalShowUserDetails(userOrId);
+          }
+          return;
+        }
+        
+        // Store user data for other functions
+        window.currentUserDetails = user;
+        
+        // Call original function if it exists
+        if (typeof originalShowUserDetails === 'function') {
+          originalShowUserDetails(user);
+        }
+        
+        // Update visibility button
+        const toggleBtn = document.getElementById('toggle-visibility-btn');
+        if (toggleBtn) {
+          console.log('User data in showUserDetails:', user);
+          console.log('Raw visible value:', user.visible, 'type:', typeof user.visible);
+          // Handle null as true (default visible)
+          const isVisible = user.visible === null || user.visible === true;
+          const buttonText = isVisible ? 'Hide User' : 'Show User';
+          const buttonIcon = isVisible ? '👁️' : '👁️‍🗨️';
+          console.log('Initial button setup - visible:', user.visible, 'isVisible:', isVisible, 'text:', buttonText);
+          toggleBtn.innerHTML = `<span class="btn-icon">${buttonIcon}</span><span id="toggle-visibility-text">${buttonText}</span>`;
+          
+          // Update status display
+          updateUserStatusDisplay(user.id, isVisible);
+        }
+        
+        // Show the modal if it's not already visible
+        const modal = document.getElementById('user-detail-modal');
+        if (modal && modal.style.display === 'none') {
+          modal.style.display = 'block';
+        }
+      };
+      
+    });
+    
+    // Also watch for when the modal is shown to update visibility button
+    window.addEventListener('load', function() {
+      const modal = document.getElementById('user-detail-modal');
+      if (!modal) {
+        return;
+      }
+      
+      // Create observer to watch for modal display changes
+      const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+          if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+            if (modal.style.display !== 'none' && modal.style.display !== '') {
+              // Get user ID from modal
+              const userIdElement = document.getElementById('detail-user-id');
+              if (userIdElement && userIdElement.textContent) {
+                const userId = userIdElement.textContent.trim();
+                
+                // Fetch user data and update visibility button
+                fetch(`/api/users/${userId}`)
+                  .then(response => response.json())
+                  .then(user => {
+                    // Update visibility button
+                    const toggleBtn = document.getElementById('toggle-visibility-btn');
+                    if (toggleBtn) {
+                      const isVisible = user.visible === null || user.visible === true;
+                      const buttonText = isVisible ? 'Hide User' : 'Show User';
+                      const buttonIcon = isVisible ? '👁️' : '👁️‍🗨️';
+                      toggleBtn.innerHTML = `<span class="btn-icon">${buttonIcon}</span><span id="toggle-visibility-text">${buttonText}</span>`;
+                    }
+                  })
+                  .catch(error => {
+                    console.error('Error fetching user for visibility button:', error);
+                  });
+              }
+            }
+          }
+        });
+      });
+      
+      // Start observing
+      observer.observe(modal, { attributes: true });
+    });
+  </script>
 
   <!-- POI Type Modal -->
   <div id="poi-type-modal" class="modal" style="display: none;">
@@ -7480,6 +8015,24 @@
       textarea.dispatchEvent(new Event('input'));
     }
 
+    // Calculate level from XP
+    function calculateLevelFromXP(xp) {
+      if (xp <= 0) return 1;
+      
+      let level = 1;
+      let totalXPNeeded = 0;
+      
+      // Keep adding XP requirements until we exceed the player's XP
+      while (totalXPNeeded <= xp) {
+        totalXPNeeded += level * level * 100;
+        if (totalXPNeeded <= xp) {
+          level++;
+        }
+      }
+      
+      return level;
+    }
+
     // Format relative time helper
     function formatRelativeTime(dateString) {
       const date = new Date(dateString);
@@ -7631,6 +8184,10 @@
         }
       }
       
+      if (!user.visible) {
+        badges.push('<span style="background: #6c757d; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; margin-right: 0.25rem;" title="Hidden from leaderboards">👻 Hidden</span>');
+      }
+      
       if (user.unacknowledged_warnings > 0) {
         badges.push(`<span style="background: #ffc107; color: #2a1810; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem;" title="${user.unacknowledged_warnings} unacknowledged warning${user.unacknowledged_warnings > 1 ? 's' : ''}">⚠️ ${user.unacknowledged_warnings}</span>`);
       }
@@ -7677,7 +8234,30 @@
       document.getElementById('detail-user-joined').textContent = new Date(user.created_at).toLocaleString();
       document.getElementById('detail-user-last-active').textContent = user.last_visit ? new Date(user.last_visit).toLocaleString() : 'Never';
       document.getElementById('detail-user-xp').textContent = user.xp || 0;
-      document.getElementById('detail-user-admin').textContent = user.is_admin ? 'Yes' : 'No';
+      
+      // Calculate and display level
+      const userXP = user.xp || 0;
+      const level = calculateLevelFromXP(userXP);
+      const levelBadge = document.getElementById('detail-user-level');
+      if (levelBadge) {
+        levelBadge.textContent = level;
+      }
+      
+      // Display nickname
+      const nicknameEl = document.getElementById('detail-user-nickname');
+      if (nicknameEl) {
+        nicknameEl.textContent = user.nickname || '(none)';
+      }
+      
+      // Display donation tier
+      const tierEl = document.getElementById('detail-user-tier');
+      if (tierEl && user.donation_tier) {
+        tierEl.textContent = user.donation_tier.name;
+        tierEl.style.background = user.donation_tier.color || '#6c757d';
+        tierEl.style.display = 'inline-block';
+      } else if (tierEl) {
+        tierEl.style.display = 'none';
+      }
       
       document.getElementById('detail-user-total-pois').textContent = user.total_pois || 0;
       document.getElementById('detail-user-published-pois').textContent = user.published_pois || 0;
