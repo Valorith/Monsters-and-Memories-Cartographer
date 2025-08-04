@@ -982,20 +982,18 @@ export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {
           }
         }
 
-        const xpResult = await client.query(
-          'SELECT value FROM xp_config WHERE key = $1',
-          ['change_approved']
-        );
-        const xpAmount = xpResult.rows[0]?.value || 10;
+        // Award XP - use getXPConfig if available, otherwise fallback
+        const xpAmount = getXPConfig ? await getXPConfig('change_approved') : 10;
 
+        // Update user XP within the existing transaction
         await client.query(
-          'UPDATE users SET xp = COALESCE(xp, 0) + $1 WHERE id = $2',
-          [xpAmount, proposalData.proposer_id]
+          'UPDATE users SET xp = GREATEST(0, xp + $2) WHERE id = $1',
+          [proposalData.proposer_id, xpAmount]
         );
 
         await client.query(
-          'INSERT INTO xp_history (user_id, xp_change, reason, admin_id) VALUES ($1, $2, $3, $4)',
-          [proposalData.proposer_id, xpAmount, 'Change proposal approved by admin', req.user.id]
+          'INSERT INTO xp_history (user_id, xp_change, reason) VALUES ($1, $2, $3)',
+          [proposalData.proposer_id, xpAmount, 'Change proposal approved by admin']
         );
         
         // Clear caches when XP changes
