@@ -384,9 +384,6 @@ export default {
         return;
       }
       
-      console.log('AccountPage mounted - user:', user.value);
-      console.log('Is admin?', user.value?.is_admin);
-      console.log('Active tab:', activeTab.value);
       
       loadPreferences();
       loadAdminData();

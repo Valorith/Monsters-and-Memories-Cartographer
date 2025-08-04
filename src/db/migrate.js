@@ -375,6 +375,62 @@ async function migrate() {
       console.log('Vote XP config migration completed');
     }
     
+    // Create donations table for Ko-fi integration
+    const donationsTablePath = path.join(__dirname, 'create-donations-table.sql');
+    if (fs.existsSync(donationsTablePath)) {
+      const donationsTableSchema = fs.readFileSync(donationsTablePath, 'utf8');
+      await pool.query(donationsTableSchema);
+      console.log('Donations table created for Ko-fi integration');
+    }
+    
+    // Create donation tiers table
+    const donationTiersPath = path.join(__dirname, 'create-donation-tiers-table.sql');
+    if (fs.existsSync(donationTiersPath)) {
+      try {
+        const donationTiersSchema = fs.readFileSync(donationTiersPath, 'utf8');
+        await pool.query(donationTiersSchema);
+        console.log('Donation tiers table migration completed');
+      } catch (error) {
+        console.error('Error in donation tiers migration:', error.message);
+      }
+    }
+    
+    // Add donation delete trigger
+    const donationDeleteTriggerPath = path.join(__dirname, 'add-donation-delete-trigger.sql');
+    if (fs.existsSync(donationDeleteTriggerPath)) {
+      try {
+        const donationDeleteTriggerSchema = fs.readFileSync(donationDeleteTriggerPath, 'utf8');
+        await pool.query(donationDeleteTriggerSchema);
+        console.log('Donation delete trigger added');
+      } catch (error) {
+        console.error('Error adding donation delete trigger:', error.message);
+      }
+    }
+    
+    // Add donation unmatch trigger
+    const donationUnmatchTriggerPath = path.join(__dirname, 'add-donation-unmatch-trigger.sql');
+    if (fs.existsSync(donationUnmatchTriggerPath)) {
+      try {
+        const donationUnmatchTriggerSchema = fs.readFileSync(donationUnmatchTriggerPath, 'utf8');
+        await pool.query(donationUnmatchTriggerSchema);
+        console.log('Donation unmatch trigger added');
+      } catch (error) {
+        console.error('Error adding donation unmatch trigger:', error.message);
+      }
+    }
+    
+    // Update donation matching function
+    const updateDonationMatchingPath = path.join(__dirname, 'update-donation-matching.sql');
+    if (fs.existsSync(updateDonationMatchingPath)) {
+      try {
+        const updateDonationMatchingSchema = fs.readFileSync(updateDonationMatchingPath, 'utf8');
+        await pool.query(updateDonationMatchingSchema);
+        console.log('Donation matching function updated');
+      } catch (error) {
+        console.error('Error updating donation matching:', error.message);
+      }
+    }
+    
     console.log('Database migration completed successfully!');
     
     // Check tables after migration

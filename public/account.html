@@ -4,6 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Account Settings - MMC</title>
+  
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-FS1GD2527L"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', 'G-FS1GD2527L');
+  </script>
+  
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600&display=swap');
     
@@ -302,6 +313,119 @@
       font-size: 0.9rem;
     }
     
+    /* Donation Tier Styles */
+    .donation-tier-display {
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+    }
+    
+    .tier-badge-large {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100px;
+      height: 100px;
+      background: #2d2d2d;
+      border-radius: 50%;
+      border: 3px solid #444;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+      padding: 0.5rem;
+      text-align: center;
+    }
+    
+    .tier-badge-large .tier-icon {
+      font-size: 2.5rem;
+      filter: drop-shadow(0 0 8px currentColor);
+      animation: badge-glow 2s ease-in-out infinite;
+      line-height: 1;
+    }
+    
+    .tier-badge-large .tier-name {
+      font-size: 0.75rem;
+      font-weight: bold;
+      margin-top: 0.25rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      line-height: 1;
+      max-width: 80px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    
+    @keyframes badge-glow {
+      0%, 100% { opacity: 0.8; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.1); }
+    }
+    
+    .tier-progress-info {
+      flex: 1;
+    }
+    
+    .tier-progress-bar-wrapper {
+      width: 100%;
+      height: 20px;
+    }
+    
+    .tier-progress-bar-background {
+      width: 100%;
+      height: 100%;
+      background: #1a1a1a;
+      border: 2px solid #444;
+      border-radius: 10px;
+      overflow: hidden;
+      position: relative;
+    }
+    
+    .tier-progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #FFD700, #FFA500);
+      transition: width 0.5s ease;
+      box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+    }
+    
+    .donate-button:hover {
+      background: #5a8c69 !important;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
+      box-shadow: 0 4px 12px rgba(233, 75, 71, 0.4);
+    }
+    
+    /* Donation Styles */
+    .donation-stats-card {
+      background: #3a3a3a;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      border: 1px solid #444;
+      transition: all 0.3s ease;
+    }
+    
+    .donation-stats-card:hover {
+      background: #424242;
+      border-color: #555;
+    }
+    
+    .profile-section {
+      padding-top: 2rem;
+      border-top: 1px solid #555;
+    }
+    
+    .user-match-option {
+      padding: 0.75rem;
+      border: 1px solid #444;
+      border-radius: 4px;
+      margin-bottom: 0.5rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .user-match-option:hover {
+      background: #3a3a3a;
+    }
+    
     .profile-stats-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -357,6 +481,10 @@
       .xp-level-display {
         flex-direction: column;
         text-align: center;
+      }
+      
+      .donation-stats-card div[style*="grid"] {
+        grid-template-columns: repeat(2, 1fr) !important;
       }
     }
     
@@ -966,6 +1094,39 @@
     
     .secondary-btn:hover {
       background: #666;
+    }
+    
+    /* Markdown formatting buttons */
+    .markdown-btn {
+      background: #3a3a3a;
+      color: #e0e0e0;
+      border: 1px solid #555;
+      padding: 0.4rem 0.75rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-family: inherit;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 40px;
+    }
+    
+    .markdown-btn:hover {
+      background: #4a4a4a;
+      border-color: #7fb069;
+      color: #7fb069;
+      transform: translateY(-1px);
+    }
+    
+    .markdown-btn:active {
+      transform: translateY(0);
+    }
+    
+    .markdown-btn code {
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 0.85em;
     }
     
     /* Form styles */
@@ -2594,6 +2755,267 @@
       }
     }
     
+    /* Modal Styles */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(5px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      animation: fadeIn 0.2s ease-out;
+    }
+    
+    .modal-content {
+      background: #2d2d2d;
+      border: 2px solid #4a7c59;
+      border-radius: 8px;
+      padding: 2rem;
+      max-width: 600px;
+      width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      animation: slideIn 0.3s ease-out;
+    }
+    
+    .modal-content h3 {
+      margin-top: 0;
+    }
+    
+    .modal-content .form-group {
+      margin-bottom: 1.25rem;
+    }
+    
+    .modal-content .form-group label {
+      display: block;
+      margin-bottom: 0.5rem;
+      color: #FFD700;
+      font-weight: 500;
+      font-size: 0.9rem;
+    }
+    
+    .modal-content input[type="text"],
+    .modal-content input[type="number"],
+    .modal-content input[type="color"],
+    .modal-content textarea {
+      width: 100%;
+      padding: 0.75rem;
+      background: #1a1a1a;
+      border: 1px solid #444;
+      border-radius: 6px;
+      color: #e0e0e0;
+      font-size: 1rem;
+      transition: all 0.2s;
+    }
+    
+    .modal-content input[type="text"]:focus,
+    .modal-content input[type="number"]:focus,
+    .modal-content textarea:focus {
+      outline: none;
+      border-color: #4a7c59;
+      background: #222;
+      box-shadow: 0 0 0 3px rgba(74, 124, 89, 0.2);
+    }
+    
+    .modal-content input[type="color"] {
+      height: 45px;
+      cursor: pointer;
+      padding: 0.25rem;
+    }
+    
+    .modal-content input[type="checkbox"] {
+      margin-right: 0.5rem;
+      transform: scale(1.2);
+      cursor: pointer;
+    }
+    
+    .modal-content textarea {
+      resize: vertical;
+      min-height: 80px;
+      font-family: inherit;
+    }
+    
+    .modal-actions {
+      display: flex;
+      gap: 1rem;
+      justify-content: flex-end;
+      margin-top: 1.5rem;
+    }
+    
+    .modal-content .btn {
+      padding: 0.75rem 1.5rem;
+      border: none;
+      border-radius: 6px;
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .modal-content .btn-primary {
+      background: #4a7c59;
+      color: #FFD700;
+      border: 1px solid #FFD700;
+    }
+    
+    .modal-content .btn-primary:hover {
+      background: #5fa772;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(74, 124, 89, 0.4);
+    }
+    
+    .modal-content .btn-secondary {
+      background: #444;
+      color: #e0e0e0;
+      border: 1px solid #666;
+    }
+    
+    .modal-content .btn-secondary:hover {
+      background: #555;
+      border-color: #888;
+    }
+    
+    /* Emoji Picker Styles */
+    .emoji-input-wrapper {
+      position: relative;
+      display: flex;
+      gap: 0.5rem;
+      align-items: stretch;
+    }
+    
+    .emoji-input-wrapper input[type="text"] {
+      flex: 1;
+    }
+    
+    .emoji-picker-toggle {
+      background: #4a7c59;
+      color: #FFD700;
+      border: 1px solid #FFD700;
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+      cursor: pointer;
+      font-size: 1.2rem;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 50px;
+    }
+    
+    .emoji-picker-toggle:hover {
+      background: #5fa772;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(74, 124, 89, 0.4);
+    }
+    
+    .emoji-picker-dropdown {
+      position: absolute;
+      top: calc(100% + 0.5rem);
+      left: 0;
+      right: 0;
+      background: #1a1a1a;
+      border: 2px solid #4a7c59;
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.9);
+      z-index: 10001;
+      max-height: 400px;
+      overflow-y: auto;
+      display: none;
+      animation: fadeInScale 0.2s ease-out;
+    }
+    
+    @keyframes fadeInScale {
+      from {
+        opacity: 0;
+        transform: translateY(-10px) scale(0.95);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+    
+    .emoji-picker-dropdown.show {
+      display: block;
+    }
+    
+    .emoji-picker-dropdown::-webkit-scrollbar {
+      width: 8px;
+    }
+    
+    .emoji-picker-dropdown::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 4px;
+    }
+    
+    .emoji-picker-dropdown::-webkit-scrollbar-thumb {
+      background: #4a7c59;
+      border-radius: 4px;
+    }
+    
+    .emoji-picker-dropdown::-webkit-scrollbar-thumb:hover {
+      background: #5fa772;
+    }
+    
+    .emoji-picker-grid {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 0.5rem;
+    }
+    
+    .emoji-option {
+      background: #2d2d2d;
+      border: 1px solid #3a3a3a;
+      border-radius: 8px;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 1.3rem;
+      transition: all 0.15s ease;
+      position: relative;
+    }
+    
+    .emoji-option:hover {
+      background: #4a7c59;
+      border-color: #FFD700;
+      transform: scale(1.15);
+      z-index: 1;
+      box-shadow: 0 4px 12px rgba(255, 215, 0, 0.3);
+    }
+    
+    .emoji-option:active {
+      transform: scale(1.05);
+    }
+    
+    .emoji-category {
+      margin-bottom: 1.25rem;
+    }
+    
+    .emoji-category:last-child {
+      margin-bottom: 0;
+    }
+    
+    .emoji-category-title {
+      color: #FFD700;
+      font-size: 0.75rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid rgba(255, 215, 0, 0.2);
+    }
+    
     /* Custom Confirmation Dialog */
     .confirm-dialog-overlay {
       position: fixed;
@@ -2687,6 +3109,7 @@
   <script src="/csrf-helper.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/iconify-icon@2.1.0/dist/iconify-icon.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/twemoji@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
   <div id="app">
@@ -2771,6 +3194,79 @@
               <div class="stat-info">
                 <div class="stat-value" id="total-votes">0</div>
                 <div class="stat-label">Votes Cast</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Donations Section -->
+          <div class="profile-section" style="margin-top: 2rem;">
+            <h3 style="color: #FFD700; margin-bottom: 1.5rem;">Your Donations</h3>
+            
+            <!-- Donate Button -->
+            <div style="text-align: center; margin-bottom: 1.5rem;">
+              <a href="https://ko-fi.com/valorith" target="_blank" class="donate-button" style="display: inline-block; padding: 0.75rem 1.5rem; background: #4a7c59; color: #FFD700; text-decoration: none; border-radius: 8px; font-weight: bold; transition: all 0.3s; border: 2px solid #FFD700; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+                ☕ Donate to the project!
+              </a>
+            </div>
+            
+            <div id="user-donations-loading" style="text-align: center; padding: 2rem; color: #999;">
+              Loading donation history...
+            </div>
+            <div id="user-donations-content" style="display: none;">
+              <!-- Donation Tier Progress -->
+              <div id="donation-tier-progress" class="tier-progress-card" style="background: #3a3a3a; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; border: 1px solid #444; position: relative;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem;">
+                  <h4 style="color: #FFA500; margin: 0;">Tier Progress</h4>
+                  <div id="current-tier-badge" class="tier-badge-large" style="display: none;">
+                    <div class="tier-icon" id="current-tier-icon">🏅</div>
+                    <div class="tier-name" id="current-tier-name">Bronze</div>
+                  </div>
+                </div>
+                
+                <div class="progress-container" style="margin-bottom: 1rem;">
+                  <div class="progress-labels" style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.9rem;">
+                    <span style="color: #999;">Donated $<span id="progress-current-amount">0</span></span>
+                    <span id="next-tier-info" style="color: #FFD700; cursor: help;">
+                      <span id="next-tier-name">Loading...</span> - $<span id="next-tier-amount">0</span>
+                    </span>
+                  </div>
+                  <div class="progress-bar-container" style="background: #2d2d2d; height: 24px; border-radius: 12px; overflow: hidden; position: relative;">
+                    <div id="user-tier-progress-bar" style="background: linear-gradient(90deg, #FFD700, #FFA500); height: 100%; width: 0%; transition: width 0.5s ease;"></div>
+                    <div class="progress-percentage" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-weight: bold; font-size: 0.85rem; text-shadow: 1px 1px 2px rgba(0,0,0,0.5);">
+                      <span id="progress-percentage">0</span>%
+                    </div>
+                  </div>
+                  <div id="tier-complete-message" style="display: none; text-align: center; margin-top: 0.5rem; color: #4a7c59;">
+                    <span style="font-size: 1.2rem;">🏆</span> Highest tier achieved!
+                  </div>
+                </div>
+                
+                <!-- Next Tier Perks Tooltip -->
+                <div id="next-tier-perks" style="display: none; position: absolute; background: #2d2d2d; padding: 1rem; border-radius: 8px; border: 1px solid #555; box-shadow: 0 4px 12px rgba(0,0,0,0.5); z-index: 1000; min-width: 200px; max-width: 300px;">
+                  <h5 style="color: #FFD700; margin-bottom: 0.5rem; font-size: 0.9rem;">Next Tier Perks:</h5>
+                  <ul id="perks-list" style="margin: 0; padding-left: 1.5rem; color: #e0e0e0; font-size: 0.85rem;"></ul>
+                </div>
+              </div>
+              
+              <div id="user-donation-stats" class="donation-stats-card" style="background: #3a3a3a; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; border: 1px solid #444;">
+                <h4 style="color: #FFA500; margin-bottom: 1rem;">Total Support</h4>
+                <div style="display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.5rem;">
+                  <span style="font-size: 2rem; font-weight: bold; color: #FFD700; font-family: 'Cinzel', serif;">$<span id="user-total-donated">0.00</span></span>
+                  <span style="color: #999;">USD</span>
+                </div>
+                <div style="color: #999; font-size: 0.9rem;">
+                  <span id="user-donation-count">0</span> donation<span id="user-donation-plural">s</span>
+                </div>
+              </div>
+              
+              <div id="user-donations-list" style="display: none;">
+                <h4 style="color: #FFA500; margin-bottom: 1rem;">Donation History</h4>
+                <div id="user-donations-table-container"></div>
+              </div>
+              
+              <div id="no-user-donations" style="display: none; text-align: center; padding: 2rem; color: #999;">
+                <p style="margin-bottom: 1rem;">No donations found for your account.</p>
+                <p style="font-size: 0.9rem;">Make sure your Ko-fi donation name matches your nickname: <strong id="donation-nickname-hint"></strong></p>
               </div>
             </div>
           </div>
@@ -3127,6 +3623,96 @@
                   </thead>
                   <tbody id="xp-config-tbody"></tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Welcome Message Management -->
+          <div class="admin-section collapsed" id="welcome-message-section">
+            <div class="admin-section-header" onclick="toggleAdminSection('welcome-message-section')">
+              <div>
+                <h3>Welcome Message</h3>
+                <p style="color: #999; margin: 0.25rem 0 0 0; font-size: 0.9rem;">Configure the welcome message shown to users on new sessions</p>
+              </div>
+              <span class="collapse-icon">▼</span>
+            </div>
+            <div class="admin-section-content">
+              <div id="welcome-message-loading" style="text-align: center; padding: 2rem;">
+                Loading welcome message...
+              </div>
+              
+              <div id="welcome-message-content" style="display: none;">
+                <div style="margin-bottom: 1rem;">
+                  <p style="color: #999; font-size: 0.9rem; margin-bottom: 0.5rem;">
+                    <strong>Note:</strong> This message will appear once per browser session. Supports markdown formatting.
+                  </p>
+                </div>
+                
+                <div style="margin-bottom: 1.5rem;">
+                  <label for="welcome-message-input" style="color: #e0e0e0; font-weight: 500; margin-bottom: 0.5rem; display: block;">
+                    Welcome Message
+                  </label>
+                  <textarea 
+                    id="welcome-message-input" 
+                    rows="8" 
+                    placeholder="Enter your welcome message here. You can use markdown formatting..."
+                    style="width: 100%; padding: 0.75rem; border: 1px solid #555; border-radius: 4px; 
+                           background: #2d2d2d; color: #e0e0e0; font-family: inherit; resize: vertical;
+                           box-sizing: border-box;"
+                  ></textarea>
+                </div>
+                
+                <div style="margin-top: 1rem;">
+                  <div style="background: #2d2d2d; border: 1px solid #444; border-radius: 4px; padding: 0.75rem;">
+                    <div style="color: #7fb069; font-weight: 500; margin-bottom: 0.75rem;">Markdown Formatting</div>
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                      <button onclick="applyMarkdownFormat('bold')" class="markdown-btn" title="Bold (Ctrl+B)">
+                        <strong>B</strong>
+                      </button>
+                      <button onclick="applyMarkdownFormat('italic')" class="markdown-btn" title="Italic (Ctrl+I)">
+                        <em>I</em>
+                      </button>
+                      <button onclick="applyMarkdownFormat('code')" class="markdown-btn" title="Code">
+                        <code>&lt;/&gt;</code>
+                      </button>
+                      <button onclick="applyMarkdownFormat('link')" class="markdown-btn" title="Link">
+                        🔗
+                      </button>
+                      <div style="width: 1px; background: #555; margin: 0 0.25rem;"></div>
+                      <button onclick="applyMarkdownFormat('h1')" class="markdown-btn" title="Heading 1">
+                        H1
+                      </button>
+                      <button onclick="applyMarkdownFormat('h2')" class="markdown-btn" title="Heading 2">
+                        H2
+                      </button>
+                      <button onclick="applyMarkdownFormat('h3')" class="markdown-btn" title="Heading 3">
+                        H3
+                      </button>
+                      <div style="width: 1px; background: #555; margin: 0 0.25rem;"></div>
+                      <button onclick="applyMarkdownFormat('ul')" class="markdown-btn" title="Bullet List">
+                        • List
+                      </button>
+                      <button onclick="applyMarkdownFormat('ol')" class="markdown-btn" title="Numbered List">
+                        1. List
+                      </button>
+                      <button onclick="applyMarkdownFormat('quote')" class="markdown-btn" title="Quote">
+                        &ldquo; &rdquo;
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                
+                <div style="margin-top: 1.5rem; display: flex; gap: 1rem; justify-content: flex-end;">
+                  <button onclick="clearWelcomeMessage()" class="secondary-btn">
+                    Clear Message
+                  </button>
+                  <button onclick="previewWelcomeMessage()" class="secondary-btn">
+                    <span style="margin-right: 0.5rem;">👁️</span>Preview
+                  </button>
+                  <button onclick="saveWelcomeMessage()" class="primary-btn">
+                    <span style="margin-right: 0.5rem;">💾</span>Save Message
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -3536,6 +4122,173 @@
               </div>
             </div>
           </div>
+          
+          <!-- Donation Tiers Management -->
+          <div class="admin-section collapsed" id="donation-tiers-section">
+            <div class="admin-section-header" onclick="toggleAdminSection('donation-tiers-section')">
+              <div>
+                <h3>Donation Tiers</h3>
+                <p style="color: #999; margin: 0.25rem 0 0 0; font-size: 0.9rem;">Manage donation tiers and badges</p>
+              </div>
+              <span class="collapse-icon">▼</span>
+            </div>
+            <div class="admin-section-content">
+              <div id="donation-tiers-loading" style="text-align: center; padding: 2rem;">
+                Loading donation tiers...
+              </div>
+              
+              <div id="donation-tiers-content" style="display: none;">
+                <!-- Tier Statistics -->
+                <div style="background: #3a3a3a; border-radius: 8px; padding: 1.5rem; margin-bottom: 2rem; border: 1px solid #444;">
+                  <h4 style="color: #FFD700; margin-bottom: 1rem;">Tier Statistics</h4>
+                  <div id="tier-statistics" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem;">
+                    <!-- Tier stats will be populated here -->
+                  </div>
+                </div>
+                
+                <div style="margin-bottom: 1rem;">
+                  <button onclick="showCreateDonationTierModal()" class="primary-btn">
+                    <span style="margin-right: 0.5rem;">➕</span>
+                    Add Donation Tier
+                  </button>
+                  <button onclick="recalculateAllDonationTiers()" class="secondary-btn" style="margin-left: 1rem;">
+                    <span style="margin-right: 0.5rem;">🔄</span>
+                    Recalculate All User Tiers
+                  </button>
+                  <button onclick="showTestDonationModal()" class="btn btn-warning" style="margin-left: 1rem; background: #ff6b6b; border-color: #ff5252;">
+                    <span style="margin-right: 0.5rem;">🧪</span>
+                    Test Donation
+                  </button>
+                  <button onclick="resetMyDonationStats()" class="btn btn-warning" style="margin-left: 1rem; background: #ff9f40; border-color: #ff6b1a;">
+                    <span style="margin-right: 0.5rem;">🔧</span>
+                    Fix My Stats
+                  </button>
+                  <button onclick="simulateKofiWebhook()" class="btn btn-warning" style="margin-left: 1rem; background: #9c27b0; border-color: #7b1fa2;">
+                    <span style="margin-right: 0.5rem;">📡</span>
+                    Simulate Webhook
+                  </button>
+                </div>
+                
+                <table class="admin-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 40px;">Order</th>
+                      <th style="width: 80px;">Badge</th>
+                      <th>Name</th>
+                      <th>Required Amount</th>
+                      <th>Description</th>
+                      <th>Users</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="donation-tiers-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Donations Management -->
+          <div class="admin-section collapsed" id="donations-management-section">
+            <div class="admin-section-header" onclick="toggleAdminSection('donations-management-section')">
+              <div>
+                <h3>Donations Management</h3>
+                <p style="color: #999; margin: 0.25rem 0 0 0; font-size: 0.9rem;">View and manage Ko-fi donations</p>
+              </div>
+              <span class="collapse-icon">▼</span>
+            </div>
+            <div class="admin-section-content">
+              <div id="donations-management-loading" style="text-align: center; padding: 2rem;">
+                Loading donations data...
+              </div>
+              
+              <div id="donations-management-content" style="display: none;">
+                <!-- Donation Statistics -->
+                <div style="background: #3a3a3a; border-radius: 8px; padding: 1.5rem; margin-bottom: 2rem; border: 1px solid #444;">
+                  <h4 style="color: #FFD700; margin-bottom: 1rem;">Donation Statistics</h4>
+                  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;">
+                    <div>
+                      <div style="color: #999; font-size: 0.9rem; margin-bottom: 0.25rem;">Total Donations</div>
+                      <div style="font-size: 2rem; font-weight: bold; color: #FFD700; font-family: 'Cinzel', serif;">
+                        $<span id="total-donation-amount">0.00</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div style="color: #999; font-size: 0.9rem; margin-bottom: 0.25rem;">Number of Donations</div>
+                      <div style="font-size: 2rem; font-weight: bold; color: #FFA500;">
+                        <span id="total-donation-count">0</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div style="color: #999; font-size: 0.9rem; margin-bottom: 0.25rem;">Unique Donors</div>
+                      <div style="font-size: 2rem; font-weight: bold; color: #4a7c59;">
+                        <span id="unique-donors-count">0</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div style="color: #999; font-size: 0.9rem; margin-bottom: 0.25rem;">Unmatched Donations</div>
+                      <div style="font-size: 2rem; font-weight: bold; color: #dc3545;">
+                        <span id="unmatched-donations-count">0</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Filters and Search -->
+                <div style="margin-bottom: 1.5rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
+                  <div style="flex: 1; min-width: 200px;">
+                    <label style="display: block; color: #e0e0e0; margin-bottom: 0.5rem; font-size: 0.9rem;">Search by Name</label>
+                    <input type="text" id="donation-search" placeholder="Search donor name..." 
+                           style="width: 100%; padding: 0.5rem; border: 1px solid #555; border-radius: 4px; 
+                                  background: #2d2d2d; color: #e0e0e0;">
+                  </div>
+                  <div>
+                    <label style="display: block; color: #e0e0e0; margin-bottom: 0.5rem; font-size: 0.9rem;">Filter Status</label>
+                    <select id="donation-filter" style="padding: 0.5rem; border: 1px solid #555; border-radius: 4px; 
+                            background: #2d2d2d; color: #e0e0e0;">
+                      <option value="all">All Donations</option>
+                      <option value="matched">Matched Only</option>
+                      <option value="unmatched">Unmatched Only</option>
+                    </select>
+                  </div>
+                  <button onclick="refreshDonations()" style="background: transparent; border: none; color: #999; 
+                          padding: 0.5rem; cursor: pointer; 
+                          display: flex; align-items: center; justify-content: center;
+                          transition: all 0.2s;" 
+                          onmouseover="this.style.color='#FFD700'; this.style.transform='rotate(180deg)';" 
+                          onmouseout="this.style.color='#999'; this.style.transform='rotate(0deg)';"
+                          title="Refresh donations list">
+                    <span style="font-size: 1.25rem;">🔄</span>
+                  </button>
+                </div>
+                
+                <!-- Donations Table -->
+                <div style="overflow-x: auto;">
+                  <table class="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Donor Name</th>
+                        <th>Amount</th>
+                        <th>Type</th>
+                        <th>Message</th>
+                        <th>Matched User</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="donations-tbody"></tbody>
+                  </table>
+                </div>
+                
+                <!-- Donations Pagination -->
+                <div id="donations-pagination" class="pagination" style="display: none; margin-top: 1.5rem;">
+                  <button class="pagination-btn" id="donations-prev">Previous</button>
+                  <span class="pagination-info" id="donations-page-info">Page 1 of 1</span>
+                  <button class="pagination-btn" id="donations-next">Next</button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -3659,6 +4412,11 @@
         <div id="user-warnings-section" style="display: none;">
           <h4 style="color: #FFD700;">Previous Warnings</h4>
           <div id="user-warnings-list" style="background: #2d2d2d; padding: 1rem; border-radius: 8px; max-height: 200px; overflow-y: auto;"></div>
+        </div>
+        
+        <div id="user-ban-history-section" style="display: none;">
+          <h4 style="color: #FFD700;">Ban History</h4>
+          <div id="user-ban-history-list" style="background: #2d2d2d; padding: 1rem; border-radius: 8px; max-height: 200px; overflow-y: auto;"></div>
         </div>
       </div>
     </div>
@@ -3923,6 +4681,33 @@
       return row;
     }
 
+    // Check ban status and redirect if banned
+    async function checkBanStatus() {
+      try {
+        const response = await fetch('/api/auth/status');
+        const data = await response.json();
+        
+        if (data.banned) {
+          // Log them out and redirect to main page
+          await fetch('/api/auth/logout', { method: 'POST' });
+          window.location.href = '/';
+          return true; // User is banned
+        }
+        return false; // User is not banned
+      } catch (error) {
+        console.error('Error checking ban status:', error);
+        return false;
+      }
+    }
+    
+    // Wrap any action to check ban status first
+    async function withBanCheck(action) {
+      const isBanned = await checkBanStatus();
+      if (!isBanned && typeof action === 'function') {
+        return action();
+      }
+    }
+    
     // Check authentication status
     async function checkAuth() {
       try {
@@ -3930,6 +4715,14 @@
         const data = await response.json();
         
         document.getElementById('loading').style.display = 'none';
+        
+        // Check if user is banned
+        if (data.banned) {
+          // Log them out and redirect to main page
+          await fetch('/api/auth/logout', { method: 'POST' });
+          window.location.href = '/';
+          return;
+        }
         
         if (data.authenticated) {
           currentUser = data.user;
@@ -4056,6 +4849,10 @@
           const rankData = await rankResponse.json();
           document.getElementById('user-rank').textContent = `Rank: #${rankData.rank}`;
         }
+        
+        // Load user donations
+        loadUserDonations();
+        
       } catch (error) {
         console.error('Error loading profile stats:', error);
       }
@@ -4145,11 +4942,38 @@
       if (tabName === 'voting') {
         loadVotingData();
       }
+      
+      // Load user donations when profile tab is shown
+      if (tabName === 'profile') {
+        // Always refresh if flag is set, or if we're coming from admin tab
+        const previousActiveTab = document.querySelector('.tab-content.active');
+        const comingFromAdmin = previousActiveTab && previousActiveTab.id === 'admin-tab';
+        
+        if (donationDataNeedsRefresh || comingFromAdmin) {
+          loadUserDonations();
+          donationDataNeedsRefresh = false;
+        }
+      }
     }
 
     function toggleAdminSection(sectionId) {
       const section = document.getElementById(sectionId);
       section.classList.toggle('collapsed');
+      
+      // Load data when sections are expanded
+      if (!section.classList.contains('collapsed')) {
+        switch(sectionId) {
+          case 'donation-tiers-section':
+            loadDonationTiers();
+            break;
+          case 'donations-management-section':
+            if (window.loadDonationsManagement) {
+              loadDonationsManagement();
+            }
+            break;
+          // Add other cases as needed
+        }
+      }
       
       // Update container width based on open editors
       updateContainerWidth();
@@ -5168,6 +5992,7 @@
         loadCustomPois();
       } else if (tabName === 'admin' && currentUser?.is_admin) {
         loadXPConfig();
+        loadWelcomeMessage();
         loadUsers();
       }
     };
@@ -6359,6 +7184,303 @@
       }
     }
 
+    // Welcome Message Functions
+    async function loadWelcomeMessage() {
+      const loading = document.getElementById('welcome-message-loading');
+      const content = document.getElementById('welcome-message-content');
+      const textarea = document.getElementById('welcome-message-input');
+      
+      if (!loading || !content || !textarea) {
+        console.error('Welcome message elements not found');
+        return;
+      }
+      
+      loading.style.display = 'block';
+      content.style.display = 'none';
+      
+      try {
+        const response = await fetch('/api/welcome-message');
+        if (response.ok) {
+          const data = await response.json();
+          textarea.value = data.message || '';
+          
+          loading.style.display = 'none';
+          content.style.display = 'block';
+        }
+      } catch (error) {
+        console.error('Error loading welcome message:', error);
+        loading.innerHTML = '<p style="color: #dc3545;">Failed to load welcome message</p>';
+      }
+    }
+    
+    async function saveWelcomeMessage() {
+      const textarea = document.getElementById('welcome-message-input');
+      const message = textarea.value.trim();
+      
+      if (!message) {
+        showMessage('Please enter a welcome message', 'error');
+        return;
+      }
+      
+      try {
+        const response = await window.csrfHelper.fetchWithCSRF('/api/admin/welcome-message', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ message })
+        });
+        
+        if (response.ok) {
+          showMessage('Welcome message saved successfully', 'success');
+        } else {
+          showMessage('Failed to save welcome message', 'error');
+        }
+      } catch (error) {
+        console.error('Error saving welcome message:', error);
+        showMessage('Failed to save welcome message', 'error');
+      }
+    }
+    
+    async function clearWelcomeMessage() {
+      if (!confirm('Are you sure you want to clear the welcome message? Users will not see any welcome message.')) {
+        return;
+      }
+      
+      try {
+        const response = await window.csrfHelper.fetchWithCSRF('/api/admin/welcome-message', {
+          method: 'DELETE'
+        });
+        
+        if (response.ok) {
+          document.getElementById('welcome-message-input').value = '';
+          showMessage('Welcome message cleared successfully', 'success');
+        } else {
+          showMessage('Failed to clear welcome message', 'error');
+        }
+      } catch (error) {
+        console.error('Error clearing welcome message:', error);
+        showMessage('Failed to clear welcome message', 'error');
+      }
+    }
+    
+    function previewWelcomeMessage() {
+      const message = document.getElementById('welcome-message-input').value.trim();
+      
+      if (!message) {
+        showMessage('Please enter a message to preview', 'error');
+        return;
+      }
+      
+      // Create a temporary modal to preview the message
+      const modal = document.createElement('div');
+      modal.className = 'modal';
+      modal.style.cssText = 'display: flex; position: fixed; z-index: 3000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); align-items: center; justify-content: center;';
+      
+      const modalContent = document.createElement('div');
+      modalContent.style.cssText = 'background: rgba(30, 30, 30, 0.98); border: 1px solid #555; border-radius: 8px; max-width: 600px; max-height: 80vh; margin: 1rem;';
+      
+      // Use marked if available, otherwise show plain text
+      let formattedMessage = message;
+      if (typeof marked !== 'undefined') {
+        marked.setOptions({ breaks: true, gfm: true });
+        formattedMessage = marked.parse(message);
+      }
+      
+      modalContent.innerHTML = `
+        <div style="padding: 1rem 1.5rem; border-bottom: 1px solid #444;">
+          <h3 style="margin: 0; color: #fff; font-size: 1.3rem;">Welcome to MMC!</h3>
+        </div>
+        <div style="padding: 1.5rem; overflow-y: auto; max-height: 60vh;">
+          <div class="markdown-content">${formattedMessage}</div>
+        </div>
+        <div style="padding: 1rem 1.5rem; text-align: center; border-top: 1px solid #444;">
+          <button onclick="this.closest('.modal').remove()" class="primary-btn" style="padding: 0.6rem 2rem;">OK</button>
+        </div>
+      `;
+      
+      modal.appendChild(modalContent);
+      document.body.appendChild(modal);
+      
+      // Add markdown styles
+      const style = document.createElement('style');
+      style.textContent = `
+        .markdown-content p { margin: 0 0 1rem 0; color: #e0e0e0; line-height: 1.6; }
+        .markdown-content p:last-child { margin-bottom: 0; }
+        .markdown-content h1, .markdown-content h2, .markdown-content h3 { color: #fff; margin: 1rem 0 0.5rem 0; }
+        .markdown-content ul, .markdown-content ol { margin: 0.5rem 0; padding-left: 1.5rem; color: #e0e0e0; }
+        .markdown-content li { margin: 0.25rem 0; }
+        .markdown-content a { color: #7fb069; text-decoration: none; }
+        .markdown-content a:hover { text-decoration: underline; }
+        .markdown-content code { background: rgba(255,255,255,0.1); padding: 0.2rem 0.4rem; border-radius: 3px; font-family: monospace; }
+        .markdown-content pre { background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 4px; overflow-x: auto; }
+        .markdown-content blockquote { border-left: 3px solid #7fb069; padding-left: 1rem; margin: 1rem 0; color: #ccc; }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    // Apply markdown formatting to selected text
+    function applyMarkdownFormat(format) {
+      const textarea = document.getElementById('welcome-message-input');
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const text = textarea.value;
+      const selectedText = text.substring(start, end);
+      
+      let newText = '';
+      let cursorOffset = 0;
+      
+      switch(format) {
+        case 'bold':
+          if (selectedText) {
+            newText = `**${selectedText}**`;
+            cursorOffset = newText.length;
+          } else {
+            newText = '****';
+            cursorOffset = 2;
+          }
+          break;
+          
+        case 'italic':
+          if (selectedText) {
+            newText = `*${selectedText}*`;
+            cursorOffset = newText.length;
+          } else {
+            newText = '**';
+            cursorOffset = 1;
+          }
+          break;
+          
+        case 'code':
+          if (selectedText && selectedText.includes('\n')) {
+            newText = `\`\`\`\n${selectedText}\n\`\`\``;
+            cursorOffset = newText.length;
+          } else if (selectedText) {
+            newText = `\`${selectedText}\``;
+            cursorOffset = newText.length;
+          } else {
+            newText = '``';
+            cursorOffset = 1;
+          }
+          break;
+          
+        case 'link':
+          if (selectedText && selectedText.startsWith('http')) {
+            newText = `[](${selectedText})`;
+            cursorOffset = 1;
+          } else if (selectedText) {
+            newText = `[${selectedText}]()`;
+            cursorOffset = newText.length - 1;
+          } else {
+            newText = '[]()';
+            cursorOffset = 1;
+          }
+          break;
+          
+        case 'h1':
+          if (selectedText) {
+            newText = `# ${selectedText}`;
+            cursorOffset = newText.length;
+          } else {
+            newText = '# ';
+            cursorOffset = 2;
+          }
+          break;
+          
+        case 'h2':
+          if (selectedText) {
+            newText = `## ${selectedText}`;
+            cursorOffset = newText.length;
+          } else {
+            newText = '## ';
+            cursorOffset = 3;
+          }
+          break;
+          
+        case 'h3':
+          if (selectedText) {
+            newText = `### ${selectedText}`;
+            cursorOffset = newText.length;
+          } else {
+            newText = '### ';
+            cursorOffset = 4;
+          }
+          break;
+          
+        case 'ul':
+          if (selectedText) {
+            // Convert each line to a bullet point
+            newText = selectedText.split('\n').map(line => `- ${line}`).join('\n');
+            cursorOffset = newText.length;
+          } else {
+            newText = '- ';
+            cursorOffset = 2;
+          }
+          break;
+          
+        case 'ol':
+          if (selectedText) {
+            // Convert each line to a numbered list
+            newText = selectedText.split('\n').map((line, i) => `${i + 1}. ${line}`).join('\n');
+            cursorOffset = newText.length;
+          } else {
+            newText = '1. ';
+            cursorOffset = 3;
+          }
+          break;
+          
+        case 'quote':
+          if (selectedText) {
+            // Add > to each line
+            newText = selectedText.split('\n').map(line => `> ${line}`).join('\n');
+            cursorOffset = newText.length;
+          } else {
+            newText = '> ';
+            cursorOffset = 2;
+          }
+          break;
+      }
+      
+      // Replace the selected text
+      textarea.value = text.substring(0, start) + newText + text.substring(end);
+      
+      // Set cursor position
+      textarea.focus();
+      textarea.selectionStart = start + cursorOffset;
+      textarea.selectionEnd = start + cursorOffset;
+      
+      // Trigger input event for any listeners
+      textarea.dispatchEvent(new Event('input'));
+    }
+
+    // Format relative time helper
+    function formatRelativeTime(dateString) {
+      const date = new Date(dateString);
+      const now = new Date();
+      const diffMs = now - date;
+      const diffSecs = Math.floor(diffMs / 1000);
+      const diffMins = Math.floor(diffSecs / 60);
+      const diffHours = Math.floor(diffMins / 60);
+      const diffDays = Math.floor(diffHours / 24);
+      
+      if (diffSecs < 60) {
+        return 'just now';
+      } else if (diffMins < 60) {
+        return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+      } else if (diffHours < 24) {
+        return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+      } else if (diffDays < 7) {
+        return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+      } else {
+        // For older dates, show the actual date
+        return `on ${date.toLocaleDateString('en-US', { 
+          month: 'short', 
+          day: 'numeric', 
+          year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined 
+        })}`;
+      }
+    }
+
     // User Management Functions
     let allUsers = [];
     let filteredUsers = [];
@@ -6438,6 +7560,14 @@
         
         pageUsers.forEach(user => {
           const row = document.createElement('tr');
+          
+          // Add background color based on status
+          if (user.is_banned) {
+            row.style.background = 'rgba(220, 53, 69, 0.15)';
+          } else if (user.unacknowledged_warnings > 0) {
+            row.style.background = 'rgba(255, 193, 7, 0.15)';
+          }
+          
           const statusBadge = getUserStatusBadge(user);
           
           // Always use DOM manipulation for consistent rendering
@@ -6462,13 +7592,23 @@
     }
     
     function getUserStatusBadge(user) {
+      let badges = [];
+      
       if (user.is_banned) {
-        return '<span style="background: #dc3545; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">Banned</span>';
-      } else if (user.is_admin) {
-        return '<span style="background: #FFD700; color: #2a1810; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">Admin</span>';
+        badges.push('<span style="background: #dc3545; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; margin-right: 0.25rem;">Banned</span>');
       } else {
-        return '<span style="background: #28a745; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">Active</span>';
+        if (user.is_admin) {
+          badges.push('<span style="background: #FFD700; color: #2a1810; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; margin-right: 0.25rem;">Admin</span>');
+        } else {
+          badges.push('<span style="background: #28a745; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; margin-right: 0.25rem;">Active</span>');
+        }
       }
+      
+      if (user.unacknowledged_warnings > 0) {
+        badges.push(`<span style="background: #ffc107; color: #2a1810; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem;" title="${user.unacknowledged_warnings} unacknowledged warning${user.unacknowledged_warnings > 1 ? 's' : ''}">⚠️ ${user.unacknowledged_warnings}</span>`);
+      }
+      
+      return badges.join('');
     }
     
     function changeUsersPage(direction) {
@@ -6541,16 +7681,48 @@
         document.getElementById('user-warnings-section').style.display = 'block';
         const warningsList = document.getElementById('user-warnings-list');
         warningsList.innerHTML = user.warnings.map(w => `
-          <div style="margin-bottom: 0.75rem; padding: 0.75rem; background: rgba(0, 0, 0, 0.3); border-radius: 6px; border-left: 3px solid #ffc107;">
+          <div style="margin-bottom: 0.75rem; padding: 0.75rem; background: rgba(0, 0, 0, 0.3); border-radius: 6px; border-left: 3px solid ${w.acknowledged_at ? '#28a745' : '#ffc107'};">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
-              <strong style="color: #ffc107;">${new Date(w.created_at).toLocaleDateString()}</strong>
+              <strong style="color: ${w.acknowledged_at ? '#28a745' : '#ffc107'};">Warned ${formatRelativeTime(w.created_at)}</strong>
               <span style="color: #888; font-size: 0.85rem;">by ${w.admin_name}</span>
             </div>
             <p style="margin: 0; color: #e0e0e0; line-height: 1.4;">${w.reason}</p>
+            ${w.acknowledged_at ? `
+              <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid #444;">
+                <span style="color: #28a745; font-size: 0.85rem;">
+                  ✓ Acknowledged ${formatRelativeTime(w.acknowledged_at)}
+                </span>
+              </div>
+            ` : `
+              <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid #444;">
+                <span style="color: #ffc107; font-size: 0.85rem;">
+                  ⚠️ Not yet acknowledged
+                </span>
+              </div>
+            `}
           </div>
         `).join('');
       } else {
         document.getElementById('user-warnings-section').style.display = 'none';
+      }
+      
+      // Show ban history if any
+      if (user.banHistory && user.banHistory.length > 0) {
+        document.getElementById('user-ban-history-section').style.display = 'block';
+        const banHistoryList = document.getElementById('user-ban-history-list');
+        banHistoryList.innerHTML = user.banHistory.map(bh => `
+          <div style="margin-bottom: 0.75rem; padding: 0.75rem; background: rgba(0, 0, 0, 0.3); border-radius: 6px; border-left: 3px solid ${bh.action === 'ban' ? '#dc3545' : '#28a745'};">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+              <strong style="color: ${bh.action === 'ban' ? '#dc3545' : '#28a745'};">
+                ${bh.action === 'ban' ? '🚫 Banned' : '✅ Unbanned'} ${formatRelativeTime(bh.created_at)}
+              </strong>
+              <span style="color: #888; font-size: 0.85rem;">by ${bh.admin_name}</span>
+            </div>
+            ${bh.reason ? `<p style="margin: 0; color: #e0e0e0; line-height: 1.4;">${bh.reason}</p>` : ''}
+          </div>
+        `).join('');
+      } else {
+        document.getElementById('user-ban-history-section').style.display = 'none';
       }
       
       document.getElementById('user-detail-modal').style.display = 'block';
@@ -7219,6 +8391,34 @@
     // Load initial proposal count for voting tab
     loadInitialProposalCount();
     
+    // Set up periodic ban checks
+    setInterval(checkBanStatus, 30000); // Check every 30 seconds
+    
+    // Check ban status on visibility change
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        checkBanStatus();
+      }
+    });
+    
+    // Check ban status on window focus
+    window.addEventListener('focus', checkBanStatus);
+    
+    // Intercept clicks on interactive elements
+    document.addEventListener('click', async (event) => {
+      // Check if clicked element is interactive
+      const target = event.target;
+      if (target.matches('button, a, input[type="submit"], .tab-btn, .admin-section-header') || 
+          target.closest('button, a, input[type="submit"], .tab-btn, .admin-section-header')) {
+        // Check ban status before allowing action
+        const isBanned = await checkBanStatus();
+        if (isBanned) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }
+    }, true); // Use capture phase
+    
     // Handle URL parameters
     const urlParams = new URLSearchParams(window.location.search);
     const tab = urlParams.get('tab');
@@ -7330,6 +8530,16 @@
                       color: #e0e0e0; margin-bottom: 1.5rem;"
                onkeyup="this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '')"
                onkeypress="if(event.key === 'Enter') addSharedPOI()">
+        
+        <!-- Admin Test Button -->
+        <div id="admin-test-share-container" style="display: none; margin-bottom: 1rem; text-align: center;">
+          <button class="btn btn-sm" onclick="insertSystemShareCode()" style="background: #dc3545; font-size: 0.85rem;">
+            🧪 Insert System Test Code
+          </button>
+          <p style="font-size: 0.8rem; color: #999; margin-top: 0.5rem;">
+            Admin only: Inserts test POIs from System account
+          </p>
+        </div>
         
         <div style="display: flex; gap: 1rem;">
           <button class="btn" onclick="addSharedPOI()" style="flex: 1;">
@@ -7452,10 +8662,26 @@
       document.getElementById('share-code-input').value = '';
       document.getElementById('add-shared-poi-modal').style.display = 'flex';
       document.getElementById('share-code-input').focus();
+      
+      // Show admin test button if user is admin
+      const adminContainer = document.getElementById('admin-test-share-container');
+      if (currentUser && currentUser.is_admin) {
+        adminContainer.style.display = 'block';
+      } else {
+        adminContainer.style.display = 'none';
+      }
     }
 
     function closeAddSharedPOIModal() {
       document.getElementById('add-shared-poi-modal').style.display = 'none';
+    }
+    
+    // System test share code - for admins only
+    const SYSTEM_SHARE_CODE = 'SYSTEST001';
+    
+    function insertSystemShareCode() {
+      document.getElementById('share-code-input').value = SYSTEM_SHARE_CODE;
+      document.getElementById('share-code-input').focus();
     }
 
     async function addSharedPOI() {
@@ -12079,6 +13305,1755 @@
     window.closeItemSelector = closeItemSelector;
     window.filterItemsInSelector = filterItemsInSelector;
     window.selectItem = selectItem;
+    
+    // Emoji picker helper
+    const badgeEmojis = {
+      'Medals & Trophies': ['🥇', '🥈', '🥉', '🏆', '🏅', '🎖️', '🏵️', '🎗️'],
+      'Stars & Gems': ['⭐', '🌟', '✨', '💫', '🌠', '💎', '💠', '🔷', '🔶'],
+      'Crowns & Shields': ['👑', '🛡️', '⚔️', '🗡️', '🛠️', '⚜️', '🔱', '🎯'],
+      'Nature & Elements': ['🌸', '🌺', '🌻', '🌹', '🍀', '🌿', '🔥', '💧', '⚡', '❄️'],
+      'Hearts & Symbols': ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '💗', '💖'],
+      'Other Badges': ['🎀', '🏁', '🎌', '🚩', '🎪', '🎨', '🎭', '🎯', '🎲', '🎰']
+    };
+    
+    function createEmojiPickerContent(inputId) {
+      let html = '';
+      
+      for (const [category, emojis] of Object.entries(badgeEmojis)) {
+        html += `
+          <div class="emoji-category">
+            <div class="emoji-category-title">${category}</div>
+            <div class="emoji-picker-grid">
+              ${emojis.map(emoji => `
+                <button type="button" class="emoji-option" onclick="selectEmoji('${inputId}', '${emoji}')">${emoji}</button>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+      
+      return html;
+    }
+    
+    function createEmojiPicker(inputId) {
+      return '<div class="emoji-picker-dropdown" id="emoji-picker-' + inputId + '">' + createEmojiPickerContent(inputId) + '</div>';
+    }
+    
+    function toggleEmojiPicker(inputId) {
+      const picker = document.getElementById('emoji-picker-' + inputId);
+      picker.classList.toggle('show');
+      
+      // Close picker when clicking outside
+      if (picker.classList.contains('show')) {
+        setTimeout(() => {
+          document.addEventListener('click', function closeEmojiPicker(e) {
+            if (!e.target.closest('.emoji-input-wrapper')) {
+              picker.classList.remove('show');
+              document.removeEventListener('click', closeEmojiPicker);
+            }
+          });
+        }, 100);
+      }
+    }
+    
+    function selectEmoji(inputId, emoji) {
+      const input = document.getElementById(inputId);
+      input.value = emoji;
+      const picker = document.getElementById('emoji-picker-' + inputId);
+      picker.classList.remove('show');
+    }
+    
+    window.toggleEmojiPicker = toggleEmojiPicker;
+    window.selectEmoji = selectEmoji;
+    
+    // Donation Tiers Management Functions
+    window.showCreateDonationTierModal = showCreateDonationTierModal;
+    window.editDonationTier = editDonationTier;
+    window.toggleDonationTierStatus = toggleDonationTierStatus;
+    window.deleteDonationTier = deleteDonationTier;
+    window.recalculateAllDonationTiers = recalculateAllDonationTiers;
+    
+    function showCreateDonationTierModal() {
+      const modal = document.createElement('div');
+      modal.className = 'modal-overlay';
+      modal.innerHTML = `
+        <div class="modal-content" style="max-width: 500px;">
+          <h3 style="color: #FFD700; margin-bottom: 1.5rem;">Create New Donation Tier</h3>
+          <form id="create-tier-form">
+            <div class="form-group">
+              <label>Tier Name</label>
+              <input type="text" name="name" required placeholder="e.g., Bronze Supporter">
+            </div>
+            <div class="form-group">
+              <label>Required Amount ($)</label>
+              <input type="number" name="required_amount" min="0" step="0.01" required placeholder="e.g., 10.00">
+            </div>
+            <div class="form-group">
+              <label>Badge Color (Hex)</label>
+              <input type="color" name="badge_color" required value="#FFD700">
+            </div>
+            <div class="form-group">
+              <label>Badge Icon (Emoji)</label>
+              <div class="emoji-input-wrapper">
+                <input type="text" id="create-tier-emoji" name="badge_icon" placeholder="e.g., 🥉" maxlength="2">
+                <button type="button" class="emoji-picker-toggle" onclick="toggleEmojiPicker('create-tier-emoji')">😊</button>
+                <div class="emoji-picker-dropdown" id="emoji-picker-create-tier-emoji"></div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Tier Order</label>
+              <input type="number" name="tier_order" min="1" required placeholder="1 = lowest tier">
+              <small style="color: #999; display: block; margin-top: 0.25rem;">Lower numbers appear first. Existing tiers will be automatically shifted if needed.</small>
+            </div>
+            <div class="form-group">
+              <label>Description</label>
+              <textarea name="description" rows="3" placeholder="Description of this tier"></textarea>
+            </div>
+            <div class="form-group">
+              <label>Perks (one per line)</label>
+              <textarea name="perks" rows="4" placeholder="Badge displayed next to username&#10;Access to supporter chat&#10;Early access to features"></textarea>
+            </div>
+            <div class="modal-actions">
+              <button type="submit" class="btn btn-primary">Create Tier</button>
+              <button type="button" onclick="this.closest('.modal-overlay').remove()" class="btn btn-secondary">Cancel</button>
+            </div>
+          </form>
+        </div>
+      `;
+      
+      document.body.appendChild(modal);
+      
+      // Populate the emoji picker
+      const emojiPicker = document.getElementById('emoji-picker-create-tier-emoji');
+      if (emojiPicker) {
+        emojiPicker.innerHTML = createEmojiPickerContent('create-tier-emoji');
+      }
+      
+      document.getElementById('create-tier-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const data = {
+          name: formData.get('name'),
+          required_amount: parseFloat(formData.get('required_amount')),
+          badge_color: formData.get('badge_color'),
+          badge_icon: formData.get('badge_icon') || null,
+          tier_order: parseInt(formData.get('tier_order')),
+          description: formData.get('description') || null,
+          perks: formData.get('perks').split('\n').filter(p => p.trim()).length > 0 
+            ? formData.get('perks').split('\n').filter(p => p.trim()) 
+            : null
+        };
+        
+        try {
+          const csrfToken = await getCSRFToken();
+          const response = await fetch('/api/donations/admin/tiers', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-Token': csrfToken
+            },
+            body: JSON.stringify(data)
+          });
+          
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to create tier');
+          }
+          
+          modal.remove();
+          showMessage('Donation tier created successfully', 'success');
+          loadDonationTiers();
+        } catch (error) {
+          showMessage(error.message, 'error');
+        }
+      });
+    }
+    
+    
+    async function toggleDonationTierStatus(tierId, activate) {
+      const action = activate ? 'activate' : 'deactivate';
+      if (!confirm(`Are you sure you want to ${action} this tier?`)) return;
+      
+      try {
+        const csrfToken = await getCSRFToken();
+        const response = await fetch(`/api/donations/admin/tiers/${tierId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrfToken
+          },
+          body: JSON.stringify({ is_active: activate })
+        });
+        
+        if (!response.ok) throw new Error(`Failed to ${action} tier`);
+        
+        showMessage(`Tier ${action}d successfully`, 'success');
+        loadDonationTiers();
+      } catch (error) {
+        showMessage(error.message, 'error');
+      }
+    }
+    
+    async function deleteDonationTier(tierId) {
+      if (!confirm('Are you sure you want to delete this tier? This action cannot be undone.')) return;
+      
+      try {
+        const csrfToken = await getCSRFToken();
+        const response = await fetch(`/api/donations/admin/tiers/${tierId}`, {
+          method: 'DELETE',
+          headers: {
+            'X-CSRF-Token': csrfToken
+          }
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to delete tier');
+        }
+        
+        showMessage('Tier deleted successfully', 'success');
+        loadDonationTiers();
+      } catch (error) {
+        showMessage(error.message, 'error');
+      }
+    }
+    
+    async function recalculateAllDonationTiers() {
+      if (!confirm('This will recalculate donation tiers for all users based on their total donations. Continue?')) return;
+      
+      try {
+        const csrfToken = await getCSRFToken();
+        const response = await fetch('/api/donations/admin/recalculate-tiers', {
+          method: 'POST',
+          headers: {
+            'X-CSRF-Token': csrfToken
+          }
+        });
+        
+        if (!response.ok) throw new Error('Failed to recalculate tiers');
+        
+        const result = await response.json();
+        showMessage(`Successfully recalculated tiers for ${result.updated} users`, 'success');
+        loadDonationTiers();
+      } catch (error) {
+        showMessage('Failed to recalculate tiers', 'error');
+      }
+    }
+    
+    // Helper function to get CSRF token
+    async function getCSRFToken() {
+      try {
+        const response = await fetch('/api/csrf-token');
+        const data = await response.json();
+        return data.csrfToken;
+      } catch (error) {
+        console.error('Failed to get CSRF token:', error);
+        throw error;
+      }
+    }
+    
+    // Donation Tiers Management Functions
+    let loadedDonationTiers = [];
+    
+    async function loadDonationTiers() {
+      const section = document.getElementById('donation-tiers-section');
+      if (section.classList.contains('collapsed')) return;
+      
+      const loadingEl = document.getElementById('donation-tiers-loading');
+      const contentEl = document.getElementById('donation-tiers-content');
+      const tbody = document.getElementById('donation-tiers-tbody');
+      const statsEl = document.getElementById('tier-statistics');
+      
+      try {
+        loadingEl.style.display = 'block';
+        contentEl.style.display = 'none';
+        
+        // Load tiers
+        const [tiersResponse, statsResponse] = await Promise.all([
+          fetch('/api/donations/admin/tiers'),
+          fetch('/api/donations/admin/stats')
+        ]);
+        
+        if (!tiersResponse.ok || !statsResponse.ok) {
+          throw new Error('Failed to load donation data');
+        }
+        
+        const tiers = await tiersResponse.json();
+        const stats = await statsResponse.json();
+        
+        // Store tiers globally for edit function
+        loadedDonationTiers = tiers;
+        
+        // Display tier statistics
+        statsEl.innerHTML = stats.tierStats.map(tier => `
+          <div style="text-align: center; padding: 1rem; background: #2d2d2d; border-radius: 8px; border: 1px solid #444;">
+            <div style="font-size: 2rem; margin-bottom: 0.5rem;">
+              <span style="color: ${tier.badge_color}">${tier.badge_icon || '🏅'}</span>
+            </div>
+            <div style="color: ${tier.badge_color}; font-weight: bold; margin-bottom: 0.25rem;">${tier.tier_name}</div>
+            <div style="font-size: 1.5rem; font-weight: bold;">${tier.user_count}</div>
+            <div style="color: #999; font-size: 0.8rem;">users</div>
+          </div>
+        `).join('');
+        
+        // Display tiers table
+        tbody.innerHTML = tiers.map(tier => `
+          <tr>
+            <td style="text-align: center;">${tier.tier_order}</td>
+            <td style="text-align: center;">
+              <span style="font-size: 1.5rem; color: ${tier.badge_color}">
+                ${tier.badge_icon || '🏅'}
+              </span>
+            </td>
+            <td>
+              <span style="color: ${tier.badge_color}; font-weight: bold;">
+                ${tier.name}
+              </span>
+            </td>
+            <td>$${parseFloat(tier.required_amount).toFixed(2)}</td>
+            <td>${tier.description || '-'}</td>
+            <td style="text-align: center;">
+              ${stats.tierStats.find(s => s.tier_name === tier.name)?.user_count || 0}
+            </td>
+            <td style="text-align: center;">
+              <span class="status-badge ${tier.is_active ? 'status-active' : 'status-inactive'}">
+                ${tier.is_active ? 'Active' : 'Inactive'}
+              </span>
+            </td>
+            <td>
+              <button onclick="editDonationTier(${tier.id})" class="action-btn" title="Edit tier">
+                ✏️
+              </button>
+              <button onclick="toggleDonationTierStatus(${tier.id}, ${!tier.is_active})" 
+                      class="action-btn" title="${tier.is_active ? 'Deactivate' : 'Activate'} tier">
+                ${tier.is_active ? '🚫' : '✅'}
+              </button>
+              ${stats.tierStats.find(s => s.tier_name === tier.name)?.user_count === 0 ? `
+                <button onclick="deleteDonationTier(${tier.id})" class="action-btn" title="Delete tier" 
+                        style="color: #dc3545;">
+                  🗑️
+                </button>
+              ` : ''}
+            </td>
+          </tr>
+        `).join('');
+        
+        loadingEl.style.display = 'none';
+        contentEl.style.display = 'block';
+      } catch (error) {
+        console.error('Error loading donation tiers:', error);
+        loadingEl.innerHTML = '<p style="color: #dc3545;">Failed to load donation tiers</p>';
+      }
+    }
+    
+    /* DUPLICATE - COMMENTED OUT
+    async function showAddDonationTierModal() {
+      const modal = document.createElement('div');
+      modal.className = 'modal-overlay active';
+      modal.innerHTML = `
+        <div class="modal-content" style="max-width: 500px;">
+          <div class="modal-header">
+            <h3>Add Donation Tier</h3>
+            <button class="close-btn" onclick="this.closest('.modal-overlay').remove()">×</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label>Tier Name</label>
+              <input type="text" id="tier-name" placeholder="e.g., Bronze, Silver, Gold" 
+                     style="width: 100%; padding: 0.5rem; border: 1px solid #555; 
+                            border-radius: 4px; background: #2d2d2d; color: #e0e0e0;">
+            </div>
+            
+            <div class="form-group" style="margin-top: 1rem;">
+              <label>Required Amount ($)</label>
+              <input type="number" id="tier-amount" min="0" step="0.01" placeholder="10.00"
+                     style="width: 100%; padding: 0.5rem; border: 1px solid #555; 
+                            border-radius: 4px; background: #2d2d2d; color: #e0e0e0;">
+            </div>
+            
+            <div class="form-group" style="margin-top: 1rem;">
+              <label>Badge Color</label>
+              <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <input type="color" id="tier-color" value="#FFD700"
+                       style="width: 60px; height: 40px; border: 1px solid #555; 
+                              border-radius: 4px; background: #2d2d2d; cursor: pointer;">
+                <input type="text" id="tier-color-hex" value="#FFD700" placeholder="#FFD700"
+                       style="flex: 1; padding: 0.5rem; border: 1px solid #555; 
+                              border-radius: 4px; background: #2d2d2d; color: #e0e0e0;">
+              </div>
+            </div>
+            
+            <div class="form-group" style="margin-top: 1rem;">
+              <label>Badge Icon (Emoji)</label>
+              <input type="text" id="tier-icon" placeholder="🏅" maxlength="2"
+                     style="width: 100%; padding: 0.5rem; border: 1px solid #555; 
+                            border-radius: 4px; background: #2d2d2d; color: #e0e0e0; font-size: 1.5rem;">
+            </div>
+            
+            <div class="form-group" style="margin-top: 1rem;">
+              <label>Tier Order</label>
+              <input type="number" id="tier-order" min="1" value="1" 
+                     style="width: 100%; padding: 0.5rem; border: 1px solid #555; 
+                            border-radius: 4px; background: #2d2d2d; color: #e0e0e0;">
+              <small style="color: #999;">Lower numbers appear first (1 = lowest tier)</small>
+            </div>
+            
+            <div class="form-group" style="margin-top: 1rem;">
+              <label>Description</label>
+              <textarea id="tier-description" rows="3" placeholder="Description of this tier..."
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #555; 
+                               border-radius: 4px; background: #2d2d2d; color: #e0e0e0; resize: vertical;"></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="secondary-btn" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+            <button class="primary-btn" onclick="createDonationTier()">Create Tier</button>
+          </div>
+        </div>
+      `;
+      
+      document.body.appendChild(modal);
+      
+      // Sync color picker with hex input
+      const colorPicker = document.getElementById('tier-color');
+      const colorHex = document.getElementById('tier-color-hex');
+      
+      colorPicker.addEventListener('input', (e) => {
+        colorHex.value = e.target.value.toUpperCase();
+      });
+      
+      colorHex.addEventListener('input', (e) => {
+        if (/^#[0-9A-F]{6}$/i.test(e.target.value)) {
+          colorPicker.value = e.target.value;
+        }
+      });
+    } */
+    
+    /* DUPLICATE - COMMENTED OUT
+    async function createDonationTier() {
+      const name = document.getElementById('tier-name').value.trim();
+      const amount = parseFloat(document.getElementById('tier-amount').value);
+      const color = document.getElementById('tier-color-hex').value.trim();
+      const icon = document.getElementById('tier-icon').value.trim();
+      const order = parseInt(document.getElementById('tier-order').value);
+      const description = document.getElementById('tier-description').value.trim();
+      
+      if (!name || !amount || !color || !order) {
+        showMessage('Please fill in all required fields', 'error');
+        return;
+      }
+      
+      if (!/^#[0-9A-F]{6}$/i.test(color)) {
+        showMessage('Invalid color format. Use hex color (e.g., #FFD700)', 'error');
+        return;
+      }
+      
+      try {
+        const csrfToken = await getCSRFToken();
+        const response = await fetch('/api/donations/admin/tiers', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrfToken
+          },
+          body: JSON.stringify({
+            name,
+            required_amount: amount,
+            badge_color: color.toUpperCase(),
+            badge_icon: icon || null,
+            tier_order: order,
+            description: description || null,
+            perks: []
+          })
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to create tier');
+        }
+        
+        document.querySelector('.modal-overlay').remove();
+        showMessage('Donation tier created successfully', 'success');
+        loadDonationTiers();
+      } catch (error) {
+        showMessage(error.message, 'error');
+      }
+    } */
+    
+    async function editDonationTier(tierId) {
+      // Find the tier from our loaded data
+      const tier = loadedDonationTiers.find(t => t.id === tierId);
+      if (!tier) {
+        showMessage('Tier not found', 'error');
+        return;
+      }
+      
+      const modal = document.createElement('div');
+      modal.className = 'modal-overlay';
+      modal.innerHTML = `
+        <div class="modal-content" style="max-width: 500px;">
+          <h3 style="color: #FFD700; margin-bottom: 1.5rem;">Edit Donation Tier</h3>
+          <form id="edit-tier-form">
+            <div class="form-group">
+              <label>Tier Name</label>
+              <input type="text" name="name" required value="${escapeHtml(tier.name)}">
+            </div>
+            <div class="form-group">
+              <label>Required Amount ($)</label>
+              <input type="number" name="required_amount" min="0" step="0.01" required value="${tier.required_amount}">
+            </div>
+            <div class="form-group">
+              <label>Badge Color (Hex)</label>
+              <input type="color" name="badge_color" required value="${tier.badge_color}">
+            </div>
+            <div class="form-group">
+              <label>Badge Icon (Emoji)</label>
+              <div class="emoji-input-wrapper">
+                <input type="text" id="edit-tier-emoji-${tierId}" name="badge_icon" placeholder="e.g., 🥉" maxlength="2" value="${escapeHtml(tier.badge_icon || '')}">
+                <button type="button" class="emoji-picker-toggle" onclick="toggleEmojiPicker('edit-tier-emoji-${tierId}')">😊</button>
+                <div class="emoji-picker-dropdown" id="emoji-picker-edit-tier-emoji-${tierId}"></div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Tier Order</label>
+              <input type="number" name="tier_order" min="1" required value="${tier.tier_order}">
+            </div>
+            <div class="form-group">
+              <label>Description (Optional)</label>
+              <textarea name="description" rows="3" placeholder="Describe this tier...">${escapeHtml(tier.description || '')}</textarea>
+            </div>
+            <div class="form-group">
+              <label>Perks (Optional, one per line)</label>
+              <textarea name="perks" rows="4" placeholder="Special badge color\nAccess to exclusive features\nPriority support">${tier.perks && Array.isArray(tier.perks) ? escapeHtml(tier.perks.join('\n')) : ''}</textarea>
+            </div>
+            <div class="form-group">
+              <label>
+                <input type="checkbox" name="is_active" ${tier.is_active ? 'checked' : ''}>
+                Active
+              </label>
+            </div>
+            <div class="modal-actions" style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
+              <button type="button" onclick="this.closest('.modal-overlay').remove()" class="btn btn-secondary">Cancel</button>
+              <button type="submit" class="btn btn-primary">Update Tier</button>
+            </div>
+          </form>
+        </div>
+      `;
+      
+      document.body.appendChild(modal);
+      
+      // Populate the emoji picker
+      const emojiPicker = document.getElementById('emoji-picker-edit-tier-emoji-' + tierId);
+      if (emojiPicker) {
+        emojiPicker.innerHTML = createEmojiPickerContent('edit-tier-emoji-' + tierId);
+      }
+      
+      document.getElementById('edit-tier-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        
+        const data = {
+          name: formData.get('name'),
+          required_amount: parseFloat(formData.get('required_amount')),
+          badge_color: formData.get('badge_color'),
+          badge_icon: formData.get('badge_icon') || null,
+          tier_order: parseInt(formData.get('tier_order')),
+          description: formData.get('description') || null,
+          perks: formData.get('perks').split('\n').filter(p => p.trim()).length > 0 
+            ? formData.get('perks').split('\n').filter(p => p.trim()) 
+            : null,
+          is_active: formData.has('is_active')
+        };
+        
+        try {
+          const csrfToken = await getCSRFToken();
+          const response = await fetch(`/api/donations/admin/tiers/${tierId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-Token': csrfToken
+            },
+            body: JSON.stringify(data)
+          });
+          
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to update tier');
+          }
+          
+          modal.remove();
+          showMessage('Donation tier updated successfully', 'success');
+          loadDonationTiers();
+        } catch (error) {
+          showMessage(error.message, 'error');
+        }
+      });
+    }
+    
+    async function toggleDonationTierStatus(tierId, activate) {
+      if (!confirm(`Are you sure you want to ${activate ? 'activate' : 'deactivate'} this tier?`)) {
+        return;
+      }
+      
+      try {
+        const csrfToken = await getCSRFToken();
+        const response = await fetch(`/api/donations/admin/tiers/${tierId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrfToken
+          },
+          body: JSON.stringify({ is_active: activate })
+        });
+        
+        if (!response.ok) throw new Error('Failed to update tier status');
+        
+        showMessage(`Tier ${activate ? 'activated' : 'deactivated'} successfully`, 'success');
+        loadDonationTiers();
+      } catch (error) {
+        showMessage(error.message, 'error');
+      }
+    }
+    
+    async function deleteDonationTier(tierId) {
+      if (!confirm('Are you sure you want to delete this tier? This cannot be undone.')) {
+        return;
+      }
+      
+      try {
+        const csrfToken = await getCSRFToken();
+        const response = await fetch(`/api/donations/admin/tiers/${tierId}`, {
+          method: 'DELETE',
+          headers: {
+            'X-CSRF-Token': csrfToken
+          }
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to delete tier');
+        }
+        
+        showMessage('Tier deleted successfully', 'success');
+        loadDonationTiers();
+      } catch (error) {
+        showMessage(error.message, 'error');
+      }
+    }
+    
+    async function recalculateAllDonationTiers() {
+      if (!confirm('This will recalculate donation tiers for all users based on their total donations. Continue?')) {
+        return;
+      }
+      
+      try {
+        const csrfToken = await getCSRFToken();
+        const response = await fetch('/api/donations/admin/recalculate-tiers', {
+          method: 'POST',
+          headers: {
+            'X-CSRF-Token': csrfToken
+          }
+        });
+        
+        if (!response.ok) throw new Error('Failed to recalculate tiers');
+        
+        showMessage('All user donation tiers recalculated successfully', 'success');
+        loadDonationTiers();
+      } catch (error) {
+        showMessage(error.message, 'error');
+      }
+    }
+    
+    function showTestDonationModal() {
+      const modal = document.createElement('div');
+      modal.className = 'modal-overlay';
+      modal.innerHTML = `
+        <div class="modal-content" style="max-width: 400px;">
+          <h3 style="color: #ff6b6b; margin-bottom: 1.5rem;">🧪 Create Test Donation</h3>
+          <p style="color: #FFA500; margin-bottom: 1rem; font-size: 0.9rem;">
+            ⚠️ Development Mode Only - This creates a test donation for the current user
+          </p>
+          <form id="test-donation-form">
+            <div class="form-group">
+              <label>Amount ($)</label>
+              <input type="number" name="amount" min="0.01" step="0.01" value="10.00" required>
+            </div>
+            <div class="form-group">
+              <label>Message (Optional)</label>
+              <textarea name="message" rows="3" placeholder="Test donation message">Test donation for tier testing</textarea>
+            </div>
+            <div class="modal-actions">
+              <button type="submit" class="btn btn-primary" style="background: #ff6b6b;">Create Test Donation</button>
+              <button type="button" onclick="this.closest('.modal-overlay').remove()" class="btn btn-secondary">Cancel</button>
+            </div>
+          </form>
+        </div>
+      `;
+      
+      document.body.appendChild(modal);
+      
+      document.getElementById('test-donation-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        
+        try {
+          const csrfToken = await getCSRFToken();
+          const response = await fetch('/api/donations/test-donation', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-Token': csrfToken
+            },
+            body: JSON.stringify({
+              amount: parseFloat(formData.get('amount')),
+              message: formData.get('message') || 'Test donation'
+            })
+          });
+          
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to create test donation');
+          }
+          
+          const result = await response.json();
+          modal.remove();
+          showMessage(result.message, 'success');
+          
+          // Reload donation data
+          if (typeof loadUserDonations === 'function') {
+            loadUserDonations();
+          }
+          if (typeof loadDonationsManagement === 'function') {
+            loadDonationsManagement();
+          }
+        } catch (error) {
+          showMessage(error.message, 'error');
+        }
+      });
+    }
+    
+    async function resetMyDonationStats() {
+      try {
+        const csrfToken = await getCSRFToken();
+        const response = await fetch('/api/donations/admin/reset-user-donations', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrfToken
+          },
+          body: JSON.stringify({})
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to reset donation stats');
+        }
+        
+        const result = await response.json();
+        showMessage('Your donation stats have been fixed!', 'success');
+        
+        // Reload donation data
+        if (typeof loadUserDonations === 'function') {
+          loadUserDonations();
+        }
+      } catch (error) {
+        showMessage('Failed to reset donation stats: ' + error.message, 'error');
+      }
+    }
+    
+    // Make functions available globally
+    window.loadDonationTiers = loadDonationTiers;
+    window.showCreateDonationTierModal = showCreateDonationTierModal;
+    window.editDonationTier = editDonationTier;
+    window.toggleDonationTierStatus = toggleDonationTierStatus;
+    window.deleteDonationTier = deleteDonationTier;
+    window.recalculateAllDonationTiers = recalculateAllDonationTiers;
+    window.showTestDonationModal = showTestDonationModal;
+    window.resetMyDonationStats = resetMyDonationStats;
+    window.loadUserDonations = loadUserDonations;
+    
+    // Function to simulate Ko-fi webhook for testing
+    async function simulateKofiWebhook() {
+      const webhookData = {
+        verification_token: "b9ac8182-094b-46ce-b8df-ec623784ddac",
+        message_id: "test-" + Date.now(),
+        timestamp: new Date().toISOString(),
+        type: "Donation",
+        is_public: true,
+        from_name: currentUser.nickname || currentUser.name,
+        message: "Test webhook donation",
+        amount: "10.00",
+        url: "https://ko-fi.com/Home/CoffeeShop?txid=TEST",
+        email: currentUser.email,
+        currency: "USD",
+        is_subscription_payment: false,
+        is_first_subscription_payment: false,
+        kofi_transaction_id: "TEST_" + Date.now(),
+        shop_items: null,
+        tier_name: null,
+        shipping: null
+      };
+      
+      try {
+        const response = await fetch('/api/kofi-webhook', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body: 'data=' + encodeURIComponent(JSON.stringify(webhookData))
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          showMessage('Webhook simulated successfully! Check donations list.', 'success');
+          // Reload donations
+          if (typeof loadDonationsManagement === 'function') {
+            loadDonationsManagement();
+          }
+          if (typeof loadUserDonations === 'function') {
+            loadUserDonations();
+          }
+        } else {
+          const error = await response.text();
+          showMessage('Webhook simulation failed: ' + error, 'error');
+        }
+      } catch (error) {
+        showMessage('Failed to simulate webhook: ' + error.message, 'error');
+      }
+    }
+    window.simulateKofiWebhook = simulateKofiWebhook;
+    
+    // Donation management functions
+    async function showDonationDetails(donationId) {
+      try {
+        const response = await fetch(`/api/donations?limit=1000`);
+        if (!response.ok) throw new Error('Failed to fetch donations');
+        
+        const data = await response.json();
+        const donation = data.donations.find(d => d.id === donationId);
+        
+        if (!donation) {
+          showMessage('Donation not found', 'error');
+          return;
+        }
+        
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+          <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+              <h3>Donation Details</h3>
+              <button class="close-btn" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+            </div>
+            <div class="modal-body">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div>
+                  <label style="color: #999; font-size: 0.85rem;">Transaction ID</label>
+                  <div style="font-family: monospace; font-size: 0.9rem;">${escapeHtml(donation.kofi_transaction_id)}</div>
+                </div>
+                <div>
+                  <label style="color: #999; font-size: 0.85rem;">Type</label>
+                  <div>${donation.type}</div>
+                </div>
+                <div>
+                  <label style="color: #999; font-size: 0.85rem;">From</label>
+                  <div>${escapeHtml(donation.from_name)}</div>
+                </div>
+                <div>
+                  <label style="color: #999; font-size: 0.85rem;">Amount</label>
+                  <div style="color: #FFD700; font-size: 1.2rem; font-weight: bold;">$${parseFloat(donation.amount).toFixed(2)} ${donation.currency}</div>
+                </div>
+                <div>
+                  <label style="color: #999; font-size: 0.85rem;">Date</label>
+                  <div>${new Date(donation.timestamp).toLocaleString()}</div>
+                </div>
+                <div>
+                  <label style="color: #999; font-size: 0.85rem;">Email</label>
+                  <div>${donation.email || '<span style="color: #666;">Not provided</span>'}</div>
+                </div>
+                <div>
+                  <label style="color: #999; font-size: 0.85rem;">Public</label>
+                  <div>${donation.is_public ? '✅ Yes' : '❌ No'}</div>
+                </div>
+                <div>
+                  <label style="color: #999; font-size: 0.85rem;">Subscription</label>
+                  <div>${donation.is_subscription ? '✅ Yes' : '❌ No'}</div>
+                </div>
+              </div>
+              
+              ${donation.message ? `
+                <div style="margin-top: 1rem;">
+                  <label style="color: #999; font-size: 0.85rem;">Message</label>
+                  <div style="background: #2d2d2d; padding: 1rem; border-radius: 8px; margin-top: 0.5rem;">
+                    ${escapeHtml(donation.message)}
+                  </div>
+                </div>
+              ` : ''}
+              
+              <div style="margin-top: 1rem;">
+                <label style="color: #999; font-size: 0.85rem;">Matched User</label>
+                <div>
+                  ${donation.user_id ? `
+                    <a href="#" onclick="showUserDetail(${donation.user_id}); return false;" style="color: #4a7c59;">
+                      ${escapeHtml(donation.user_name || donation.user_nickname || 'User #' + donation.user_id)}
+                    </a>
+                    <span style="color: #666; font-size: 0.85rem;">(${donation.matched_by})</span>
+                  ` : '<span style="color: #dc3545;">Not matched</span>'}
+                </div>
+              </div>
+              
+              <div style="margin-top: 1.5rem; text-align: right;">
+                <button onclick="this.closest('.modal-overlay').remove()" class="btn btn-primary">Close</button>
+              </div>
+            </div>
+          </div>
+        `;
+        
+        document.body.appendChild(modal);
+      } catch (error) {
+        console.error('Error showing donation details:', error);
+        showMessage('Failed to load donation details', 'error');
+      }
+    }
+    
+    async function unmatchDonation(donationId) {
+      if (!confirm('Are you sure you want to unmatch this donation from its user?')) return;
+      
+      try {
+        // First, get the current user_id of the donation
+        const donationsResponse = await fetch(`/api/donations?limit=1000`);
+        const donationsData = await donationsResponse.json();
+        const donation = donationsData.donations.find(d => d.id === donationId);
+        const originalUserId = donation?.user_id;
+        
+        const csrfToken = await getCSRFToken();
+        const response = await fetch(`/api/donations/${donationId}/match`, {
+          method: 'PATCH',
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrfToken
+          },
+          body: JSON.stringify({ user_id: null })
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to unmatch donation');
+        }
+        
+        showMessage('Donation unmatched successfully', 'success');
+        refreshDonations();
+        
+        // Refresh stats for the affected user
+        if (originalUserId) {
+          await refreshDonationStatsForUser(originalUserId);
+        }
+        
+        // Mark that donation data needs refresh
+        donationDataNeedsRefresh = true;
+        
+        // If currently on Profile tab, refresh after a short delay
+        const activeTab = document.querySelector('.tab-content.active');
+        if (activeTab && activeTab.id === 'profile-tab') {
+          setTimeout(() => {
+            loadUserDonations();
+            donationDataNeedsRefresh = false;
+          }, 300);
+        }
+      } catch (error) {
+        console.error('Error unmatching donation:', error);
+        showMessage('Failed to unmatch donation: ' + error.message, 'error');
+      }
+    }
+    
+    async function deleteDonation(donationId) {
+      if (!confirm('Are you sure you want to delete this donation? This action cannot be undone.')) return;
+      
+      try {
+        // First, get the user_id of the donation before deleting
+        const donationsResponse = await fetch(`/api/donations?limit=1000`);
+        const donationsData = await donationsResponse.json();
+        const donation = donationsData.donations.find(d => d.id === donationId);
+        const affectedUserId = donation?.user_id;
+        
+        const csrfToken = await getCSRFToken();
+        const response = await fetch(`/api/donations/${donationId}`, {
+          method: 'DELETE',
+          headers: {
+            'X-CSRF-Token': csrfToken
+          }
+        });
+        
+        if (!response.ok) throw new Error('Failed to delete donation');
+        
+        showMessage('Donation deleted successfully', 'success');
+        refreshDonations();
+        
+        // Refresh stats for the affected user
+        if (affectedUserId) {
+          await refreshDonationStatsForUser(affectedUserId);
+        }
+        
+        // Mark that donation data needs refresh
+        donationDataNeedsRefresh = true;
+        
+        // If currently on Profile tab, refresh after a short delay
+        const activeTab = document.querySelector('.tab-content.active');
+        if (activeTab && activeTab.id === 'profile-tab') {
+          setTimeout(() => {
+            loadUserDonations();
+            donationDataNeedsRefresh = false;
+          }, 300);
+        }
+      } catch (error) {
+        console.error('Error deleting donation:', error);
+        showMessage('Failed to delete donation', 'error');
+      }
+    }
+    
+    window.showDonationDetails = showDonationDetails;
+    window.unmatchDonation = unmatchDonation;
+    window.deleteDonation = deleteDonation;
+    
+    // Load donation tier progress for user profile
+    
+    // Donation Management Functions
+    let currentDonationsPage = 1;
+    let donationsFilter = 'all';
+    let donationsSearch = '';
+    let donationDataNeedsRefresh = false;
+    
+    // Helper function to refresh donation stats after changes
+    async function refreshDonationStatsForUser(userId) {
+      try {
+        const csrfToken = await getCSRFToken();
+        await fetch('/api/donations/admin/reset-user-donations', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrfToken
+          },
+          body: JSON.stringify({ userId: userId || currentUser.id })
+        });
+      } catch (error) {
+        console.error('Failed to refresh donation stats:', error);
+      }
+    }
+    
+    function updateTierProgress(progress) {
+      // Update current amount
+      document.getElementById('progress-current-amount').textContent = progress.totalDonated.toFixed(0);
+      
+      // Update current tier badge
+      if (progress.currentTier) {
+        const badgeEl = document.getElementById('current-tier-badge');
+        badgeEl.style.display = 'flex';
+        badgeEl.style.borderColor = progress.currentTier.color;
+        
+        const iconEl = document.getElementById('current-tier-icon');
+        iconEl.textContent = progress.currentTier.icon || '🏅';
+        iconEl.style.color = progress.currentTier.color;
+        
+        const nameEl = document.getElementById('current-tier-name');
+        nameEl.textContent = progress.currentTier.name;
+        nameEl.style.color = progress.currentTier.color;
+      } else {
+        document.getElementById('current-tier-badge').style.display = 'none';
+      }
+      
+      // Update progress bar and next tier info
+      if (progress.nextTier) {
+        document.getElementById('next-tier-name').textContent = progress.nextTier.name;
+        document.getElementById('next-tier-amount').textContent = progress.nextTier.requiredAmount.toFixed(0);
+        document.getElementById('user-tier-progress-bar').style.width = progress.progressPercent + '%';
+        document.getElementById('progress-percentage').textContent = Math.round(progress.progressPercent);
+        document.getElementById('tier-complete-message').style.display = 'none';
+        
+        // Update next tier info color
+        document.getElementById('next-tier-info').style.color = progress.nextTier.color;
+        
+        // For users with 0 donations, show special message
+        if (progress.totalDonated === 0) {
+          document.getElementById('progress-current-amount').textContent = '0';
+          document.getElementById('next-tier-amount').textContent = progress.nextTier.requiredAmount.toFixed(0);
+        }
+      } else {
+        // User has reached the highest tier
+        document.getElementById('next-tier-name').textContent = 'Max Tier';
+        document.getElementById('next-tier-amount').textContent = progress.totalDonated.toFixed(0);
+        document.getElementById('user-tier-progress-bar').style.width = '100%';
+        document.getElementById('progress-percentage').textContent = '100';
+        document.getElementById('tier-complete-message').style.display = 'block';
+        document.getElementById('next-tier-perks').style.display = 'none';
+      }
+      
+      // Add hover effect to show perks tooltip
+      const nextTierInfo = document.getElementById('next-tier-info');
+      const perksTooltip = document.getElementById('next-tier-perks');
+      
+      nextTierInfo.onmouseenter = async (e) => {
+        if (progress.nextTier) {
+          // Load perks only when hovering
+          const hasPerks = await loadNextTierPerks(progress.nextTier.id);
+          if (hasPerks) {
+            // Show tooltip first to get its dimensions
+            perksTooltip.style.display = 'block';
+            
+            // Position tooltip near the element
+            const rect = nextTierInfo.getBoundingClientRect();
+            const tooltipHeight = perksTooltip.offsetHeight;
+            const tooltipWidth = perksTooltip.offsetWidth;
+            
+            // Calculate position relative to viewport
+            let top = rect.bottom + 5; // Default: below the element
+            let left = rect.left;
+            
+            // Check if tooltip would go off bottom of screen
+            if (top + tooltipHeight > window.innerHeight) {
+              // Show above instead
+              top = rect.top - tooltipHeight - 5;
+            }
+            
+            // Check if tooltip would go off right side of screen
+            if (left + tooltipWidth > window.innerWidth) {
+              left = window.innerWidth - tooltipWidth - 10;
+            }
+            
+            // Ensure tooltip doesn't go off left side
+            if (left < 10) {
+              left = 10;
+            }
+            
+            // Use fixed positioning relative to viewport
+            perksTooltip.style.position = 'fixed';
+            perksTooltip.style.top = top + 'px';
+            perksTooltip.style.left = left + 'px';
+          }
+        }
+      };
+      
+      nextTierInfo.onmouseleave = () => {
+        perksTooltip.style.display = 'none';
+      };
+    }
+    
+    async function loadNextTierPerks(tierId) {
+      try {
+        const response = await fetch('/api/donations/tiers');
+        if (!response.ok) return false;
+        
+        const tiers = await response.json();
+        const nextTier = tiers.find(t => t.id === tierId);
+        
+        if (nextTier && nextTier.perks && nextTier.perks.length > 0) {
+          const perksList = document.getElementById('perks-list');
+          perksList.innerHTML = nextTier.perks.map(perk => `<li>${escapeHtml(perk)}</li>`).join('');
+          return true;
+        }
+        return false;
+      } catch (error) {
+        console.error('Error loading tier perks:', error);
+        return false;
+      }
+    }
+    
+    async function loadUserDonations() {
+      const loadingEl = document.getElementById('user-donations-loading');
+      const contentEl = document.getElementById('user-donations-content');
+      const listEl = document.getElementById('user-donations-list');
+      const noDonationsEl = document.getElementById('no-user-donations');
+      
+      try {
+        loadingEl.style.display = 'block';
+        contentEl.style.display = 'none';
+        
+        // Load both donations and tier progress in parallel (with cache busting)
+        const timestamp = Date.now();
+        const [donationsResponse, progressResponse] = await Promise.all([
+          fetch(`/api/donations?user_id=${currentUser.id}&limit=100&_t=${timestamp}`),
+          fetch(`/api/donations/user-progress?_t=${timestamp}`)
+        ]);
+        
+        if (!donationsResponse.ok) throw new Error('Failed to load donations');
+        if (!progressResponse.ok) throw new Error('Failed to load progress');
+        
+        const data = await donationsResponse.json();
+        const donations = data.donations || [];
+        const progress = await progressResponse.json();
+        
+        console.log('Loaded user progress:', progress);
+        
+        loadingEl.style.display = 'none';
+        contentEl.style.display = 'block';
+        
+        // Update tier progress
+        updateTierProgress(progress);
+        
+        if (donations.length === 0) {
+          listEl.style.display = 'none';
+          noDonationsEl.style.display = 'block';
+          document.getElementById('donation-nickname-hint').textContent = currentUser.nickname || currentUser.name;
+          document.getElementById('user-total-donated').textContent = '0.00';
+          document.getElementById('user-donation-count').textContent = '0';
+          document.getElementById('user-donation-plural').textContent = 's';
+        } else {
+          listEl.style.display = 'block';
+          noDonationsEl.style.display = 'none';
+          
+          // Calculate total
+          const total = donations.reduce((sum, d) => sum + parseFloat(d.amount), 0);
+          document.getElementById('user-total-donated').textContent = total.toFixed(2);
+          document.getElementById('user-donation-count').textContent = donations.length;
+          document.getElementById('user-donation-plural').textContent = donations.length === 1 ? '' : 's';
+          
+          // Build table
+          const tableHTML = `
+            <table class="admin-table" style="width: 100%;">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Amount</th>
+                  <th>Type</th>
+                  <th>Message</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${donations.map(d => `
+                  <tr>
+                    <td>${new Date(d.timestamp).toLocaleDateString()}</td>
+                    <td style="color: #FFD700; font-weight: bold;">$${parseFloat(d.amount).toFixed(2)}</td>
+                    <td>${d.type}</td>
+                    <td>${d.message ? escapeHtml(d.message) : '<span style="color: #666;">-</span>'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `;
+          
+          document.getElementById('user-donations-table-container').innerHTML = tableHTML;
+        }
+      } catch (error) {
+        console.error('Error loading user donations:', error);
+        loadingEl.style.display = 'none';
+        contentEl.style.display = 'block';
+        contentEl.innerHTML = '<p style="color: #dc3545;">Error loading donations. Please try again later.</p>';
+      }
+    }
+    
+    async function loadDonationsManagement() {
+      const section = document.getElementById('donations-management-section');
+      // Only skip if already loaded and visible
+      if (section.dataset.loaded === 'true' && !section.classList.contains('collapsed')) {
+        return;
+      }
+      
+      const loadingEl = document.getElementById('donations-management-loading');
+      const contentEl = document.getElementById('donations-management-content');
+      
+      try {
+        loadingEl.style.display = 'block';
+        contentEl.style.display = 'none';
+        
+        // Load statistics
+        const statsResponse = await fetch('/api/donations/stats');
+        if (statsResponse.ok) {
+          const { stats } = await statsResponse.json();
+          document.getElementById('total-donation-amount').textContent = parseFloat(stats.total_amount).toFixed(2);
+          document.getElementById('total-donation-count').textContent = stats.total_donations;
+          document.getElementById('unique-donors-count').textContent = stats.unique_donors;
+          document.getElementById('unmatched-donations-count').textContent = stats.unmatched_donations;
+        }
+        
+        // Load donations
+        await loadDonationsList();
+        
+        loadingEl.style.display = 'none';
+        contentEl.style.display = 'block';
+        section.dataset.loaded = 'true';
+      } catch (error) {
+        console.error('Error loading donations management:', error);
+        loadingEl.style.display = 'none';
+        contentEl.style.display = 'block';
+        contentEl.innerHTML = '<p style="color: #dc3545;">Error loading donations data. Please try again later.</p>';
+      }
+    }
+    
+    async function loadDonationsList() {
+      try {
+        let url = `/api/donations?page=${currentDonationsPage}&limit=20`;
+        if (donationsFilter === 'unmatched') {
+          url += '&unmatched=true';
+        }
+        
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Failed to load donations');
+        
+        const data = await response.json();
+        const donations = data.donations || [];
+        const pagination = data.pagination;
+        
+        // Filter by search if needed
+        let filteredDonations = donations;
+        if (donationsSearch) {
+          const searchLower = donationsSearch.toLowerCase();
+          filteredDonations = donations.filter(d => 
+            d.from_name.toLowerCase().includes(searchLower)
+          );
+        }
+        
+        // Update table
+        const tbody = document.getElementById('donations-tbody');
+        if (filteredDonations.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #999;">No donations found</td></tr>';
+        } else {
+          tbody.innerHTML = filteredDonations.map(d => `
+            <tr>
+              <td>${new Date(d.timestamp).toLocaleDateString()}</td>
+              <td>${escapeHtml(d.from_name)}</td>
+              <td style="color: #FFD700; font-weight: bold;">$${parseFloat(d.amount).toFixed(2)}</td>
+              <td>${d.type}</td>
+              <td>${d.message ? `<span title="${escapeHtml(d.message)}">${escapeHtml(d.message.substring(0, 50))}${d.message.length > 50 ? '...' : ''}</span>` : '<span style="color: #666;">-</span>'}</td>
+              <td>
+                ${d.user_id ? `
+                  <a href="#" onclick="showUserDetail(${d.user_id}); return false;" style="color: #4a7c59;">
+                    ${escapeHtml(d.user_name || d.user_nickname || 'User #' + d.user_id)}
+                  </a>
+                  <span style="color: #666; font-size: 0.85rem;">(${d.matched_by})</span>
+                ` : `
+                  <span style="color: #dc3545;">Unmatched</span>
+                  <button class="small-btn" style="margin-left: 0.5rem; padding: 0.25rem 0.5rem; font-size: 0.85rem;" 
+                          onclick="showDonationMatchModal(${d.id})">
+                    Assign
+                  </button>
+                `}
+              </td>
+              <td>
+                <div style="display: flex; gap: 0.25rem; justify-content: center;">
+                  ${d.user_id ? `
+                    <button class="action-btn" onclick="showDonationDetails(${d.id})" title="View details">
+                      👁️
+                    </button>
+                    <button class="action-btn" onclick="unmatchDonation(${d.id})" title="Unmatch from user">
+                      🔗
+                    </button>
+                  ` : ''}
+                  <button class="action-btn" onclick="deleteDonation(${d.id})" title="Delete donation" style="color: #dc3545;">
+                    🗑️
+                  </button>
+                </div>
+              </td>
+            </tr>
+          `).join('');
+        }
+        
+        // Update pagination
+        const paginationEl = document.getElementById('donations-pagination');
+        if (pagination && pagination.pages > 1) {
+          paginationEl.style.display = 'flex';
+          document.getElementById('donations-page-info').textContent = `Page ${pagination.page} of ${pagination.pages}`;
+          document.getElementById('donations-prev').disabled = pagination.page <= 1;
+          document.getElementById('donations-next').disabled = pagination.page >= pagination.pages;
+          
+          document.getElementById('donations-prev').onclick = () => {
+            if (currentDonationsPage > 1) {
+              currentDonationsPage--;
+              loadDonationsList();
+            }
+          };
+          
+          document.getElementById('donations-next').onclick = () => {
+            if (currentDonationsPage < pagination.pages) {
+              currentDonationsPage++;
+              loadDonationsList();
+            }
+          };
+        } else {
+          paginationEl.style.display = 'none';
+        }
+      } catch (error) {
+        console.error('Error loading donations list:', error);
+        document.getElementById('donations-tbody').innerHTML = '<tr><td colspan="7" style="text-align: center; color: #dc3545;">Error loading donations</td></tr>';
+      }
+    }
+    
+    function refreshDonations() {
+      currentDonationsPage = 1;
+      loadDonationsList();
+      // Also refresh stats
+      loadDonationsManagement();
+    }
+    
+    // Event listeners for filters
+    document.getElementById('donation-search').addEventListener('input', (e) => {
+      donationsSearch = e.target.value;
+      loadDonationsList();
+    });
+    
+    document.getElementById('donation-filter').addEventListener('change', (e) => {
+      donationsFilter = e.target.value;
+      currentDonationsPage = 1;
+      loadDonationsList();
+    });
+    
+    // Donation matching functions
+    async function showDonationMatchModal(donationId) {
+      // First fetch the full donation details
+      try {
+        const response = await fetch(`/api/donations?limit=1000`);
+        if (!response.ok) throw new Error('Failed to fetch donations');
+        
+        const data = await response.json();
+        const donation = data.donations.find(d => d.id === donationId);
+        
+        if (!donation) {
+          showMessage('Donation not found', 'error');
+          return;
+        }
+        
+        // Update the modal to show more information
+        const modalContent = document.querySelector('#donation-match-modal .modal-body');
+        const donationDetailsHtml = `
+          <div style="background: #2d2d2d; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem;">
+            <h4 style="color: #FFD700; margin-top: 0;">Donation Details</h4>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+              <div>
+                <p style="margin: 0.5rem 0;"><strong>Donor Name:</strong> <span id="match-donor-name">${escapeHtml(donation.from_name)}</span></p>
+                <p style="margin: 0.5rem 0;"><strong>Amount:</strong> <span id="match-donation-amount" style="color: #FFD700;">$${parseFloat(donation.amount).toFixed(2)}</span></p>
+                <p style="margin: 0.5rem 0;"><strong>Currency:</strong> ${donation.currency}</p>
+                <p style="margin: 0.5rem 0;"><strong>Date:</strong> <span id="match-donation-date">${new Date(donation.timestamp).toLocaleDateString()}</span></p>
+              </div>
+              <div>
+                ${donation.email ? `<p style="margin: 0.5rem 0;"><strong>Email:</strong> ${escapeHtml(donation.email)}</p>` : ''}
+                <p style="margin: 0.5rem 0;"><strong>Type:</strong> ${donation.type}</p>
+                <p style="margin: 0.5rem 0;"><strong>Public:</strong> ${donation.is_public ? 'Yes' : 'No'}</p>
+                ${donation.is_subscription ? `<p style="margin: 0.5rem 0;"><strong>Subscription:</strong> Yes</p>` : ''}
+              </div>
+            </div>
+            ${donation.message ? `
+              <div style="margin-top: 1rem;">
+                <p style="margin: 0.5rem 0 0.25rem 0;"><strong>Message:</strong></p>
+                <div style="background: #1a1a1a; padding: 0.75rem; border-radius: 4px;">
+                  ${escapeHtml(donation.message)}
+                </div>
+              </div>
+            ` : ''}
+            ${donation.kofi_transaction_id ? `
+              <p style="margin: 0.5rem 0; font-size: 0.85rem; color: #999;">
+                <strong>Transaction ID:</strong> <code>${escapeHtml(donation.kofi_transaction_id)}</code>
+              </p>
+            ` : ''}
+          </div>
+          
+          <div>
+            <label style="display: block; color: #e0e0e0; margin-bottom: 0.5rem;">Search for User to Match</label>
+            <input type="text" id="match-user-search" placeholder="Search by name, nickname, or email..." 
+                   style="width: 100%; padding: 0.5rem; border: 1px solid #555; border-radius: 4px; 
+                          background: #2d2d2d; color: #e0e0e0; margin-bottom: 1rem;"
+                   onkeyup="searchUsersForMatch(this.value)">
+            
+            <div id="match-user-results" style="max-height: 300px; overflow-y: auto;">
+              <!-- User search results will appear here -->
+            </div>
+          </div>
+          
+          <input type="hidden" id="match-donation-id" value="${donationId}">
+          <input type="hidden" id="match-selected-user-id">
+          
+          <div style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1.5rem;">
+            <button class="btn secondary-btn" onclick="closeDonationMatchModal()">Cancel</button>
+            <button class="btn" onclick="confirmDonationMatch()" id="confirm-match-btn" disabled>Match to User</button>
+          </div>
+        `;
+        
+        modalContent.innerHTML = donationDetailsHtml;
+        
+        // Show the modal
+        document.getElementById('donation-match-modal').style.display = 'block';
+        
+        // Pre-populate search with donor name or email to help find matches
+        const searchInput = document.getElementById('match-user-search');
+        if (donation.email) {
+          searchInput.value = donation.email;
+          searchUsersForMatch(donation.email);
+        } else {
+          searchInput.value = donation.from_name;
+          searchUsersForMatch(donation.from_name);
+        }
+        
+      } catch (error) {
+        console.error('Error loading donation for matching:', error);
+        showMessage('Failed to load donation details', 'error');
+      }
+    }
+    
+    function closeDonationMatchModal() {
+      document.getElementById('donation-match-modal').style.display = 'none';
+    }
+    
+    async function searchUsersForMatch(query) {
+      if (query.length < 2) {
+        document.getElementById('match-user-results').innerHTML = '';
+        return;
+      }
+      
+      try {
+        const response = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`);
+        if (!response.ok) throw new Error('Search failed');
+        
+        const users = await response.json();
+        const resultsEl = document.getElementById('match-user-results');
+        
+        if (users.length === 0) {
+          resultsEl.innerHTML = '<p style="text-align: center; color: #999; padding: 1rem;">No users found</p>';
+        } else {
+          resultsEl.innerHTML = users.map(user => `
+            <div class="user-match-option" style="padding: 0.75rem; border: 1px solid #444; border-radius: 4px; margin-bottom: 0.5rem; cursor: pointer; transition: all 0.2s;"
+                 onmouseover="this.style.background='#3a3a3a'" 
+                 onmouseout="this.style.background='transparent'"
+                 onclick="selectUserForMatch(${user.id}, '${escapeHtml(user.name)}')">
+              <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <img src="${user.picture || ''}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: #3a3a3a;" onerror="this.style.display='none'">
+                <div>
+                  <div style="font-weight: bold; color: #e0e0e0;">${escapeHtml(user.name)}</div>
+                  ${user.nickname ? `<div style="color: #999; font-size: 0.9rem;">@${escapeHtml(user.nickname)}</div>` : ''}
+                  <div style="color: #666; font-size: 0.85rem;">${escapeHtml(user.email)}</div>
+                </div>
+              </div>
+            </div>
+          `).join('');
+        }
+      } catch (error) {
+        console.error('Error searching users:', error);
+        document.getElementById('match-user-results').innerHTML = '<p style="text-align: center; color: #dc3545;">Error searching users</p>';
+      }
+    }
+    
+    function selectUserForMatch(userId, userName) {
+      document.getElementById('match-selected-user-id').value = userId;
+      document.getElementById('confirm-match-btn').disabled = false;
+      document.getElementById('confirm-match-btn').textContent = `Match to ${userName}`;
+      
+      // Highlight selected user
+      const options = document.querySelectorAll('.user-match-option');
+      options.forEach(opt => opt.style.border = '1px solid #444');
+      event.currentTarget.style.border = '2px solid #4a7c59';
+    }
+    
+    async function confirmDonationMatch() {
+      const donationId = document.getElementById('match-donation-id').value;
+      const userId = document.getElementById('match-selected-user-id').value;
+      
+      if (!donationId || !userId) return;
+      
+      try {
+        const csrfToken = await getCSRFToken();
+        const response = await fetch(`/api/donations/${donationId}/match`, {
+          method: 'PATCH',
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrfToken 
+          },
+          body: JSON.stringify({ user_id: parseInt(userId) })
+        });
+        
+        if (!response.ok) throw new Error('Failed to match donation');
+        
+        showMessage('Donation successfully matched to user', 'success');
+        closeDonationMatchModal();
+        refreshDonations();
+        
+        // Refresh stats for the newly matched user
+        await refreshDonationStatsForUser(parseInt(userId));
+        
+        // Mark that donation data needs refresh
+        donationDataNeedsRefresh = true;
+        
+        // If currently on Profile tab, refresh after a short delay
+        const activeTab = document.querySelector('.tab-content.active');
+        if (activeTab && activeTab.id === 'profile-tab') {
+          setTimeout(() => {
+            loadUserDonations();
+            donationDataNeedsRefresh = false;
+          }, 300);
+        }
+      } catch (error) {
+        console.error('Error matching donation:', error);
+        showMessage('Error matching donation. Please try again.', 'error');
+      }
+    }
+    
+    // Update admin section toggle to load donations when opened
+    const originalToggleAdminSection = window.toggleAdminSection;
+    window.toggleAdminSection = function(sectionId) {
+      originalToggleAdminSection(sectionId);
+      
+      if (sectionId === 'donations-management-section') {
+        const section = document.getElementById(sectionId);
+        if (!section.classList.contains('collapsed')) {
+          loadDonationsManagement();
+        }
+      }
+    };
+    
+    // Helper function to escape HTML
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+    
+    // Show user details in a modal
+    function showUserDetail(userId) {
+      // Always fetch fresh data to ensure we have the latest donation info
+      fetch(`/api/users/${userId}`)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Failed to fetch user');
+          }
+          return response.json();
+        })
+        .then(userData => {
+          displayUserDetailModal(userData);
+        })
+        .catch(error => {
+          console.error('Error loading user details:', error);
+          showMessage('Failed to load user details', 'error');
+        });
+    }
+    
+    function displayUserDetailModal(user) {
+      const modal = document.createElement('div');
+      modal.className = 'modal-overlay';
+      modal.innerHTML = `
+        <div class="modal-content" style="max-width: 600px;">
+          <div class="modal-header">
+            <h3>User Details</h3>
+            <button class="close-btn" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+              ${user.picture ? `<img src="${user.picture}" style="width: 60px; height: 60px; border-radius: 50%; object-fit: cover;">` : ''}
+              <div>
+                <h4 style="margin: 0; color: #FFD700;">${escapeHtml(user.name)}</h4>
+                ${user.nickname ? `<div style="color: #999;">@${escapeHtml(user.nickname)}</div>` : ''}
+                <div style="color: #666; font-size: 0.9rem;">${escapeHtml(user.email)}</div>
+              </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;">
+              <div style="background: #2d2d2d; padding: 1rem; border-radius: 8px;">
+                <div style="color: #999; font-size: 0.85rem;">Total Donated</div>
+                <div style="color: #FFD700; font-size: 1.5rem; font-weight: bold;">
+                  $${parseFloat(user.total_donated || 0).toFixed(2)}
+                </div>
+              </div>
+              
+              <div style="background: #2d2d2d; padding: 1rem; border-radius: 8px;">
+                <div style="color: #999; font-size: 0.85rem;">Current Tier</div>
+                <div style="font-size: 1.2rem;">
+                  ${user.current_donation_tier_id ? `<span style="color: ${user.tier_color || '#FFD700'}">${user.tier_icon || '🏅'} ${user.tier_name || 'Supporter'}</span>` : '<span style="color: #666;">None</span>'}
+                </div>
+              </div>
+              
+              <div style="background: #2d2d2d; padding: 1rem; border-radius: 8px;">
+                <div style="color: #999; font-size: 0.85rem;">Account Created</div>
+                <div>${new Date(user.created_at).toLocaleDateString()}</div>
+              </div>
+              
+              <div style="background: #2d2d2d; padding: 1rem; border-radius: 8px;">
+                <div style="color: #999; font-size: 0.85rem;">Last Donation</div>
+                <div>${user.last_donation_date ? new Date(user.last_donation_date).toLocaleDateString() : '<span style="color: #666;">Never</span>'}</div>
+              </div>
+              
+              <div style="background: #2d2d2d; padding: 1rem; border-radius: 8px;">
+                <div style="color: #999; font-size: 0.85rem;">User ID</div>
+                <div>#${user.id}</div>
+              </div>
+              
+              <div style="background: #2d2d2d; padding: 1rem; border-radius: 8px;">
+                <div style="color: #999; font-size: 0.85rem;">Status</div>
+                <div>${user.is_admin ? '<span style="color: #ff6b6b;">Admin</span>' : '<span style="color: #4ade80;">User</span>'}</div>
+              </div>
+            </div>
+            
+            <div style="margin-top: 1.5rem; display: flex; gap: 1rem; justify-content: flex-end;">
+              <button onclick="this.closest('.modal-overlay').remove()" class="btn btn-primary">Close</button>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      document.body.appendChild(modal);
+    }
+    
+    window.showUserDetail = showUserDetail;
+    
+    // Navigate to user management tab with specific user
+    function viewFullUserProfile(userId) {
+      // Close the modal first
+      const modal = document.querySelector('.modal-overlay');
+      if (modal) modal.remove();
+      
+      // Switch to admin tab
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+      });
+      
+      const adminTab = document.querySelector('.tab-btn[onclick*="admin"]');
+      const adminContent = document.getElementById('admin-tab');
+      
+      if (adminTab && adminContent) {
+        adminTab.classList.add('active');
+        adminContent.classList.add('active');
+        
+        // Expand the user management section
+        const userSection = document.getElementById('user-management-section');
+        if (userSection && userSection.classList.contains('collapsed')) {
+          toggleAdminSection('user-management-section');
+        }
+        
+        // Load users if not already loaded
+        if (!allUsers || allUsers.length === 0) {
+          loadUsers();
+        }
+        
+        // Wait a bit for users to load, then find and highlight the user
+        setTimeout(() => {
+          // Find the user in the list
+          const targetUser = allUsers.find(u => u.id === userId);
+          if (targetUser) {
+            const searchInput = document.getElementById('user-search');
+            if (searchInput) {
+              // Search by the user's name
+              searchInput.value = targetUser.name;
+              searchUsers();
+            }
+          }
+          
+          // After search/display completes, highlight the user
+          setTimeout(() => {
+            const userRows = document.querySelectorAll('#users-tbody tr');
+            userRows.forEach((row, index) => {
+              // Look for the user ID in the row's data
+              const avatarImg = row.querySelector('img');
+              if (avatarImg && avatarImg.dataset.userId == userId) {
+                row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                row.style.backgroundColor = '#3a4a3a';
+                row.style.transition = 'background-color 0.3s';
+                setTimeout(() => {
+                  row.style.backgroundColor = '';
+                }, 3000);
+              }
+            });
+          }, 500);
+        }, 500);
+      }
+    }
+    window.viewFullUserProfile = viewFullUserProfile;
   </script>
 
   <!-- Create Proposal Modal -->
@@ -12127,6 +15102,48 @@
       </div>
       <div class="modal-body" id="admin-proposal-content">
         <!-- Content loaded dynamically -->
+      </div>
+    </div>
+  </div>
+  
+  <!-- Donation Match Modal -->
+  <div id="donation-match-modal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2>Match Donation to User</h2>
+        <button class="close-btn" onclick="closeDonationMatchModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="background: #2d2d2d; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem;">
+          <h4 style="color: #FFD700; margin-top: 0;">Donation Details</h4>
+          <p><strong>Donor Name:</strong> <span id="match-donor-name"></span></p>
+          <p><strong>Amount:</strong> <span id="match-donation-amount" style="color: #FFD700;"></span></p>
+          <p><strong>Date:</strong> <span id="match-donation-date"></span></p>
+          <div id="match-donation-message-container" style="display: none;">
+            <p><strong>Message:</strong></p>
+            <div id="match-donation-message" style="background: #1a1a1a; padding: 0.75rem; border-radius: 4px; margin-top: 0.5rem;"></div>
+          </div>
+        </div>
+        
+        <div>
+          <label style="display: block; color: #e0e0e0; margin-bottom: 0.5rem;">Search for User</label>
+          <input type="text" id="match-user-search" placeholder="Search by name, nickname, or email..." 
+                 style="width: 100%; padding: 0.5rem; border: 1px solid #555; border-radius: 4px; 
+                        background: #2d2d2d; color: #e0e0e0; margin-bottom: 1rem;"
+                 onkeyup="searchUsersForMatch(this.value)">
+          
+          <div id="match-user-results" style="max-height: 300px; overflow-y: auto;">
+            <!-- User search results will appear here -->
+          </div>
+        </div>
+        
+        <input type="hidden" id="match-donation-id">
+        <input type="hidden" id="match-selected-user-id">
+        
+        <div style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1.5rem;">
+          <button class="btn secondary-btn" onclick="closeDonationMatchModal()">Cancel</button>
+          <button class="btn" onclick="confirmDonationMatch()" id="confirm-match-btn" disabled>Match to User</button>
+        </div>
       </div>
     </div>
   </div>

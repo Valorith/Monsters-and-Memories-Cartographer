@@ -185,5 +185,4 @@ export default function itemsRouter(app, validateCSRF) {
     }
   });
 
-  console.log('✅ Items API routes registered');
 }

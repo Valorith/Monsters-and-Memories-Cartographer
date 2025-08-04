@@ -23,6 +23,8 @@ import itemsRouter from './src/api/items.js';
 import npcsRouter from './src/api/npcs.js';
 import changeProposalsRouter from './src/api/change-proposals.js';
 import searchRouter from './src/api/search.js';
+import kofiWebhookRouter from './src/api/kofi-webhook.js';
+import donationTiersRouter from './src/api/donation-tiers.js';
 
 // Try to load sharp, but make it optional
 let sharp;
@@ -573,6 +575,13 @@ changeProposalsRouter(app, validateCSRF, { updateUserXP, getXPConfig });
 
 // Search routes
 searchRouter(app);
+
+// Ko-fi webhook routes (no CSRF needed for external webhooks, but needed for admin actions)
+kofiWebhookRouter(app, validateCSRF);
+
+// Donation tiers routes
+const donationTiersRoutes = donationTiersRouter(validateCSRF);
+app.use('/api/donations', donationTiersRoutes);
 
 // Get all maps - cached for 5 minutes
 app.get('/api/maps', 
@@ -1439,6 +1448,33 @@ app.get('/api/auth/status', async (req, res) => {
       }
     }
     
+    // Check for unacknowledged warnings
+    let unacknowledgedWarnings = [];
+    try {
+      // Check if acknowledged_at column exists
+      const columnExists = await pool.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.columns 
+          WHERE table_name = 'user_warnings' 
+          AND column_name = 'acknowledged_at'
+        );
+      `);
+      
+      if (columnExists.rows[0].exists) {
+        const warningsResult = await pool.query(
+          `SELECT w.*, a.name as admin_name 
+           FROM user_warnings w
+           JOIN users a ON w.admin_id = a.id
+           WHERE w.user_id = $1 AND w.acknowledged_at IS NULL
+           ORDER BY w.created_at DESC`,
+          [req.user.id]
+        );
+        unacknowledgedWarnings = warningsResult.rows;
+      }
+    } catch (error) {
+      console.error('Error fetching unacknowledged warnings:', error);
+    }
+    
     res.json({
       authenticated: true,
       user: {
@@ -1459,7 +1495,9 @@ app.get('/api/auth/status', async (req, res) => {
         }
       },
       // Include admin mode preference from session (secure)
-      adminModeEnabled: req.session.adminModeEnabled || false
+      adminModeEnabled: req.session.adminModeEnabled || false,
+      // Include unacknowledged warnings
+      unacknowledgedWarnings
     });
   } else {
     res.json({ authenticated: false });
@@ -1988,7 +2026,16 @@ app.get('/api/user/profile', async (req, res) => {
 
   try {
     const result = await pool.query(
-      'SELECT id, email, name, picture, nickname, avatar_filename, avatar_version, created_at FROM users WHERE id = $1',
+      `SELECT 
+        u.id, u.email, u.name, u.picture, u.nickname, 
+        u.avatar_filename, u.avatar_version, u.created_at,
+        u.xp, u.total_donated, u.last_donation_date,
+        dt.name as donation_tier_name,
+        dt.badge_color as donation_tier_color,
+        dt.badge_icon as donation_tier_icon
+      FROM users u
+      LEFT JOIN donation_tiers dt ON u.current_donation_tier_id = dt.id
+      WHERE u.id = $1`,
       [req.user.id]
     );
 
@@ -2234,15 +2281,20 @@ app.get('/api/leaderboard/top10',
     try {
       const result = await pool.query(`
         SELECT 
-          id,
-          COALESCE(nickname, name) as display_name,
-          avatar_filename,
-          avatar_version,
-          picture,
-          xp
-        FROM users
-        WHERE xp >= 0
-        ORDER BY xp DESC
+          u.id,
+          COALESCE(u.nickname, u.name) as display_name,
+          u.avatar_filename,
+          u.avatar_version,
+          u.picture,
+          u.xp,
+          u.total_donated,
+          dt.name as donation_tier_name,
+          dt.badge_color as donation_tier_color,
+          dt.badge_icon as donation_tier_icon
+        FROM users u
+        LEFT JOIN donation_tiers dt ON u.current_donation_tier_id = dt.id
+        WHERE u.xp >= 0
+        ORDER BY u.xp DESC
         LIMIT 10
       `);
       
@@ -2266,7 +2318,12 @@ app.get('/api/leaderboard/top10',
           level: level,
           xpInCurrentLevel,
           xpNeededForNextLevel,
-          progressPercent: Math.min(100, Math.max(0, progressPercent))
+          progressPercent: Math.min(100, Math.max(0, progressPercent)),
+          donationTier: player.donation_tier_name ? {
+            name: player.donation_tier_name,
+            color: player.donation_tier_color,
+            icon: player.donation_tier_icon
+          } : null
         };
       });
       
@@ -2427,7 +2484,8 @@ app.get('/api/admin/users', async (req, res) => {
         u.is_banned, u.ban_reason, u.banned_at,
         (SELECT COUNT(*) FROM custom_pois WHERE user_id = u.id) as poi_count,
         (SELECT COUNT(*) FROM pending_pois WHERE user_id = u.id) as pending_poi_count,
-        (SELECT COUNT(*) FROM pending_poi_votes WHERE user_id = u.id) as votes_cast
+        (SELECT COUNT(*) FROM pending_poi_votes WHERE user_id = u.id) as votes_cast,
+        (SELECT COUNT(*) FROM user_warnings WHERE user_id = u.id AND acknowledged_at IS NULL) as unacknowledged_warnings
       FROM users u
       ORDER BY u.created_at DESC`
     );
@@ -2504,10 +2562,28 @@ app.get('/api/admin/users/:userId', async (req, res) => {
       [req.params.userId]
     );
 
+    // Get ban history
+    let banHistory = [];
+    try {
+      const banHistoryResult = await pool.query(
+        `SELECT bh.*, a.name as admin_name 
+         FROM user_ban_history bh
+         JOIN users a ON bh.admin_id = a.id
+         WHERE bh.user_id = $1
+         ORDER BY bh.created_at DESC`,
+        [req.params.userId]
+      );
+      banHistory = banHistoryResult.rows;
+    } catch (error) {
+      // Table might not exist yet
+      console.log('Ban history table not available yet');
+    }
+
     res.json({
       ...user,
       ...statsResult.rows[0],
-      warnings: warningsResult.rows
+      warnings: warningsResult.rows,
+      banHistory: banHistory
     });
   } catch (error) {
     console.error('Error fetching user details:', error);
@@ -2550,6 +2626,13 @@ app.post('/api/admin/users/:userId/ban', validateCSRF, async (req, res) => {
       [req.params.userId, reason, req.user.id]
     );
 
+    // Log to ban history
+    await pool.query(
+      `INSERT INTO user_ban_history (user_id, action, reason, admin_id)
+       VALUES ($1, 'ban', $2, $3)`,
+      [req.params.userId, reason, req.user.id]
+    );
+
     // Log out all sessions for this user
     await pool.query(
       "DELETE FROM session WHERE sess::jsonb @> $1::jsonb",
@@ -2575,6 +2658,13 @@ app.post('/api/admin/users/:userId/unban', validateCSRF, async (req, res) => {
        SET is_banned = false, ban_reason = NULL, banned_at = NULL, banned_by = NULL
        WHERE id = $1`,
       [req.params.userId]
+    );
+
+    // Log to ban history
+    await pool.query(
+      `INSERT INTO user_ban_history (user_id, action, reason, admin_id)
+       VALUES ($1, 'unban', 'User unbanned', $2)`,
+      [req.params.userId, req.user.id]
     );
 
     res.json({ success: true });
@@ -2606,6 +2696,42 @@ app.post('/api/admin/users/:userId/warn', validateCSRF, async (req, res) => {
   } catch (error) {
     console.error('Error warning user:', error);
     res.status(500).json({ error: 'Failed to warn user' });
+  }
+});
+
+// Acknowledge warning
+app.post('/api/warnings/:warningId/acknowledge', validateCSRF, async (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  const { warningId } = req.params;
+
+  try {
+    // Verify the warning belongs to the authenticated user
+    const warningCheck = await pool.query(
+      'SELECT user_id FROM user_warnings WHERE id = $1',
+      [warningId]
+    );
+
+    if (warningCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Warning not found' });
+    }
+
+    if (warningCheck.rows[0].user_id !== req.user.id) {
+      return res.status(403).json({ error: 'You can only acknowledge your own warnings' });
+    }
+
+    // Update the warning to mark it as acknowledged
+    await pool.query(
+      'UPDATE user_warnings SET acknowledged_at = CURRENT_TIMESTAMP WHERE id = $1',
+      [warningId]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error acknowledging warning:', error);
+    res.status(500).json({ error: 'Failed to acknowledge warning' });
   }
 });
 
@@ -2693,6 +2819,95 @@ app.post('/api/admin/users/:userId/toggle-admin', validateCSRF, async (req, res)
   } catch (error) {
     console.error('Error toggling admin status:', error);
     res.status(500).json({ error: 'Failed to update admin status' });
+  }
+});
+
+// Search users
+app.get('/api/users/search', async (req, res) => {
+  if (!req.isAuthenticated() || !req.user.is_admin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  const { q } = req.query;
+  
+  if (!q || q.trim().length < 2) {
+    return res.json([]);
+  }
+
+  const searchQuery = q.trim().toLowerCase();
+
+  try {
+    const result = await pool.query(`
+      SELECT 
+        id, 
+        name, 
+        email, 
+        nickname,
+        picture,
+        xp,
+        is_admin
+      FROM users
+      WHERE 
+        LOWER(name) LIKE $1 OR 
+        LOWER(email) LIKE $1 OR 
+        LOWER(nickname) LIKE $1
+      ORDER BY 
+        CASE 
+          WHEN LOWER(name) = $2 THEN 0
+          WHEN LOWER(nickname) = $2 THEN 1
+          WHEN LOWER(email) = $2 THEN 2
+          WHEN LOWER(name) LIKE $3 THEN 3
+          WHEN LOWER(nickname) LIKE $3 THEN 4
+          ELSE 5
+        END,
+        name
+      LIMIT 20
+    `, [`%${searchQuery}%`, searchQuery, `${searchQuery}%`]);
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error searching users:', error);
+    res.status(500).json({ error: 'Failed to search users' });
+  }
+});
+
+// Get user details
+app.get('/api/users/:id', async (req, res) => {
+  if (!req.isAuthenticated() || !req.user.is_admin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(`
+      SELECT 
+        u.id,
+        u.name,
+        u.email,
+        u.nickname,
+        u.picture,
+        u.created_at,
+        u.last_login,
+        u.total_donated,
+        u.current_donation_tier_id,
+        u.last_donation_date,
+        dt.name as tier_name,
+        dt.badge_color as tier_color,
+        dt.badge_icon as tier_icon
+      FROM users u
+      LEFT JOIN donation_tiers dt ON u.current_donation_tier_id = dt.id
+      WHERE u.id = $1
+    `, [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error fetching user details:', error);
+    res.status(500).json({ error: 'Failed to fetch user details' });
   }
 });
 
@@ -2817,6 +3032,123 @@ app.put('/api/admin/xp-config/:key', validateCSRF, async (req, res) => {
   } catch (error) {
     console.error('Error updating XP config:', error);
     res.status(500).json({ error: 'Failed to update XP configuration' });
+  }
+});
+
+// Welcome message endpoints
+
+// Get active welcome message
+app.get('/api/welcome-message', async (req, res) => {
+  try {
+    // Check if table exists first
+    const tableExists = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'welcome_messages'
+      );
+    `);
+    
+    if (!tableExists.rows[0].exists) {
+      // Table doesn't exist yet, return null message
+      return res.json({ message: null });
+    }
+    
+    const result = await pool.query(
+      'SELECT * FROM welcome_messages WHERE is_active = true ORDER BY created_at DESC LIMIT 1'
+    );
+    
+    if (result.rows.length === 0) {
+      return res.json({ message: null });
+    }
+    
+    res.json({ message: result.rows[0].message });
+  } catch (error) {
+    console.error('Error fetching welcome message:', error);
+    res.status(500).json({ error: 'Failed to fetch welcome message' });
+  }
+});
+
+// Update welcome message (admin only)
+app.post('/api/admin/welcome-message', validateCSRF, async (req, res) => {
+  if (!req.isAuthenticated() || !req.user.is_admin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  const { message } = req.body;
+
+  if (!message || typeof message !== 'string' || message.trim().length === 0) {
+    return res.status(400).json({ error: 'Message is required' });
+  }
+
+  try {
+    // Check if table exists first
+    const tableExists = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'welcome_messages'
+      );
+    `);
+    
+    if (!tableExists.rows[0].exists) {
+      // Create the table if it doesn't exist
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS welcome_messages (
+          id SERIAL PRIMARY KEY,
+          message TEXT NOT NULL,
+          is_active BOOLEAN DEFAULT true,
+          created_by INTEGER REFERENCES users(id) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+    }
+
+    await pool.query('BEGIN');
+    
+    // Deactivate all current welcome messages
+    await pool.query('UPDATE welcome_messages SET is_active = false');
+    
+    // Insert new welcome message
+    await pool.query(
+      'INSERT INTO welcome_messages (message, created_by) VALUES ($1, $2)',
+      [message.trim(), req.user.id]
+    );
+    
+    await pool.query('COMMIT');
+    res.json({ success: true });
+  } catch (error) {
+    await pool.query('ROLLBACK');
+    console.error('Error updating welcome message:', error);
+    res.status(500).json({ error: 'Failed to update welcome message' });
+  }
+});
+
+// Delete/clear welcome message (admin only)
+app.delete('/api/admin/welcome-message', validateCSRF, async (req, res) => {
+  if (!req.isAuthenticated() || !req.user.is_admin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  try {
+    // Check if table exists first
+    const tableExists = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'welcome_messages'
+      );
+    `);
+    
+    if (tableExists.rows[0].exists) {
+      await pool.query('UPDATE welcome_messages SET is_active = false');
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error clearing welcome message:', error);
+    res.status(500).json({ error: 'Failed to clear welcome message' });
   }
 });
 

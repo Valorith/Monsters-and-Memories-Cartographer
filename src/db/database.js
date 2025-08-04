@@ -56,23 +56,31 @@ const pool = new Pool({
   
   // Connection timeout settings (in milliseconds)
   connectionTimeoutMillis: 30000, // 30 seconds to connect
-  idleTimeoutMillis: 30000,       // 30 seconds before idle connection is closed
+  idleTimeoutMillis: 10000,       // 10 seconds before idle connection is closed (shorter for Railway)
   
   // Query timeout
   query_timeout: 60000,            // 60 seconds query timeout
   statement_timeout: 60000,        // 60 seconds statement timeout
   
-  // Keep alive
+  // Keep alive settings to prevent unexpected disconnections
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000, // 10 seconds before first keepalive probe
+  
+  // Additional settings for better connection handling
+  allowExitOnIdle: true,           // Allow connections to be terminated when idle
   
   // Allow application_name for better monitoring
   application_name: 'mmc-server'
 });
 
+// Connection logging - only log in development or when debugging
+const logConnections = process.env.DB_LOG_CONNECTIONS === 'true' || process.env.NODE_ENV === 'development';
+
 // Test the connection
 pool.on('connect', (client) => {
-  console.log('New client connected to PostgreSQL database');
+  if (logConnections) {
+    console.log('New client connected to PostgreSQL database');
+  }
   
   // Set session parameters for each new connection
   client.query('SET statement_timeout = 60000') // 60 seconds
@@ -80,13 +88,22 @@ pool.on('connect', (client) => {
 });
 
 pool.on('error', (err, client) => {
-  console.error('Unexpected error on idle client', err);
-  // Don't exit the process, just log the error
-  // The pool will handle reconnection automatically
+  // Only log connection termination errors as warnings, not full errors
+  if (err.message === 'Connection terminated unexpectedly') {
+    // This is normal behavior for Railway's proxy, only log in debug mode
+    if (logConnections) {
+      console.warn('[Database] Idle connection terminated - pool will create new connections as needed');
+    }
+  } else {
+    console.error('[Database] Unexpected error on idle client:', err.message);
+  }
+  // Don't exit the process, the pool will handle reconnection automatically
 });
 
 pool.on('remove', () => {
-  console.log('Client removed from pool');
+  if (logConnections) {
+    console.log('Client removed from pool');
+  }
 });
 
 // Pool health check function

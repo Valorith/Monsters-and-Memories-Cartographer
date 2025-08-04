@@ -1,5 +1,5 @@
 <template>
-  <div class="xp-bar-container" v-if="user">
+  <div class="xp-bar-container" v-if="user && !user.isBanned">
     <div class="xp-info">
       <div class="level-badge" @click="toggleLeaderboard" :class="{ 'clickable': true }" title="Click to view leaderboard">
         <div class="level-number">{{ currentLevel }}</div>
@@ -44,7 +44,15 @@
                class="leaderboard-item" :class="{ 'current-user': player.id === user.id }">
             <div class="rank">{{ index + 1 }}</div>
             <div class="player-info">
-              <div class="player-name">{{ player.display_name }}</div>
+              <div class="player-name">
+                <span v-if="player.donationTier" 
+                      class="donation-badge" 
+                      :style="{ color: player.donationTier.color }"
+                      :title="`${player.donationTier.name} Supporter`">
+                  {{ player.donationTier.icon }}
+                </span>
+                {{ player.display_name }}
+              </div>
               <div class="player-level">Level {{ player.level }} • {{ player.xp }} XP</div>
               <div class="player-xp-bar">
                 <div class="player-xp-fill" :style="{ width: player.progressPercent + '%' }"></div>
@@ -199,7 +207,7 @@ export default {
     onMounted(async () => {
       // Add click outside listener
       document.addEventListener('click', handleClickOutside);
-      if (props.user) {
+      if (props.user && !props.user.isBanned) {
         displayXP.value = xpIntoCurrentLevel.value;
         animatedProgress.value = progressPercent.value;
 
@@ -696,8 +704,23 @@ export default {
   color: #FFD700;
   text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.donation-badge {
+  font-size: 18px;
+  filter: drop-shadow(0 0 4px currentColor);
+  animation: badge-glow 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes badge-glow {
+  0%, 100% { opacity: 0.8; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.1); }
 }
 
 .player-level {

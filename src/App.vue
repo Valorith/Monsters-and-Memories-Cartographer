@@ -83,7 +83,7 @@
       </div>
     </header>
     
-    <XPBar :user="user" v-if="isAuthenticated" />
+    <XPBar :user="user" v-if="isAuthenticated && !loading" />
     
     <div class="poi-search-section">
       <POISearch
@@ -166,7 +166,7 @@
     
     <!-- POI Popup -->
     <POIPopup
-      v-if="selectedPOI"
+      v-if="selectedPOI && !(proposalsSourceActive && selectedPOIHasProposal)"
       :poi="selectedPOI"
       :visible="!!selectedPOI"
       :position="popupPosition"
@@ -185,8 +185,36 @@
       @propose-item-edit="showItemEditProposal"
     />
     
+    <!-- Proposal Popup -->
+    <ProposalPopup
+      v-if="selectedPOI && proposalsSourceActive && selectedPOIHasProposal"
+      :visible="true"
+      :proposal="(selectedPOI.is_proposal || (selectedPOI.is_custom && selectedPOI.has_pending_proposal)) ? selectedPOI : null"
+      :proposalData="!(selectedPOI.is_proposal || (selectedPOI.is_custom && selectedPOI.has_pending_proposal)) ? selectedPOI : null"
+      :position="popupPosition"
+      :isLeftSide="popupIsLeftSide"
+      :isAuthenticated="isAuthenticated"
+      :currentUserId="user?.id"
+      @close="handleProposalPopupClose"
+      @vote-success="handleProposalVoteSuccess"
+      @toggle-proposed-location="handleToggleProposedLocation"
+      @proposal-withdrawn="handleProposalWithdrawn"
+    />
+    
     <!-- Toast Container -->
     <ToastContainer />
+    
+    <!-- Welcome Modal -->
+    <WelcomeModal />
+    
+    <!-- Warning Modal -->
+    <WarningModal 
+      :warnings="unacknowledgedWarnings"
+      @acknowledged="handleWarningAcknowledged"
+    />
+    
+    <!-- Ban Modal -->
+    <BanModal />
     
     <!-- Context Menu -->
     <ContextMenu
@@ -374,6 +402,16 @@
       </div>
     </div>
     
+    <!-- Map Filters -->
+    <MapFilters
+      v-if="!isLoading"
+      :poi-types="poiTypes"
+      :all-pois="allDisplayPOIs"
+      :is-authenticated="isAuthenticated"
+      :initial-filters="mapFilters"
+      @update-filters="handleFilterUpdate"
+    />
+    
     <!-- Context Menu for Custom POIs -->
     <ContextMenu
       :visible="contextMenuVisible"
@@ -395,6 +433,49 @@
       @save="saveCustomPOI"
       @cancel="customPOIDialogVisible = false"
     />
+    
+    <!-- Custom Ko-fi Donation Button -->
+    <button 
+      class="custom-kofi-button" 
+      @click="openKofiWidget"
+      title="Support MMC"
+    >
+      <svg width="40" height="40" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" class="kofi-logo">
+        <defs>
+          <linearGradient id="kofiGoldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#FFD700;stop-opacity:1" />
+            <stop offset="50%" style="stop-color:#FFA500;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#FF8C00;stop-opacity:1" />
+          </linearGradient>
+          <filter id="kofiShadow">
+            <feDropShadow dx="2" dy="2" stdDeviation="2" flood-opacity="0.3"/>
+          </filter>
+        </defs>
+        
+        <!-- Compass rose background -->
+        <circle cx="50" cy="50" r="45" fill="url(#kofiGoldGradient)" filter="url(#kofiShadow)"/>
+        <circle cx="50" cy="50" r="40" fill="#2C1810" />
+        
+        <!-- M letters forming mountains -->
+        <path d="M 20 65 L 30 35 L 40 55 L 50 35 L 60 55 L 70 35 L 80 65" 
+              stroke="url(#kofiGoldGradient)" 
+              stroke-width="4" 
+              fill="none" 
+              stroke-linejoin="round" 
+              stroke-linecap="round"/>
+        
+        <!-- C as a crescent moon -->
+        <path d="M 65 70 A 15 15 0 1 1 35 70 A 12 12 0 1 0 65 70" 
+              fill="url(#kofiGoldGradient)" />
+        
+        <!-- Compass points -->
+        <path d="M 50 10 L 55 20 L 50 15 L 45 20 Z" fill="#FFD700" opacity="0.8"/>
+        <path d="M 90 50 L 80 55 L 85 50 L 80 45 Z" fill="#FFD700" opacity="0.8"/>
+        <path d="M 50 90 L 45 80 L 50 85 L 55 80 Z" fill="#FFD700" opacity="0.8"/>
+        <path d="M 10 50 L 20 45 L 15 50 L 20 55 Z" fill="#FFD700" opacity="0.8"/>
+      </svg>
+      <span class="kofi-text">Support MMC</span>
+    </button>
   </div>
 </template>
 
@@ -404,6 +485,7 @@ import { useMapViewer } from './composables/useMapViewer'
 import { useMapInteractions } from './composables/useMapInteractions'
 import { mapsAPI, poisAPI, connectionsAPI, pointConnectorsAPI, zoneConnectorsAPI } from './services/api'
 import POIPopup from './components/POIPopup.vue'
+import ProposalPopup from './components/ProposalPopup.vue'
 import AdminPanel from './components/AdminPanel.vue'
 import ItemInfoModal from './components/ItemInfoModal.vue'
 import NPCListModal from './components/NPCListModal.vue'
@@ -423,6 +505,10 @@ import ItemEditProposalDialog from './components/ItemEditProposalDialog.vue'
 import ItemSearchDialog from './components/ItemSearchDialog.vue'
 import NPCProposalDialog from './components/NPCProposalDialog.vue'
 import NPCEditProposalDialog from './components/NPCEditProposalDialog.vue'
+import WelcomeModal from './components/WelcomeModal.vue'
+import WarningModal from './components/WarningModal.vue'
+import BanModal from './components/BanModal.vue'
+import MapFilters from './components/MapFilters.vue'
 import { useToast } from './composables/useToast'
 import { useAuth } from './composables/useAuth'
 import { useCSRF } from './composables/useCSRF'
@@ -443,6 +529,7 @@ export default {
   name: 'App',
   components: {
     POIPopup,
+    ProposalPopup,
     AdminPanel,
     AdminPopup,
     MapManager,
@@ -452,6 +539,7 @@ export default {
     CustomPOIDialog,
     XPBar,
     POISearch,
+    MapFilters,
     POIEditProposalDialog,
     POIDeleteProposalDialog,
     POILootProposalDialog,
@@ -461,7 +549,10 @@ export default {
     NPCProposalDialog,
     NPCEditProposalDialog,
     ItemInfoModal,
-    NPCListModal
+    NPCListModal,
+    WelcomeModal,
+    WarningModal,
+    BanModal
   },
   setup() {
     const mapCanvas = ref(null)
@@ -504,6 +595,13 @@ export default {
     const proposalPreviewPOIs = ref([])
     const proposalPreviewConnection = ref(null)
     const isLoadingProposalPreview = ref(false)
+    
+    // All pending proposals for the current map
+    const pendingProposals = ref([])
+    
+    // Active move proposal display
+    const showingProposedLocation = ref(false)
+    const activeProposedLocation = ref(null)
     
     // Toast and dialog
     const { success, error, warning, info } = useToast()
@@ -583,7 +681,7 @@ export default {
     const isTransitioningMap = ref(false)
     
     // Authentication
-    const { user, isAuthenticated, isAdmin: isUserAdmin, adminModeEnabled, checkAuthStatus } = useAuth()
+    const { user, isAuthenticated, isAdmin: isUserAdmin, adminModeEnabled, loading, unacknowledgedWarnings, checkAuthStatus, acknowledgeWarning } = useAuth()
     const { fetchWithCSRF, initCSRF } = useCSRF()
     
     // Sync admin mode state from server
@@ -601,6 +699,41 @@ export default {
     const selectedCustomPOI = ref(null)
     const customPOIs = ref([])
     const contextMenuPOI = ref(null)
+    
+    // Load filter settings from sessionStorage
+    const loadFilterSettings = () => {
+      const savedFilters = sessionStorage.getItem('mapFilters')
+      if (savedFilters) {
+        try {
+          return JSON.parse(savedFilters)
+        } catch (e) {
+          console.error('Error loading saved filters:', e)
+        }
+      }
+      // Return default settings if no saved settings
+      return {
+        search: '',
+        types: [],
+        sources: ['official', 'custom', 'shared'],
+        showConnections: true,
+        showLabels: true
+      }
+    }
+    
+    // Filter state - initialize from sessionStorage
+    const mapFilters = ref(loadFilterSettings())
+    
+    // Save filter settings to sessionStorage whenever they change
+    const saveFilterSettings = () => {
+      try {
+        sessionStorage.setItem('mapFilters', JSON.stringify(mapFilters.value))
+      } catch (e) {
+        console.error('Error saving filter settings:', e)
+      }
+    }
+    
+    // POI types for filtering
+    const poiTypes = ref([])
     
     // User dropdown state
     const showUserDropdown = ref(false)
@@ -897,15 +1030,17 @@ export default {
       
       if (!ctx.value || !image.value) return
       
-      // Draw connections
-      currentMapData.value.connections.forEach(connection => {
-        const isDragging = draggedItem.value && draggedItem.value.id === connection.id
-        const isPending = pendingChange.value && pendingChange.value.item.id === connection.id
-        drawConnection(ctx.value, connection, isDragging || isPending)
-      })
+      // Draw connections (if enabled in filters)
+      if (mapFilters.value.showConnections) {
+        currentMapData.value.connections.forEach(connection => {
+          const isDragging = draggedItem.value && draggedItem.value.id === connection.id
+          const isPending = pendingChange.value && pendingChange.value.item.id === connection.id
+          drawConnection(ctx.value, connection, isDragging || isPending)
+        })
+      }
       
-      // Draw zone connectors
-      if (currentMapData.value.zoneConnectors) {
+      // Draw zone connectors (if connections are enabled)
+      if (mapFilters.value.showConnections && currentMapData.value.zoneConnectors) {
         currentMapData.value.zoneConnectors.forEach(zoneConnector => {
           // Only draw the "from" side on current map
           if (zoneConnector.from_map_id === maps.value[selectedMapIndex.value]?.id) {
@@ -930,8 +1065,8 @@ export default {
         })
       }
       
-      // Draw connectors
-      if (currentMapData.value.connectors) {
+      // Draw connectors (if connections are enabled)
+      if (mapFilters.value.showConnections && currentMapData.value.connectors) {
         currentMapData.value.connectors.forEach(connector => {
           const isDragging = draggedItem.value && isSameEntity(draggedItem.value.id, connector.id)
           const isPending = pendingChange.value && isSameEntity(pendingChange.value.item.id, connector.id)
@@ -944,45 +1079,31 @@ export default {
       const allPOIs = []
       const poiLocations = new Map()
       
-      // Add regular POIs first
-      currentMapData.value.pois.forEach(poi => {
-        const key = `${poi.x},${poi.y}`
-        if (!poiLocations.has(key)) {
-          // Ensure regular POIs have is_custom flag set to false
-          const regularPOI = {
-            ...poi,
-            is_custom: false
-          }
-          poiLocations.set(key, regularPOI)
-          allPOIs.push(regularPOI)
-        }
-      })
-      
-      // Add custom POIs with prefixed IDs to avoid collisions
-      customPOIs.value.forEach(poi => {
+      // Use filtered POIs instead of all POIs
+      filteredPOIs.value.forEach(poi => {
         // Skip the temporarily hidden custom POI
-        if (hiddenCustomPOIId.value && poi.id === hiddenCustomPOIId.value) {
+        if (poi.is_custom && hiddenCustomPOIId.value && poi.id === hiddenCustomPOIId.value) {
           return
         }
         
         const key = `${poi.x},${poi.y}`
-        // Prefix custom POI IDs to ensure uniqueness
-        const customPOI = {
+        
+        // For custom POIs, add prefix to avoid ID collisions
+        const poiToAdd = poi.is_custom ? {
           ...poi,
           id: `custom_${poi.id}`,  // Prefix ID to prevent collisions
-          originalId: poi.id,       // Keep original ID for API calls
-          is_custom: true          // Ensure flag is set
-        }
+          originalId: poi.id        // Keep original ID for API calls
+        } : poi
         
         if (!poiLocations.has(key)) {
-          poiLocations.set(key, customPOI)
-          allPOIs.push(customPOI)
-        } else {
+          poiLocations.set(key, poiToAdd)
+          allPOIs.push(poiToAdd)
+        } else if (poi.is_custom) {
           // If custom POI is at same location as regular POI, prefer custom POI
           const existingIndex = allPOIs.findIndex(p => p.x === poi.x && p.y === poi.y)
           if (existingIndex !== -1) {
-            allPOIs[existingIndex] = customPOI
-            poiLocations.set(key, customPOI)
+            allPOIs[existingIndex] = poiToAdd
+            poiLocations.set(key, poiToAdd)
           }
         }
       })
@@ -1058,18 +1179,21 @@ export default {
       const customPOIsToRender = currentGroupedPOIs.filter(poi => poi.is_custom)
       
       
+      // Check if proposals are visible
+      const proposalsVisible = mapFilters.value.sources.includes('proposals')
+      
       // Draw regular POIs first
       regularPOIs.forEach(poi => {
         const isDragging = draggedItem.value && draggedItem.value.id === poi.id
         const isPending = pendingChange.value && pendingChange.value.item.id === poi.id
-        drawPOI(ctx.value, poi, isDragging || isPending)
+        drawPOI(ctx.value, poi, isDragging || isPending, mapFilters.value.showLabels, proposalsVisible)
       })
       
       // Draw custom POIs on top
       customPOIsToRender.forEach(poi => {
         const isDragging = draggedItem.value && draggedItem.value.id === poi.id
         const isPending = pendingChange.value && pendingChange.value.item.id === poi.id
-        drawPOI(ctx.value, poi, isDragging || isPending)
+        drawPOI(ctx.value, poi, isDragging || isPending, mapFilters.value.showLabels, proposalsVisible)
       })
       
       // Draw proposal preview connection arrow
@@ -1163,7 +1287,7 @@ export default {
         }
         
         // Draw the POI
-        drawPOI(ctx.value, poi, false)
+        drawPOI(ctx.value, poi, false, mapFilters.value.showLabels, proposalsVisible)
         
         // Add special styling for proposal POIs
         const canvasPos = imageToCanvas(poi.x, poi.y)
@@ -1286,6 +1410,79 @@ export default {
         ctx.value.restore()
       }
       
+      // Draw move proposal visualization (only if proposals are visible)
+      if (proposalsVisible && showingProposedLocation.value && activeProposedLocation.value) {
+        const originalPos = imageToCanvas(activeProposedLocation.value.originalPoi.x, activeProposedLocation.value.originalPoi.y)
+        const proposedPos = imageToCanvas(activeProposedLocation.value.x, activeProposedLocation.value.y)
+        
+        // Draw dotted line from original to proposed location
+        ctx.value.save()
+        
+        // White background line for contrast
+        ctx.value.strokeStyle = 'rgba(255, 255, 255, 0.9)'
+        ctx.value.lineWidth = 4
+        ctx.value.setLineDash([10, 5])
+        ctx.value.beginPath()
+        ctx.value.moveTo(originalPos.x, originalPos.y)
+        ctx.value.lineTo(proposedPos.x, proposedPos.y)
+        ctx.value.stroke()
+        
+        // Blue line on top
+        ctx.value.strokeStyle = '#1E90FF'
+        ctx.value.lineWidth = 2
+        ctx.value.beginPath()
+        ctx.value.moveTo(originalPos.x, originalPos.y)
+        ctx.value.lineTo(proposedPos.x, proposedPos.y)
+        ctx.value.stroke()
+        
+        ctx.value.restore()
+        
+        // Draw proposed location POI
+        const proposedPOI = {
+          ...activeProposedLocation.value.originalPoi,
+          x: activeProposedLocation.value.x,
+          y: activeProposedLocation.value.y,
+          is_proposal: true,
+          proposal_type: 'move',
+          is_proposed_location: true,
+          has_move_proposal: true,
+          move_proposal: activeProposedLocation.value.move_proposal
+        }
+        drawPOI(ctx.value, proposedPOI, false, true, true) // Always show proposal indicator for proposed location
+        
+        // Draw "PROPOSED" label
+        const canvasPos = proposedPos
+        const labelY = canvasPos.y - 35
+        const labelText = 'PROPOSED LOCATION'
+        
+        ctx.value.save()
+        ctx.value.font = 'bold 12px Arial'
+        ctx.value.textAlign = 'center'
+        ctx.value.textBaseline = 'middle'
+        
+        // Measure text for background
+        const metrics = ctx.value.measureText(labelText)
+        const padding = 6
+        const bgWidth = metrics.width + padding * 2
+        const bgHeight = 18
+        
+        // Draw background pill
+        ctx.value.fillStyle = 'rgba(30, 144, 255, 0.9)'
+        ctx.value.beginPath()
+        if (ctx.value.roundRect) {
+          ctx.value.roundRect(canvasPos.x - bgWidth / 2, labelY - bgHeight / 2, bgWidth, bgHeight, bgHeight / 2)
+        } else {
+          // Fallback for browsers without roundRect
+          ctx.value.rect(canvasPos.x - bgWidth / 2, labelY - bgHeight / 2, bgWidth, bgHeight)
+        }
+        ctx.value.fill()
+        
+        // Draw text
+        ctx.value.fillStyle = '#FFFFFF'
+        ctx.value.fillText(labelText, canvasPos.x, labelY)
+        ctx.value.restore()
+      }
+      
       // Draw all POI tooltips last to ensure they appear on top
       if (hoveredPOI.value) {
         drawPOITooltip(ctx.value, hoveredPOI.value)
@@ -1338,6 +1535,54 @@ export default {
         popupPosition.value = {
           x: canvasPos.x + rect.left + offsetX,
           y: canvasPos.y + rect.top + offsetY
+        }
+        
+        // Draw line from proposal popup to POI if it's a proposal
+        if (proposalsSourceActive.value && selectedPOIHasProposal.value) {
+          // Draw dotted line on canvas
+          ctx.value.save()
+          
+          // Set up line style
+          ctx.value.strokeStyle = '#1E90FF'
+          ctx.value.lineWidth = 3
+          ctx.value.setLineDash([8, 4])
+          ctx.value.lineCap = 'round'
+          
+          // Add shadow for visibility
+          ctx.value.shadowColor = 'rgba(0, 0, 0, 0.5)'
+          ctx.value.shadowBlur = 3
+          ctx.value.shadowOffsetX = 1
+          ctx.value.shadowOffsetY = 1
+          
+          // Draw the line from POI to popup edge
+          ctx.value.beginPath()
+          ctx.value.moveTo(canvasPos.x, canvasPos.y)
+          
+          // Calculate where line meets popup
+          // Since the popup uses CSS transforms and fixed positioning, 
+          // we'll draw the line to extend under where the popup appears
+          let lineEndX
+          if (popupIsLeftSide.value) {
+            // Popup is to the left - extend line further left to reach popup edge
+            // The popup is positioned at offsetX (-340) and then translated left by its width
+            lineEndX = canvasPos.x - 60
+          } else {
+            // Popup is to the right - extend line to reach popup edge
+            // The popup is positioned at offsetX (40) plus 20px offset
+            lineEndX = canvasPos.x + 60
+          }
+          const lineEndY = canvasPos.y + offsetY
+          
+          ctx.value.lineTo(lineEndX, lineEndY)
+          ctx.value.stroke()
+          
+          // Draw a small circle at the POI end
+          ctx.value.fillStyle = '#1E90FF'
+          ctx.value.beginPath()
+          ctx.value.arc(canvasPos.x, canvasPos.y, 4, 0, Math.PI * 2)
+          ctx.value.fill()
+          
+          ctx.value.restore()
         }
       }
     }
@@ -1441,6 +1686,9 @@ export default {
         // Load custom POIs for this map
         await loadCustomPOIs()
         
+        // Load pending proposals for this map
+        await loadPendingProposals()
+        
         reset(mapCanvas.value)
         render()
       } catch (err) {
@@ -1517,25 +1765,17 @@ export default {
         )
         
         if (clickedPOI) {
-          console.log('Shift+Click on POI:', {
-            clickedPOI: clickedPOI,
-            isGrouped: clickedPOI.isGrouped,
-            groupedPOIs: clickedPOI.groupedPOIs,
-            is_custom: clickedPOI.is_custom
-          })
           
           // If it's a grouped POI, we need to determine which POI to delete
           let poiToDelete = clickedPOI
           
           if (clickedPOI.isGrouped && clickedPOI.groupedPOIs && clickedPOI.groupedPOIs.length > 1) {
-            console.log('Grouped POI clicked, searching for regular POI in group...')
             
             // For grouped POIs, we should show a selection dialog
             const regularPOIs = clickedPOI.groupedPOIs.filter(poi => 
               !poi.is_custom && currentMapData.value.pois.some(p => p.id === poi.id)
             )
             
-            console.log('Regular POIs in group:', regularPOIs)
             
             if (regularPOIs.length === 0) {
               // No regular POI in this group
@@ -1550,12 +1790,6 @@ export default {
             }
           }
           
-          console.log('POI to delete:', {
-            id: poiToDelete.id,
-            name: poiToDelete.name,
-            is_custom: poiToDelete.is_custom,
-            type: poiToDelete.type
-          })
           
           // Check if it's a regular POI (admin can only delete regular POIs via this method)
           const isRegularPOI = !poiToDelete.is_custom && 
@@ -1564,7 +1798,6 @@ export default {
           if (isRegularPOI) {
             showConfirm('Delete POI', `Delete POI "${poiToDelete.name}"?`, 'Delete', 'Cancel').then(confirmed => {
               if (confirmed) {
-                console.log('Deleting POI with ID:', poiToDelete.id)
                 deletePOI(poiToDelete.id)
               }
             })
@@ -1583,10 +1816,32 @@ export default {
         return
       }
       
-      // Check for POI clicks using the same grouped POIs that were rendered
-      const clickedPOI = currentGroupedPOIs.find(poi =>
-        isPOIHit(poi, imagePos.x, imagePos.y)
-      )
+      // Check if proposals are visible (source filter is 'all' or 'proposals')
+      const proposalsVisible = mapFilters.value.sources.includes('proposals')
+      
+      // Check if clicking on proposed location first (only if proposals are visible)
+      let clickedPOI = null
+      if (proposalsVisible && showingProposedLocation.value && activeProposedLocation.value) {
+        const proposedPOI = {
+          ...activeProposedLocation.value.originalPoi,
+          x: activeProposedLocation.value.x,
+          y: activeProposedLocation.value.y,
+          is_proposal: true,
+          is_proposed_location: true,
+          has_move_proposal: true,
+          move_proposal: activeProposedLocation.value.move_proposal
+        }
+        if (isPOIHit(proposedPOI, imagePos.x, imagePos.y)) {
+          clickedPOI = proposedPOI
+        }
+      }
+      
+      // If not clicking on proposed location, check for POI clicks
+      if (!clickedPOI) {
+        clickedPOI = currentGroupedPOIs.find(poi =>
+          isPOIHit(poi, imagePos.x, imagePos.y)
+        )
+      }
       
       // Check for connector clicks
       const clickedConnector = currentMapData.value.connectors?.find(conn =>
@@ -1879,11 +2134,6 @@ export default {
       if (clickedPOI && !isConnectorPOI) {
         // If it's a grouped POI, we need to handle it specially
         if (clickedPOI.isGrouped && clickedPOI.groupedPOIs && clickedPOI.groupedPOIs.length > 1) {
-          console.log('Grouped POI clicked, showing selection:', {
-            groupId: clickedPOI.groupId,
-            groupSize: clickedPOI.groupedPOIs.length,
-            pois: clickedPOI.groupedPOIs.map(p => ({ id: p.id, name: p.name }))
-          })
           
           // Find which specific POI in the group was clicked based on exact position
           // This helps when POIs are slightly offset in a group
@@ -1900,24 +2150,45 @@ export default {
             }
           }
           
-          console.log('Selecting POI from group:', {
-            id: poiToSelect.id,
-            name: poiToSelect.name,
-            is_custom: poiToSelect.is_custom
-          })
           
           // For better UX, we should implement a selection menu in the future
           // For now, we'll use the most accurate POI we can find
           selectedPOI.value = poiToSelect
         } else {
-          console.log('Single POI clicked:', {
-            id: clickedPOI.id,
-            name: clickedPOI.name,
-            is_custom: clickedPOI.is_custom,
-            x: clickedPOI.x,
-            y: clickedPOI.y
-          })
-          selectedPOI.value = clickedPOI
+          
+          // Check if proposals are visible (source filter is 'all' or 'proposals')
+          const proposalsVisible = mapFilters.value.sources.includes('proposals')
+          
+          // Check if clicking on proposed location
+          if (clickedPOI.is_proposed_location) {
+            // Show ProposalPopup for the move proposal
+            selectedPOI.value = clickedPOI
+          } else if (proposalsVisible && clickedPOI.has_move_proposal && !clickedPOI.is_proposed_location) {
+            // Only toggle proposed location if proposals are visible
+            if (activeProposedLocation.value && 
+                activeProposedLocation.value.originalPoi.id === clickedPOI.id) {
+              // Toggle off - also close any open proposal popup
+              showingProposedLocation.value = false
+              activeProposedLocation.value = null
+              // Close proposal popup if it's showing a proposed location
+              if (selectedPOI.value?.is_proposed_location) {
+                selectedPOI.value = null
+              }
+            } else {
+              // Toggle on
+              showingProposedLocation.value = true
+              activeProposedLocation.value = {
+                x: clickedPOI.move_proposal.proposed_x,
+                y: clickedPOI.move_proposal.proposed_y,
+                originalPoi: clickedPOI,
+                move_proposal: clickedPOI.move_proposal
+              }
+            }
+            render()
+          } else {
+            // For other POIs, show popup as normal
+            selectedPOI.value = clickedPOI
+          }
         }
         
         const canvasPos = imageToCanvas(clickedPOI.x, clickedPOI.y)
@@ -2325,10 +2596,34 @@ export default {
         return
       }
       
-      // Update hovered items using the grouped POIs
-      hoveredPOI.value = currentGroupedPOIs.find(poi =>
-        isPOIHit(poi, imagePos.x, imagePos.y)
-      )
+      // Check if proposals are visible (source filter is 'all' or 'proposals')
+      const proposalsVisible = mapFilters.value.sources.includes('proposals')
+      
+      // Check if hovering over proposed location first (only if proposals are visible)
+      if (proposalsVisible && showingProposedLocation.value && activeProposedLocation.value) {
+        const proposedPOI = {
+          ...activeProposedLocation.value.originalPoi,
+          x: activeProposedLocation.value.x,
+          y: activeProposedLocation.value.y,
+          is_proposal: true,
+          is_proposed_location: true,
+          has_move_proposal: true,
+          move_proposal: activeProposedLocation.value.move_proposal
+        }
+        if (isPOIHit(proposedPOI, imagePos.x, imagePos.y)) {
+          hoveredPOI.value = proposedPOI
+        } else {
+          // Update hovered items using the grouped POIs
+          hoveredPOI.value = currentGroupedPOIs.find(poi =>
+            isPOIHit(poi, imagePos.x, imagePos.y)
+          )
+        }
+      } else {
+        // Update hovered items using the grouped POIs
+        hoveredPOI.value = currentGroupedPOIs.find(poi =>
+          isPOIHit(poi, imagePos.x, imagePos.y)
+        )
+      }
       
       hoveredConnection.value = currentMapData.value.connections.find(conn =>
         isConnectionHit(conn, imagePos.x, imagePos.y)
@@ -2927,7 +3222,7 @@ export default {
         }
       }
       
-      animate()
+      render()
     }
     
     const toggleAdmin = async () => {
@@ -3018,19 +3313,13 @@ export default {
     
     // Handle POI copy operation
     const handlePOICopy = async () => {
-      console.log('handlePOICopy called', { 
-        draggedItem: draggedItem.value, 
-        dragItemType: dragItemType.value 
-      })
       
       if (!draggedItem.value) {
-        console.log('No dragged item')
         return
       }
       
       // Accept both 'poi' and 'customPoi' types for copying
       if (dragItemType.value !== 'poi' && dragItemType.value !== 'customPoi') {
-        console.log('Invalid drag item type:', dragItemType.value)
         return
       }
       
@@ -3458,7 +3747,6 @@ export default {
     }
     
     const deletePOI = async (poiIdOrRef) => {
-      console.log('deletePOI called with:', poiIdOrRef)
       
       // Create context for entity type inference
       const context = {
@@ -3468,27 +3756,17 @@ export default {
       
       // Parse the entity reference (supports both legacy ID and new {type, id} format)
       const entityRef = parseEntityReference(poiIdOrRef, context)
-      console.log('Parsed entity reference:', entityRef)
       
       // First, check if we're deleting the currently selected POI
       // This is the most reliable way to determine if it's custom or regular
       let isCustomPOI = false
       let poiToDelete = null
       
-      console.log('Current selectedPOI:', selectedPOI.value)
       
       if (selectedPOI.value && isSameEntity(selectedPOI.value.id, entityRef.numericId || entityRef.id)) {
         // We're deleting the selected POI - trust its is_custom flag
         isCustomPOI = selectedPOI.value.is_custom === true
         poiToDelete = selectedPOI.value
-        console.log('Deleting selected POI:', {
-          id: entityRef.id,
-          selectedPOI_id: selectedPOI.value.id,
-          name: poiToDelete.name,
-          is_custom: isCustomPOI,
-          type: poiToDelete.type,
-          entityType: entityRef.type || (isCustomPOI ? EntityTypes.CUSTOM_POI : EntityTypes.POI)
-        })
       }
       
       if (!poiToDelete) {
@@ -3496,26 +3774,13 @@ export default {
         if (entityRef.type === EntityTypes.CUSTOM_POI) {
           isCustomPOI = true
           poiToDelete = findEntityById(customPOIs.value, entityRef.numericId || entityRef.id)
-          if (poiToDelete) {
-            console.log('Found in customPOIs by type:', {
-              id: poiToDelete.id,
-              name: poiToDelete.name,
-              entityType: EntityTypes.CUSTOM_POI
-            })
-          }
         } else if (entityRef.type === EntityTypes.POI) {
           isCustomPOI = false
           poiToDelete = findEntityById(currentMapData.value?.pois || [], entityRef.numericId || entityRef.id)
           if (poiToDelete) {
-            console.log('Found in regular POIs by type:', {
-              id: poiToDelete.id,
-              name: poiToDelete.name,
-              entityType: EntityTypes.POI
-            })
           }
         } else {
           // No type specified - use the safer approach of checking regular POIs first
-          console.log('No entity type specified, checking both collections...')
           
           // IMPORTANT: We should NOT be here if we're deleting from the POI popup
           // The POI popup should always have selectedPOI set
@@ -3527,12 +3792,6 @@ export default {
             poiToDelete = findEntityById(dbMapData.value[map.id].pois, entityRef.numericId || entityRef.id)
             if (poiToDelete) {
               isCustomPOI = false
-              console.log('Found in regular POIs (fallback):', {
-                id: poiToDelete.id,
-                name: poiToDelete.name,
-                type: poiToDelete.type,
-                created_by: poiToDelete.created_by
-              })
             }
           }
           
@@ -3541,20 +3800,10 @@ export default {
             poiToDelete = findEntityById(customPOIs.value, entityRef.numericId || entityRef.id)
             if (poiToDelete) {
               isCustomPOI = true
-              console.log('Found in customPOIs (fallback):', {
-                id: poiToDelete.id,
-                name: poiToDelete.name,
-                is_custom: true
-              })
             }
           }
           
-          // Log all POIs with this ID for debugging
           const searchId = entityRef.numericId || entityRef.id
-          console.log('All custom POIs with ID', searchId + ':', 
-            customPOIs.value.filter(p => isSameEntity(p.id, searchId)))
-          console.log('All regular POIs with ID', searchId + ':', 
-            dbMapData.value[maps.value[selectedMapIndex.value]?.id]?.pois?.filter(p => isSameEntity(p.id, searchId)) || [])
         }
       }
       
@@ -3567,8 +3816,6 @@ export default {
       if (isCustomPOI) {
         // Handle custom POI deletion
         const actualId = poiToDelete.id
-        console.log('Custom POI deletion - actualId:', actualId)
-        console.log('Selected POI for comparison:', selectedPOI.value?.id)
         
         const confirmed = await showConfirm(
           'Delete Custom POI',
@@ -3617,10 +3864,6 @@ export default {
       }
       
       try {
-        console.log('Regular POI deletion:', {
-          id: poiToDelete.id,
-          name: poiToDelete.name
-        })
         
         // Show confirmation dialog
         const confirmed = await showConfirm(
@@ -4014,7 +4257,6 @@ export default {
         if (!response.ok) throw new Error('Failed to fetch POI data')
         const fullPoiData = await response.json()
         
-        console.log('Full POI data for loot proposal:', fullPoiData)
         
         lootProposalDialog.value.poi = fullPoiData
         lootProposalDialog.value.visible = true
@@ -4607,7 +4849,6 @@ export default {
     watch(adminPopupPosition, (newVal) => {
     }, { deep: true })
     
-    let animationFrameId = null
     let globalContextMenuHandler = null
     let globalMouseUpHandler = null
     
@@ -4623,10 +4864,8 @@ export default {
       }
     }
     
-    const animate = () => {
-      render()
-      animationFrameId = requestAnimationFrame(animate)
-    }
+    // Animation loop removed - render is now called only when needed
+    // This improves performance and prevents Vue reactivity warnings
     
     const loginWithGoogle = () => {
       window.location.href = '/auth/google';
@@ -4658,7 +4897,6 @@ export default {
     
     // Handle avatar loading error by falling back to Google avatar
     const handleAvatarError = async (event) => {
-      console.log('Avatar failed to load:', event.target.src)
       
       // Don't retry if we're already trying the Google picture
       if (event.target.src.includes('/api/user/google-picture') || 
@@ -4669,7 +4907,6 @@ export default {
       
       // Check if this is a missing custom avatar
       if (user.value?.avatarState?.hasCustomAvatar && user.value?.avatarState?.avatarMissing) {
-        console.log('Custom avatar is missing, attempting recovery...')
         
         // Try to recover the avatar
         try {
@@ -4679,7 +4916,6 @@ export default {
           })
           
           if (recoverResponse.ok) {
-            console.log('Avatar recovery initiated, refreshing auth status...')
             // Wait a moment for file to be written
             setTimeout(() => {
               checkAuthStatus()
@@ -4697,7 +4933,6 @@ export default {
         if (response.ok) {
           const data = await response.json()
           if (data.picture && event.target.src !== data.picture) {
-            console.log('Falling back to Google picture:', data.picture)
             event.target.src = data.picture
             
             // Update the user object to prevent retry loops
@@ -4768,7 +5003,7 @@ export default {
     const allCustomPOIs = ref([])
     
     const loadAllCustomPOIs = async () => {
-      if (!isAuthenticated.value) return
+      if (!isAuthenticated.value || user.value?.isBanned) return
       
       try {
         const response = await fetch('/api/custom-pois')
@@ -4874,6 +5109,62 @@ export default {
         }
       } catch (error) {
         console.error('Error loading custom POIs:', error)
+      }
+    }
+    
+    // Animation frame ID for proposal animations
+    let proposalAnimationId = null
+    
+    // Start or stop proposal animation based on whether there are proposals
+    const updateProposalAnimation = () => {
+      const hasAnimatedPOIs = filteredPOIs.value.some(poi => 
+        poi.is_proposal || 
+        poi.has_pending_proposal || 
+        poi.has_move_proposal || 
+        poi.has_edit_proposal || 
+        poi.has_deletion_proposal ||
+        poi.has_loot_proposal ||
+        poi.has_npc_proposal ||
+        (poi.is_custom && poi.is_shared_active) // Include shared POIs
+      )
+      
+      if (hasAnimatedPOIs && !proposalAnimationId) {
+        // Start animation loop
+        const animateProposals = () => {
+          render()
+          proposalAnimationId = requestAnimationFrame(animateProposals)
+        }
+        animateProposals()
+      } else if (!hasAnimatedPOIs && proposalAnimationId) {
+        // Stop animation loop
+        cancelAnimationFrame(proposalAnimationId)
+        proposalAnimationId = null
+      }
+    }
+    
+    // Load pending proposals for the current map
+    const loadPendingProposals = async () => {
+      if (!maps.value[selectedMapIndex.value]?.id) return
+      
+      try {
+        const response = await fetch('/api/change-proposals')
+        if (response.ok) {
+          const allProposals = await response.json()
+          
+          // Filter proposals for current map that are POI-related
+          const currentMapId = maps.value[selectedMapIndex.value].id
+          pendingProposals.value = allProposals.filter(proposal => 
+            proposal.status === 'pending' &&
+            proposal.map_id === currentMapId &&
+            ['add_poi', 'edit_poi', 'move_poi', 'delete_poi', 'change_loot', 'edit_npc'].includes(proposal.change_type)
+          )
+          
+          
+          render() // Re-render to show proposals if filter is active
+          updateProposalAnimation() // Start animation if needed
+        }
+      } catch (error) {
+        console.error('Error loading pending proposals:', error)
       }
     }
     
@@ -4987,6 +5278,11 @@ export default {
         error('Failed to save custom POI')
       }
     }
+    
+    // Save filter settings whenever they change
+    watch(mapFilters, () => {
+      saveFilterSettings()
+    }, { deep: true })
     
     // Load custom POIs when map changes
     watch(() => maps.value[selectedMapIndex.value]?.id, () => {
@@ -5110,27 +5406,20 @@ export default {
       if ((preview.changeType === 'edit_poi' || preview.changeType === 'move_poi' || preview.changeType === 'delete_poi' || preview.changeType === 'change_loot')) {
         // Use target_id from preview or current data
         const poiId = preview.targetId || current?.id || proposed.poi_id
-        console.log('Looking for POI with ID:', poiId, 'in map data')
         if (poiId && currentMapData.value.pois) {
           // Look for the POI in the current map data
           originalPOI = currentMapData.value.pois.find(p => p.id === poiId)
-          console.log('Found original POI:', originalPOI)
         } else {
-          console.log('No POI ID or no map data available')
         }
       } else if (preview.changeType === 'edit_npc') {
         // For edit_npc, we need to use the npcid from the proposed_data, not the target_id
         // target_id is the npcs.id, but POIs reference npcs.npcid
         const npcId = preview.proposed?.npcid || preview.current?.npcid
-        console.log('Looking for POI with NPC ID (npcid):', npcId, 'target_id was:', preview.targetId)
-        console.log('Available POIs:', currentMapData.value.pois?.map(p => ({ id: p.id, name: p.name, npc_id: p.npc_id })))
         
         if (npcId && currentMapData.value.pois) {
           // Look for the POI that has this NPC
           originalPOI = currentMapData.value.pois.find(p => p.npc_id === npcId)
-          console.log('Found POI with NPC:', originalPOI)
         } else {
-          console.log('No NPC ID or no map data available')
         }
       }
       
@@ -5140,16 +5429,6 @@ export default {
         const x = proposed.x || current?.x || originalPOI?.x
         const y = proposed.y || current?.y || originalPOI?.y
         
-        console.log('Delete POI coordinates:', {
-          proposed_x: proposed.x,
-          proposed_y: proposed.y,
-          current_x: current?.x,
-          current_y: current?.y,
-          original_x: originalPOI?.x,
-          original_y: originalPOI?.y,
-          final_x: x,
-          final_y: y
-        })
         
         const poiData = {
           id: preview.changeType === 'delete_poi' ? `proposal_delete_${preview.proposalId}` : `proposal_loot_${preview.proposalId}`,
@@ -5181,7 +5460,6 @@ export default {
         // Process the POI to set up icon properly
         const displayPOI = processPOI(poiData)
         
-        console.log('Processed POI for preview:', displayPOI)
         
         proposalPreviewPOIs.value.push(displayPOI)
         
@@ -5189,7 +5467,6 @@ export default {
         setTimeout(() => {
           selectedPOI.value = displayPOI
           const canvasCoords = imageToCanvas(displayPOI.x, displayPOI.y)
-          console.log('Canvas coordinates for delete POI:', canvasCoords)
           
           popupPosition.value = { 
             x: canvasCoords.x, 
@@ -5331,30 +5608,38 @@ export default {
     
     // Add visibility change listener to refresh map data when returning to the page
     // This handles cases where proposals are deleted on the account page
-    const handleVisibilityChange = () => {
-      if (!document.hidden && maps.value[selectedMapIndex.value]?.id) {
-        // Check if we need to refresh due to returning from account page
-        const shouldRefresh = sessionStorage.getItem('refresh_on_return')
-        if (shouldRefresh) {
-          sessionStorage.removeItem('refresh_on_return')
-        }
+    const handleVisibilityChange = async () => {
+      if (!document.hidden) {
+        // Always check auth status when tab becomes visible to get latest warnings
+        await checkAuthStatus()
         
-        // Only refresh if we have a database-connected map
-        const currentMap = maps.value[selectedMapIndex.value]
-        if (currentMap.id && dbMapData.value[currentMap.id]) {
-          // Force reload map data to get updated proposal status
-          delete dbMapData.value[currentMap.id]
-          loadSelectedMap()
+        if (maps.value[selectedMapIndex.value]?.id) {
+          // Check if we need to refresh due to returning from account page
+          const shouldRefresh = sessionStorage.getItem('refresh_on_return')
+          if (shouldRefresh) {
+            sessionStorage.removeItem('refresh_on_return')
+          }
           
-          // Also clear any proposal preview POIs that might be lingering
-          proposalPreviewPOIs.value = []
-          proposalPreviewConnection.value = null
+          // Only refresh if we have a database-connected map
+          const currentMap = maps.value[selectedMapIndex.value]
+          if (currentMap.id && dbMapData.value[currentMap.id]) {
+            // Force reload map data to get updated proposal status
+            delete dbMapData.value[currentMap.id]
+            loadSelectedMap()
+            
+            // Also clear any proposal preview POIs that might be lingering
+            proposalPreviewPOIs.value = []
+            proposalPreviewConnection.value = null
+          }
         }
       }
     }
     
     // Handle focus changes to clear proposal preview when returning to tab
-    const handleFocusChange = () => {
+    const handleFocusChange = async () => {
+      // Always check auth status when window gains focus to get latest warnings
+      await checkAuthStatus()
+      
       // Clear any lingering proposal preview when tab gains focus
       if (proposalPreviewPOIs.value.length > 0 || proposalPreviewConnection.value) {
         proposalPreviewPOIs.value = []
@@ -5380,6 +5665,7 @@ export default {
       
       // Admin mode state is now handled by the watcher on adminModeEnabled
       
+      
       // Check if we need to show a POI proposal preview BEFORE loading maps
       const proposalPreviewData = sessionStorage.getItem('poi_proposal_preview')
       if (proposalPreviewData) {
@@ -5393,6 +5679,9 @@ export default {
       // Load all POIs for global search
       await loadAllPOIsForSearch()
       
+      // Load POI types for filtering
+      await loadPOITypes()
+      
       // Start XP polling if authenticated
       if (isAuthenticated.value) {
         xpPollingInterval = setInterval(pollForXPUpdates, 30000) // Poll every 30 seconds
@@ -5400,10 +5689,8 @@ export default {
         await loadAllCustomPOIs()
       }
       
-      // Start animation loop for pending proposals
-      let animationFrameId = null
-      const animatePendingProposals = () => {
-        // Check if we need to refresh POIs
+      // Check periodically for POI refresh requests
+      const checkForPOIRefresh = () => {
         const shouldRefreshPOIs = sessionStorage.getItem('refresh_pois')
         if (shouldRefreshPOIs) {
           sessionStorage.removeItem('refresh_pois')
@@ -5415,21 +5702,9 @@ export default {
             }
           }
         }
-        
-        // Check if any POIs have pending proposals
-        const hasPendingProposals = currentMapData.value.pois.some(poi => poi.has_pending_proposal)
-        
-        if (hasPendingProposals) {
-          render()
-          animationFrameId = requestAnimationFrame(animatePendingProposals)
-        } else {
-          // Check again in 1 second
-          setTimeout(() => {
-            animationFrameId = requestAnimationFrame(animatePendingProposals)
-          }, 1000)
-        }
       }
-      animatePendingProposals()
+      // Check every second for refresh requests
+      setInterval(checkForPOIRefresh, 1000)
       
       initCanvas(mapCanvas.value)
       resizeCanvas()
@@ -5509,10 +5784,6 @@ export default {
       // Now handle the POI proposal preview if we have one
       if (proposalPreviewData) {
         const preview = JSON.parse(proposalPreviewData)
-        console.log('Proposal preview data received:', preview)
-        console.log('Preview mapId:', preview.mapId)
-        console.log('Preview proposed.map_id:', preview.proposed?.map_id)
-        console.log('Preview current.map_id:', preview.current?.map_id)
         sessionStorage.removeItem('poi_proposal_preview')
         
         // Find and select the map - check top-level mapId first, then fall back to nested values
@@ -5567,7 +5838,7 @@ export default {
       }
       
       // Start animation loop for glowing effects
-      animate()
+      render()
     })
     
     onUnmounted(() => {
@@ -5586,11 +5857,11 @@ export default {
       if (globalMouseUpHandler) {
         window.removeEventListener('mouseup', globalMouseUpHandler)
       }
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId)
-      }
       if (xpPollingInterval) {
         clearInterval(xpPollingInterval)
+      }
+      if (proposalAnimationId) {
+        cancelAnimationFrame(proposalAnimationId)
       }
       // Clear any hidden custom POI when component unmounts
       hiddenCustomPOIId.value = null
@@ -5638,6 +5909,318 @@ export default {
     
     // Current map ID
     const currentMapId = computed(() => maps.value[selectedMapIndex.value]?.id || null)
+    
+    // Check if proposals source is active
+    const proposalsSourceActive = computed(() => mapFilters.value.sources.includes('proposals'))
+    
+    // Check if selected POI has any proposal
+    const selectedPOIHasProposal = computed(() => {
+      if (!selectedPOI.value) return false
+      return selectedPOI.value.is_proposal || 
+             selectedPOI.value.has_pending_proposal || 
+             selectedPOI.value.has_move_proposal || 
+             selectedPOI.value.has_edit_proposal || 
+             selectedPOI.value.has_deletion_proposal || 
+             selectedPOI.value.has_loot_proposal ||
+             selectedPOI.value.has_npc_proposal
+    })
+    
+    // All POIs for display (before filtering)
+    const allDisplayPOIs = computed(() => {
+      const pois = []
+      
+      // Add official POIs
+      if (currentMapData.value && currentMapData.value.pois) {
+        currentMapData.value.pois.forEach(poi => {
+          pois.push({
+            ...poi,
+            is_custom: false,
+            is_proposal: false
+          })
+        })
+      }
+      
+      // Check if proposals are visible
+      const proposalsVisible = mapFilters.value.sources.includes('proposals')
+      
+      // Add custom POIs
+      if (isAuthenticated.value) {
+        
+        customPOIs.value.forEach(poi => {
+          // Custom POIs with status 'pending' are actually proposals
+          const isPending = poi.status === 'pending' && proposalsVisible
+          
+          // Find the corresponding proposal for this custom POI if it's pending
+          let proposalData = null
+          if (isPending && pendingProposals.value.length > 0) {
+            // Look for a proposal that matches this custom POI
+            proposalData = pendingProposals.value.find(proposal => 
+              proposal.change_type === 'add_poi' && 
+              proposal.proposed_data.is_custom && 
+              proposal.proposer_id === user.value?.id &&
+              proposal.proposed_data.name === poi.name &&
+              proposal.proposed_data.x === poi.x &&
+              proposal.proposed_data.y === poi.y
+            )
+          }
+          
+          // Only add proposal data if proposals are visible
+          if (proposalsVisible && isPending) {
+            pois.push({
+              ...poi,
+              is_custom: true,
+              is_proposal: true,
+              proposal_type: 'add',
+              has_pending_proposal: true,
+              // Add proposal voting data if found
+              proposer_name: proposalData?.proposer_name || poi.owner_name,
+              proposer_id: proposalData?.proposer_id || poi.user_id,
+              upvotes: proposalData?.upvotes || (isPending ? 1 : 0),
+              downvotes: proposalData?.downvotes || 0,
+              user_vote: proposalData?.user_vote || (isPending && poi.user_id === user.value?.id ? 1 : 0),
+              vote_score: proposalData?.vote_score || (proposalData ? proposalData.upvotes - proposalData.downvotes : (isPending ? 1 : 0)),
+              proposal_id: proposalData?.id,
+              notes: proposalData?.notes || poi.notes
+            })
+          } else {
+            // Add as regular custom POI without proposal data
+            pois.push({
+              ...poi,
+              is_custom: true,
+              is_proposal: false,
+              proposal_type: null,
+              has_pending_proposal: false
+            })
+          }
+        })
+      }
+      
+      // Add proposal POIs when proposals filter is active
+      if (proposalsVisible && pendingProposals.value.length > 0) {
+        // First, mark existing POIs that have proposals
+        pendingProposals.value.forEach(proposal => {
+          if (proposal.change_type === 'move_poi') {
+            // Mark existing POI as having a move proposal
+            // For custom POIs, we need to check if the proposal's target_type is 'custom_poi'
+            const poiToMove = pois.find(p => {
+              if (proposal.target_type === 'custom_poi') {
+                return p.is_custom && p.id === proposal.target_id
+              }
+              return !p.is_custom && p.id === proposal.target_id
+            })
+            if (poiToMove) {
+              poiToMove.has_move_proposal = true
+              poiToMove.move_proposal = {
+                id: proposal.id,
+                proposed_x: proposal.proposed_data.x,
+                proposed_y: proposal.proposed_data.y,
+                proposer_name: proposal.proposer_name,
+                proposer_id: proposal.proposer_id,
+                upvotes: proposal.upvotes,
+                downvotes: proposal.downvotes,
+                user_vote: proposal.user_vote,
+                notes: proposal.notes
+              }
+            }
+          } else if (proposal.change_type === 'edit_poi') {
+            // Mark existing POI as having an edit proposal
+            const poiToEdit = pois.find(p => {
+              if (proposal.target_type === 'custom_poi') {
+                return p.is_custom && p.id === proposal.target_id
+              }
+              return !p.is_custom && p.id === proposal.target_id
+            })
+            if (poiToEdit) {
+              poiToEdit.has_edit_proposal = true
+              poiToEdit.edit_proposal = {
+                id: proposal.id,
+                proposed_data: proposal.proposed_data,
+                current_data: proposal.current_data,
+                proposer_name: proposal.proposer_name,
+                proposer_id: proposal.proposer_id,
+                upvotes: proposal.upvotes,
+                downvotes: proposal.downvotes,
+                user_vote: proposal.user_vote,
+                notes: proposal.notes
+              }
+            }
+          } else if (proposal.change_type === 'delete_poi') {
+            // Mark existing POI as having a deletion proposal
+            const poiToDelete = pois.find(p => {
+              if (proposal.target_type === 'custom_poi') {
+                return p.is_custom && p.id === proposal.target_id
+              }
+              return !p.is_custom && p.id === proposal.target_id
+            })
+            if (poiToDelete) {
+              poiToDelete.has_deletion_proposal = true
+              poiToDelete.deletion_proposal = {
+                id: proposal.id,
+                proposer_name: proposal.proposer_name,
+                proposer_id: proposal.proposer_id,
+                upvotes: proposal.upvotes,
+                downvotes: proposal.downvotes,
+                user_vote: proposal.user_vote,
+                notes: proposal.notes
+              }
+            }
+          } else if (proposal.change_type === 'change_loot') {
+            // Mark existing POI as having a loot change proposal
+            const poiWithLootChange = pois.find(p => !p.is_custom && p.id === proposal.target_id)
+            if (poiWithLootChange) {
+              poiWithLootChange.has_loot_proposal = true
+              poiWithLootChange.loot_proposal = {
+                id: proposal.id,
+                proposal_id: proposal.id,
+                proposed_data: proposal.proposed_data,
+                current_data: proposal.current_data,
+                proposer_name: proposal.proposer_name,
+                proposer_id: proposal.proposer_id,
+                upvotes: proposal.upvotes,
+                downvotes: proposal.downvotes,
+                user_vote: proposal.user_vote,
+                notes: proposal.notes
+              }
+            }
+          } else if (proposal.change_type === 'edit_npc') {
+            // For NPC edit proposals, we need to find POIs at the given coordinates
+            // The API provides poi_x and poi_y for the affected POI
+            const affectedPOIs = pois.filter(p => 
+              p.x === proposal.poi_x && 
+              p.y === proposal.poi_y && 
+              p.npc_id // Must have an NPC
+            )
+            affectedPOIs.forEach(poi => {
+              poi.has_npc_proposal = true
+              poi.npc_proposal = {
+                id: proposal.id,
+                proposal_id: proposal.id,
+                proposed_data: proposal.proposed_data,
+                current_data: proposal.current_data,
+                proposer_name: proposal.proposer_name,
+                proposer_id: proposal.proposer_id,
+                upvotes: proposal.upvotes,
+                downvotes: proposal.downvotes,
+                user_vote: proposal.user_vote,
+                notes: proposal.notes
+              }
+            })
+          }
+        })
+        
+        // Add new POI proposals when proposals are included in sources
+        if (mapFilters.value.sources.includes('proposals')) {
+          pendingProposals.value.forEach(proposal => {
+            if (proposal.change_type === 'add_poi') {
+              const proposedData = proposal.proposed_data
+              pois.push({
+                id: `proposal_${proposal.id}`,
+                name: proposedData.name,
+                description: proposedData.description,
+                x: proposedData.x,
+                y: proposedData.y,
+                type_id: proposedData.type_id,
+                poi_type_id: proposedData.type_id,
+                npc_id: proposedData.npc_id,
+                item_id: proposedData.item_id,
+                icon: proposal.type_icon_value,
+                icon_type: proposal.type_icon_type,
+                is_custom: proposedData.is_custom || false,
+                is_proposal: true,
+                proposal_type: 'add',
+                proposal_data: proposedData,
+                proposer_name: proposal.proposer_name,
+                proposer_id: proposal.proposer_id,
+                upvotes: proposal.upvotes,
+                downvotes: proposal.downvotes,
+                user_vote: proposal.user_vote,
+                vote_score: proposal.vote_score || (proposal.upvotes - proposal.downvotes),
+                proposal_id: proposal.id,
+                notes: proposal.notes,
+                npc_name: proposal.npc_name,
+                item_name: proposal.item_name
+              })
+            }
+          })
+        }
+      }
+      
+      // Debug: Log POI structure if we have any
+      if (pois.length > 0 && !window._poiStructureLogged) {
+        window._poiStructureLogged = true
+      }
+      
+      return pois
+    })
+    
+    // Filtered POIs based on current filters
+    const filteredPOIs = computed(() => {
+      let pois = [...allDisplayPOIs.value]
+      
+      // Search filter
+      if (mapFilters.value.search) {
+        const search = mapFilters.value.search.toLowerCase()
+        pois = pois.filter(poi => 
+          poi.name.toLowerCase().includes(search) ||
+          (poi.description && poi.description.toLowerCase().includes(search))
+        )
+      }
+      
+      // Type filter - only filter if we have POI types loaded and not all types are selected
+      if (poiTypes.value.length > 0 && 
+          mapFilters.value.types.length < poiTypes.value.length) {
+        // If no types are selected (empty array), filter out all POIs
+        if (mapFilters.value.types.length === 0) {
+          pois = []
+        } else {
+          // Otherwise, filter by selected types
+          pois = pois.filter(poi => {
+            // Check multiple possible field names for POI type
+            const typeId = poi.poi_type_id || poi.type_id || poi.poi_type?.id
+            return mapFilters.value.types.includes(typeId)
+          })
+        }
+      }
+      
+      // Source filter - now handles multiple selections
+      if (!mapFilters.value.sources || mapFilters.value.sources.length === 0) {
+        // No sources selected, show no POIs
+        return []
+      }
+      
+      pois = pois.filter(poi => {
+        // Check each source type
+        if (mapFilters.value.sources.includes('official') && !poi.is_custom && !poi.is_proposal) {
+          return true
+        }
+        // For custom POIs, distinguish between owned and shared
+        if (poi.is_custom && !poi.is_proposal) {
+          const isOwned = poi.user_id === user.value?.id
+          const isShared = poi.is_shared_active || (!isOwned && poi.is_custom)
+          
+          if (mapFilters.value.sources.includes('custom') && isOwned) {
+            return true
+          }
+          if (mapFilters.value.sources.includes('shared') && isShared) {
+            return true
+          }
+        }
+        if (mapFilters.value.sources.includes('proposals') && (
+          poi.is_proposal || 
+          poi.has_move_proposal || 
+          poi.has_edit_proposal || 
+          poi.has_deletion_proposal || 
+          poi.has_loot_proposal ||
+          poi.has_npc_proposal ||
+          poi.has_pending_proposal
+        )) {
+          return true
+        }
+        return false
+      })
+      
+      return pois
+    })
     
     // Handle POI selection from search
     const handlePOISelected = async (poi) => {
@@ -5703,6 +6286,180 @@ export default {
         
         render()
       }, 100)
+    }
+    
+    // Handle warning acknowledgment
+    const handleWarningAcknowledged = (warningId) => {
+      acknowledgeWarning(warningId)
+    }
+    
+    // Handle filter updates
+    const handleFilterUpdate = (filters) => {
+      mapFilters.value = { ...filters }
+      
+      // Hide proposed location if switching away from proposal view
+      if (!filters.sources.includes('proposals')) {
+        showingProposedLocation.value = false
+        activeProposedLocation.value = null
+      }
+      
+      render() // Re-render with new filters
+      updateProposalAnimation() // Update animation state
+    }
+    
+    // Load POI types
+    const loadPOITypes = async () => {
+      try {
+        const response = await fetch('/api/poi-types')
+        if (response.ok) {
+          const types = await response.json()
+          poiTypes.value = types
+          // Initialize filter with all types selected
+          if (mapFilters.value.types.length === 0) {
+            mapFilters.value.types = types.map(t => t.id)
+          }
+        }
+      } catch (error) {
+        console.error('Error loading POI types:', error)
+      }
+    }
+    
+    // Proposal popup handlers
+    const handleProposalPopupClose = () => {
+      selectedPOI.value = null
+      showingProposedLocation.value = false
+      activeProposedLocation.value = null
+      render() // Re-render to clear any proposed location visuals
+    }
+    
+    const handleProposalVoteSuccess = ({ proposalId, vote }) => {
+      // Update the proposal data with new vote
+      const updateProposalVote = (proposal) => {
+        if (proposal.id === proposalId || proposal.proposal_id === proposalId) {
+          // Update vote counts based on previous vote
+          const prevVote = proposal.user_vote || 0
+          if (prevVote === 1) proposal.upvotes--
+          if (prevVote === -1) proposal.downvotes--
+          if (vote === 1) proposal.upvotes++
+          if (vote === -1) proposal.downvotes++
+          proposal.user_vote = vote
+          proposal.vote_score = proposal.upvotes - proposal.downvotes
+        }
+      }
+      
+      // Update in pendingProposals
+      pendingProposals.value.forEach(updateProposalVote)
+      
+      // Update in selectedPOI if it's a proposal
+      if (selectedPOI.value?.is_proposal) {
+        updateProposalVote(selectedPOI.value)
+      } else if (selectedPOI.value) {
+        // Update in POI proposal data
+        if (selectedPOI.value.move_proposal) updateProposalVote(selectedPOI.value.move_proposal)
+        if (selectedPOI.value.edit_proposal) updateProposalVote(selectedPOI.value.edit_proposal)
+        if (selectedPOI.value.deletion_proposal) updateProposalVote(selectedPOI.value.deletion_proposal)
+      }
+      
+      render() // Re-render to update visual indicators
+    }
+    
+    const handleToggleProposedLocation = (show) => {
+      // This function is no longer used since we handle toggling via direct clicks
+      // Keeping it for backwards compatibility with ProposalPopup component
+    }
+    
+    // Open Ko-fi donation widget
+    const openKofiWidget = () => {
+      // Simply open the Ko-fi page in a new tab
+      // The floating chat widget has too many cross-origin restrictions to work reliably
+      window.open('https://ko-fi.com/valorith', '_blank')
+    }
+    
+    const handleProposalWithdrawn = (proposalId) => {
+      try {
+        // Find the proposal that was withdrawn
+        const withdrawnProposal = pendingProposals.value.find(p => p.id === proposalId)
+        
+        // Store the current selected POI to clear its flags
+        const currentSelectedPOI = selectedPOI.value
+        
+        // Remove from pending proposals
+        pendingProposals.value = pendingProposals.value.filter(p => p.id !== proposalId)
+      
+      // Update POI states based on the withdrawn proposal type
+      if (withdrawnProposal) {
+        // Get all POIs - official POIs from currentMapData and custom POIs
+        const officialPOIs = currentMapData.value?.pois || []
+        const allPOIs = [...officialPOIs, ...customPOIs.value]
+        
+        if (withdrawnProposal.change_type === 'move_poi') {
+          const poi = allPOIs.find(p => 
+            (withdrawnProposal.target_type === 'custom_poi' ? p.is_custom && p.id === withdrawnProposal.target_id : !p.is_custom && p.id === withdrawnProposal.target_id)
+          )
+          if (poi) {
+            delete poi.has_move_proposal
+            delete poi.move_proposal
+          }
+        } else if (withdrawnProposal.change_type === 'edit_poi') {
+          const poi = allPOIs.find(p => 
+            (withdrawnProposal.target_type === 'custom_poi' ? p.is_custom && p.id === withdrawnProposal.target_id : !p.is_custom && p.id === withdrawnProposal.target_id)
+          )
+          if (poi) {
+            delete poi.has_edit_proposal
+            delete poi.edit_proposal
+          }
+        } else if (withdrawnProposal.change_type === 'delete_poi') {
+          const poi = allPOIs.find(p => 
+            (withdrawnProposal.target_type === 'custom_poi' ? p.is_custom && p.id === withdrawnProposal.target_id : !p.is_custom && p.id === withdrawnProposal.target_id)
+          )
+          if (poi) {
+            delete poi.has_deletion_proposal
+            delete poi.deletion_proposal
+          }
+        } else if (withdrawnProposal.change_type === 'change_loot') {
+          const poi = allPOIs.find(p => !p.is_custom && p.id === withdrawnProposal.target_id)
+          if (poi) {
+            delete poi.has_loot_proposal
+            delete poi.loot_proposal
+          }
+        } else if (withdrawnProposal.change_type === 'edit_npc') {
+          // For NPC proposals, find POIs at the given coordinates
+          const affectedPOIs = allPOIs.filter(p => 
+            p.x === withdrawnProposal.poi_x && 
+            p.y === withdrawnProposal.poi_y && 
+            p.npc_id
+          )
+          affectedPOIs.forEach(poi => {
+            delete poi.has_npc_proposal
+            delete poi.npc_proposal
+          })
+        }
+      }
+      
+      // Also clear flags from the currently selected POI if it matches
+      if (currentSelectedPOI) {
+        delete currentSelectedPOI.has_move_proposal
+        delete currentSelectedPOI.move_proposal
+        delete currentSelectedPOI.has_edit_proposal
+        delete currentSelectedPOI.edit_proposal
+        delete currentSelectedPOI.has_deletion_proposal
+        delete currentSelectedPOI.deletion_proposal
+        delete currentSelectedPOI.has_loot_proposal
+        delete currentSelectedPOI.loot_proposal
+        delete currentSelectedPOI.has_npc_proposal
+        delete currentSelectedPOI.npc_proposal
+      }
+      
+      // Close the proposal popup
+      selectedPOI.value = null
+      
+      // Re-render the map to update visual indicators
+      render()
+      // Stop the proposal animation if no more proposals
+      updateProposalAnimation()
+      } catch (error) {
+        console.error('Error handling proposal withdrawal:', error)
+      }
     }
     
     return {
@@ -5779,11 +6536,14 @@ export default {
       // Auth related
       user,
       isAuthenticated,
+      loading,
+      unacknowledgedWarnings,
       loginWithGoogle,
       showUserDropdown,
       toggleUserDropdown,
       handleLogout,
       handleAvatarError,
+      handleWarningAcknowledged,
       // Custom POI related
       contextMenuVisible,
       contextMenuPosition,
@@ -5805,6 +6565,11 @@ export default {
       allSearchablePOIs,
       currentMapId,
       handlePOISelected,
+      // Filters
+      poiTypes,
+      allDisplayPOIs,
+      mapFilters,
+      handleFilterUpdate,
       // Proposal preview loading
       isLoadingProposalPreview,
       // Proposal dialogs
@@ -5823,7 +6588,17 @@ export default {
       handleItemSelected,
       handleNPCSelected,
       handlePOINavigation,
-      isTransitioningMap
+      isTransitioningMap,
+      // Proposal popup handlers
+      handleProposalPopupClose,
+      handleProposalVoteSuccess,
+      handleToggleProposedLocation,
+      handleProposalWithdrawn,
+      // Computed properties for proposals
+      proposalsSourceActive,
+      selectedPOIHasProposal,
+      // Ko-fi widget
+      openKofiWidget
     }
   }
 }
@@ -6415,6 +7190,81 @@ export default {
   
   .proposal-btn {
     font-size: 1rem !important;
+  }
+}
+
+/* Hide default Ko-fi button */
+.floatingchat-container-wrap {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+/* Custom Ko-fi Donation Button */
+.custom-kofi-button {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  z-index: 999;
+  background: #4a7c59;
+  border: 2px solid #FFD700;
+  border-radius: 50px;
+  padding: 12px 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  animation: subtlePulse 3s ease-in-out infinite;
+}
+
+@keyframes subtlePulse {
+  0%, 100% {
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  }
+  50% {
+    box-shadow: 0 4px 20px rgba(255, 215, 0, 0.4);
+  }
+}
+
+.custom-kofi-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 215, 0, 0.5);
+  background: #5a8c69;
+}
+
+.custom-kofi-button:active {
+  transform: translateY(0);
+}
+
+.kofi-logo {
+  width: 40px;
+  height: 40px;
+  transition: transform 0.3s ease;
+}
+
+.custom-kofi-button:hover .kofi-logo {
+  transform: rotate(10deg) scale(1.1);
+}
+
+.kofi-text {
+  color: #FFD700;
+  font-weight: bold;
+  font-size: 14px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+}
+
+/* Hide text on small screens */
+@media (max-width: 768px) {
+  .kofi-text {
+    display: none;
+  }
+  
+  .custom-kofi-button {
+    padding: 12px;
+    left: 15px;
+    bottom: 15px;
   }
 }
 </style>

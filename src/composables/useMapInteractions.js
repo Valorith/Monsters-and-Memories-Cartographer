@@ -392,7 +392,7 @@ export function useMapInteractions(scale, offsetX, offsetY) {
   }
   
   // Draw POI on canvas
-  const drawPOI = (ctx, poi, isDragging = false) => {
+  const drawPOI = (ctx, poi, isDragging = false, showLabels = true, proposalsVisible = true) => {
     const canvasPos = imageToCanvas(poi.x, poi.y)
     const isHovered = hoveredPOI.value?.id === poi.id
     
@@ -429,44 +429,134 @@ export function useMapInteractions(scale, offsetX, offsetY) {
       ctx.scale(1.1, 1.1)
     }
     
-    // Draw pending proposal indicator
-    if (poi.has_pending_proposal) {
-      // Draw a subtle pulsing orange glow beneath the icon
+    // Draw proposal indicator for proposed POIs
+    if (poi.is_proposal) {
+      // Draw a blue pulsing glow for proposals
       const pulseTime = Date.now() / 1000
-      const pulseIntensity = 0.4 + Math.sin(pulseTime * 3) * 0.2  // Gentle pulsing between 0.2 and 0.6 opacity
+      const pulseIntensity = 0.5 + Math.sin(pulseTime * 3) * 0.3  // Pulsing between 0.2 and 0.8 opacity
       
       ctx.save()
       
-      // Create elliptical glow beneath the icon
-      const glowWidth = iconSize * 0.8
-      const glowHeight = iconSize * 0.3
-      const glowOffsetY = iconSize / 2 + 5  // Position below the icon
+      // Create circular glow around the icon
+      const glowRadius = iconSize * 0.8
       
       // Draw the glow using radial gradient
-      const gradient = ctx.createRadialGradient(0, glowOffsetY, 0, 0, glowOffsetY, glowWidth)
-      gradient.addColorStop(0, `rgba(255, 152, 0, ${pulseIntensity})`)
-      gradient.addColorStop(0.5, `rgba(255, 152, 0, ${pulseIntensity * 0.5})`)
-      gradient.addColorStop(1, 'rgba(255, 152, 0, 0)')
+      const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, glowRadius)
+      gradient.addColorStop(0, `rgba(30, 144, 255, ${pulseIntensity})`)
+      gradient.addColorStop(0.5, `rgba(30, 144, 255, ${pulseIntensity * 0.6})`)
+      gradient.addColorStop(1, 'rgba(30, 144, 255, 0)')
       
       ctx.fillStyle = gradient
-      ctx.globalAlpha = 0.8
-      
-      // Draw elliptical glow
       ctx.beginPath()
-      ctx.ellipse(0, glowOffsetY, glowWidth, glowHeight, 0, 0, Math.PI * 2)
+      ctx.arc(0, 0, glowRadius, 0, Math.PI * 2)
       ctx.fill()
       
-      // Add small proposal icon below
-      ctx.font = 'bold 14px sans-serif'
-      ctx.fillStyle = '#ff9800'
+      // Draw dashed ring for proposals
+      ctx.strokeStyle = `rgba(30, 144, 255, ${0.5 + pulseIntensity * 0.3})`
+      ctx.lineWidth = 2
+      ctx.setLineDash([5, 5])
+      ctx.beginPath()
+      ctx.arc(0, 0, iconSize / 2 + 5, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.setLineDash([])
+      
+      ctx.restore()
+      
+      // Make the icon slightly transparent for proposals
+      ctx.globalAlpha = 0.8
+    }
+    
+    // Draw pending proposal indicator (for existing POIs with proposals)
+    // Only show if proposals are visible in the filter
+    if (proposalsVisible && (poi.has_pending_proposal || poi.has_move_proposal || poi.has_edit_proposal || poi.has_deletion_proposal || poi.has_loot_proposal || poi.has_npc_proposal)) {
+      // Draw a blue pulsing glow for all proposals (same as new proposals)
+      const pulseTime = Date.now() / 1000
+      const pulseIntensity = 0.5 + Math.sin(pulseTime * 3) * 0.3  // Pulsing between 0.2 and 0.8 opacity
+      
+      ctx.save()
+      
+      // Create circular glow around the icon
+      const glowRadius = iconSize * 0.8
+      
+      // Draw the glow using radial gradient
+      const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, glowRadius)
+      gradient.addColorStop(0, `rgba(30, 144, 255, ${pulseIntensity})`)
+      gradient.addColorStop(0.5, `rgba(30, 144, 255, ${pulseIntensity * 0.6})`)
+      gradient.addColorStop(1, 'rgba(30, 144, 255, 0)')
+      
+      ctx.fillStyle = gradient
+      ctx.beginPath()
+      ctx.arc(0, 0, glowRadius, 0, Math.PI * 2)
+      ctx.fill()
+      
+      // Draw dashed ring for proposals
+      ctx.strokeStyle = `rgba(30, 144, 255, ${0.5 + pulseIntensity * 0.3})`
+      ctx.lineWidth = 2
+      ctx.setLineDash([5, 5])
+      ctx.beginPath()
+      ctx.arc(0, 0, iconSize / 2 + 5, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.setLineDash([])
+      
+      
+      ctx.restore()
+    }
+    
+    // Draw shared POI indicator
+    if (poi.is_custom && poi.is_shared_active) {
+      // Draw a purple/violet pulsing glow for shared POIs
+      const pulseTime = Date.now() / 1000
+      const pulseIntensity = 0.4 + Math.sin(pulseTime * 2.5) * 0.2  // Gentler pulsing between 0.2 and 0.6 opacity
+      
+      ctx.save()
+      
+      // Create circular glow around the icon
+      const glowRadius = iconSize * 0.7
+      
+      // Draw the glow using radial gradient with purple/violet color
+      const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, glowRadius)
+      gradient.addColorStop(0, `rgba(147, 112, 219, ${pulseIntensity})`)  // Medium purple
+      gradient.addColorStop(0.5, `rgba(147, 112, 219, ${pulseIntensity * 0.6})`)
+      gradient.addColorStop(1, 'rgba(147, 112, 219, 0)')
+      
+      ctx.fillStyle = gradient
+      ctx.beginPath()
+      ctx.arc(0, 0, glowRadius, 0, Math.PI * 2)
+      ctx.fill()
+      
+      // Draw dotted ring for shared POIs
+      ctx.strokeStyle = `rgba(147, 112, 219, ${0.4 + pulseIntensity * 0.3})`
+      ctx.lineWidth = 2
+      ctx.setLineDash([3, 6])  // Smaller dots for shared POIs
+      ctx.beginPath()
+      ctx.arc(0, 0, iconSize / 2 + 5, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.setLineDash([])
+      
+      ctx.restore()
+    }
+    
+    // Draw deletion proposal indicator
+    if (poi.has_deletion_proposal) {
+      ctx.save()
+      
+      // Draw red X over the POI
+      const crossSize = iconSize * 0.7
+      ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)'
+      ctx.lineWidth = 4
+      ctx.lineCap = 'round'
+      
+      // Add shadow for visibility
       ctx.shadowColor = 'rgba(0, 0, 0, 0.8)'
       ctx.shadowBlur = 4
-      ctx.shadowOffsetX = 1
-      ctx.shadowOffsetY = 1
-      ctx.globalAlpha = pulseIntensity + 0.3  // Ensure icon is visible
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText('📋', 0, glowOffsetY + glowHeight + 10)
+      
+      // Draw X
+      ctx.beginPath()
+      ctx.moveTo(-crossSize / 2, -crossSize / 2)
+      ctx.lineTo(crossSize / 2, crossSize / 2)
+      ctx.moveTo(crossSize / 2, -crossSize / 2)
+      ctx.lineTo(-crossSize / 2, crossSize / 2)
+      ctx.stroke()
       
       ctx.restore()
     }

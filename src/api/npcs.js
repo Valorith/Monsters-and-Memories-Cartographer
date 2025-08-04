@@ -189,7 +189,6 @@ export default function npcsRouter(app, validateCSRF) {
   app.put('/api/npcs/batch/update', validateCSRF, requireAdmin, async (req, res) => {
     const { npcs } = req.body;
   
-  console.log('Received NPCs for batch update:', JSON.stringify(npcs, null, 2));
   
   if (!Array.isArray(npcs) || npcs.length === 0) {
     return res.status(400).json({ error: 'No NPCs to update' });

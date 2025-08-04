@@ -38,6 +38,9 @@ export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {
           cp.*,
           COALESCE(u.nickname, u.name) as proposer_name,
           COALESCE(a.nickname, a.name) as admin_name,
+          dt.name as proposer_donation_tier_name,
+          dt.badge_color as proposer_donation_tier_color,
+          dt.badge_icon as proposer_donation_tier_icon,
           (SELECT COUNT(*) FROM change_proposal_votes WHERE proposal_id = cp.id AND vote = 1) as upvotes,
           (SELECT COUNT(*) FROM change_proposal_votes WHERE proposal_id = cp.id AND vote = -1) as downvotes,
           CASE 
@@ -151,6 +154,7 @@ export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {
         FROM change_proposals cp
         LEFT JOIN users u ON cp.proposer_id = u.id
         LEFT JOIN users a ON cp.admin_id = a.id
+        LEFT JOIN donation_tiers dt ON u.current_donation_tier_id = dt.id
         WHERE cp.status = 'pending'
         ORDER BY cp.created_at DESC
       `, [req.user?.id]);

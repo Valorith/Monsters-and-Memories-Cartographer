@@ -5,6 +5,7 @@ const isAuthenticated = computed(() => !!user.value);
 const isAdmin = computed(() => user.value?.is_admin || false);
 const adminModeEnabled = ref(false);
 const loading = ref(true);
+const unacknowledgedWarnings = ref([]);
 
 export function useAuth() {
   const checkAuthStatus = async () => {
@@ -13,10 +14,13 @@ export function useAuth() {
       const data = await response.json();
       
       if (data.banned) {
-        // User is banned - show alert and clear auth
-        alert(`Your account has been banned.\nReason: ${data.banReason || 'No reason provided'}`);
-        user.value = null;
+        // User is banned - set user with ban info
+        user.value = {
+          isBanned: true,
+          banReason: data.banReason || null
+        };
         adminModeEnabled.value = false;
+        unacknowledgedWarnings.value = [];
       } else if (data.authenticated) {
         user.value = {
           ...data.user,
@@ -24,9 +28,12 @@ export function useAuth() {
           displayName: data.user.displayName || data.user.name
         };
         adminModeEnabled.value = data.adminModeEnabled || false;
+        // Set unacknowledged warnings
+        unacknowledgedWarnings.value = data.unacknowledgedWarnings || [];
       } else {
         user.value = null;
         adminModeEnabled.value = false;
+        unacknowledgedWarnings.value = [];
       }
     } catch (error) {
       console.error('Error checking auth status:', error);
@@ -51,13 +58,20 @@ export function useAuth() {
     }
   };
 
+  const acknowledgeWarning = (warningId) => {
+    // Remove the acknowledged warning from the list
+    unacknowledgedWarnings.value = unacknowledgedWarnings.value.filter(w => w.id !== warningId);
+  };
+
   return {
     user,
     isAuthenticated,
     isAdmin,
     adminModeEnabled,
     loading,
+    unacknowledgedWarnings,
     checkAuthStatus,
-    logout
+    logout,
+    acknowledgeWarning
   };
 }
