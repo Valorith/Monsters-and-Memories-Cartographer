@@ -164,25 +164,4 @@ export default function itemsRouter(app, validateCSRF) {
     }
   });
 
-  // GET /api/items/:id - Get single item
-  app.get('/api/items/:id', async (req, res) => {
-    try {
-      const { id } = req.params;
-      
-      const result = await pool.query(
-        'SELECT * FROM items WHERE id = $1',
-        [id]
-      );
-      
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Item not found' });
-      }
-      
-      res.json(result.rows[0]);
-    } catch (error) {
-      console.error('Error fetching item:', error);
-      res.status(500).json({ error: 'Failed to fetch item' });
-    }
-  });
-
 }

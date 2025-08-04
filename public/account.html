@@ -5413,7 +5413,9 @@
         }
         
         // Load user donations
-        loadUserDonations();
+        if (typeof loadUserDonations === 'function') {
+          loadUserDonations();
+        }
         
       } catch (error) {
         console.error('Error loading profile stats:', error);
@@ -5502,7 +5504,9 @@
       
       // Load voting data when voting tab is shown
       if (tabName === 'voting') {
-        loadVotingData();
+        if (typeof loadVotingData === 'function') {
+          loadVotingData();
+        }
       }
       
       // Load user donations when profile tab is shown
@@ -10488,7 +10492,7 @@
           const start = (proposalsPage - 1) * proposalsPerPage;
           const paginated = filtered.slice(start, start + proposalsPerPage);
           
-          displayProposals(paginated);
+          await displayProposals(paginated);
           updateProposalsPagination(totalPages);
           
           // Update voting tab with pending count
@@ -10503,7 +10507,7 @@
       }
     }
 
-    function toggleProposalExpansion(proposalId, event) {
+    async function toggleProposalExpansion(proposalId, event) {
       // Prevent event bubbling
       if (event) {
         event.stopPropagation();
@@ -10522,7 +10526,7 @@
       const totalPages = Math.ceil(filtered.length / proposalsPerPage);
       const start = (proposalsPage - 1) * proposalsPerPage;
       const paginated = filtered.slice(start, start + proposalsPerPage);
-      displayProposals(paginated);
+      await displayProposals(paginated);
     }
     
     function getFilteredProposals() {
@@ -10600,7 +10604,7 @@
       return sorted;
     }
     
-    function sortProposals() {
+    async function sortProposals() {
       // Update the sort filter
       proposalFilters.sort = document.getElementById('proposal-sort').value;
       
@@ -10613,11 +10617,11 @@
       const start = (proposalsPage - 1) * proposalsPerPage;
       const paginated = filtered.slice(start, start + proposalsPerPage);
       
-      displayProposals(paginated);
+      await displayProposals(paginated);
       updateProposalsPagination(totalPages);
     }
 
-    function displayProposals(proposals) {
+    async function displayProposals(proposals) {
       const list = document.getElementById('proposals-list');
       
       if (proposals.length === 0) {
@@ -10633,7 +10637,8 @@
         return;
       }
       
-      list.innerHTML = proposals.map(proposal => {
+      // Generate HTML for each proposal asynchronously
+      const proposalHtmlPromises = proposals.map(async proposal => {
         const isOwner = proposal.proposer_id === currentUser.id;
         const isExpanded = expandedProposalId === proposal.id;
         const voteClass = proposal.user_vote === 1 ? 'upvote active' : 
@@ -10675,7 +10680,7 @@
             
             ${isExpanded ? `
               <div class="proposal-content" style="margin-top: 1rem;">
-                ${getProposalDescription(proposal)}
+                ${await getProposalDescription(proposal)}
               </div>
               
               <div class="proposal-voting">
@@ -10712,8 +10717,7 @@
             ` : ''}
           </div>
         `;
-      }).join('');
-    }
+      });
 
     function renderVoteStatusBar(proposal) {
       const voteScore = proposal.vote_score || 0;
@@ -10769,6 +10773,65 @@
         </div>
       `;
     }
+      
+      // Wait for all proposal HTML to be generated
+      const proposalHtmlArray = await Promise.all(proposalHtmlPromises);
+      
+      // Set the innerHTML with all the generated HTML
+      list.innerHTML = proposalHtmlArray.join('');
+    }
+    
+    // Caches for NPC and Item names
+    const npcsCache = {};
+    const itemsCache = {};
+    
+    // Function to get NPC name with caching
+    async function getNPCName(npcId) {
+      if (!npcId) return null;
+      
+      if (npcsCache[npcId]) {
+        return npcsCache[npcId];
+      }
+      
+      try {
+        const response = await fetch(`/api/npcs/${npcId}`);
+        if (response.ok) {
+          const npc = await response.json();
+          if (npc && npc.name) {
+            npcsCache[npcId] = npc.name;
+            return npc.name;
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to fetch NPC name:', error);
+      }
+      
+      return null;
+    }
+    
+    // Function to get Item name with caching
+    async function getItemName(itemId) {
+      if (!itemId) return null;
+      
+      if (itemsCache[itemId]) {
+        return itemsCache[itemId];
+      }
+      
+      try {
+        const response = await fetch(`/api/items/${itemId}`);
+        if (response.ok) {
+          const item = await response.json();
+          if (item && item.name) {
+            itemsCache[itemId] = item.name;
+            return item.name;
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to fetch item name:', error);
+      }
+      
+      return null;
+    }
     
     function getProposalTitle(proposal) {
       const data = proposal.proposed_data;
@@ -10797,7 +10860,7 @@
       }
     }
 
-    function getProposalDescription(proposal) {
+    async function getProposalDescription(proposal) {
       const data = proposal.proposed_data;
       const current = proposal.current_data;
       let desc = '';
@@ -10860,15 +10923,19 @@
             desc += `<p><strong>Type:</strong> ${currentTypeName}</p>`;
           }
           if (data.npc_id !== undefined && data.npc_id !== current?.npc_id) {
-            const currentNPC = current?.npc_id ? 
-                              (proposal.current_npc_name || 'NPC #' + current.npc_id) : 
-                              'None';
+            let currentNPC = 'None';
+            if (current?.npc_id) {
+              const npcName = await getNPCName(current.npc_id);
+              currentNPC = npcName || proposal.current_npc_name || `NPC #${current.npc_id}`;
+            }
             desc += `<p><strong>NPC:</strong> ${currentNPC}</p>`;
           }
           if (data.item_id !== undefined && data.item_id !== current?.item_id) {
-            const currentItem = current?.item_id ? 
-                               (proposal.current_item_name || 'Item #' + current.item_id) : 
-                               'None';
+            let currentItem = 'None';
+            if (current?.item_id) {
+              const itemName = await getItemName(current.item_id);
+              currentItem = itemName || proposal.current_item_name || `Item #${current.item_id}`;
+            }
             desc += `<p><strong>Item:</strong> ${currentItem}</p>`;
           }
           
@@ -10887,10 +10954,20 @@
             desc += `<p><strong>Type:</strong> ${proposal.type_name || 'Type #' + data.type_id}</p>`;
           }
           if (data.npc_id !== undefined && data.npc_id !== current?.npc_id) {
-            desc += `<p><strong>NPC:</strong> ${data.npc_id ? (proposal.npc_name || 'NPC #' + data.npc_id) : 'None'}</p>`;
+            let proposedNPC = 'None';
+            if (data.npc_id) {
+              const npcName = await getNPCName(data.npc_id);
+              proposedNPC = npcName || proposal.npc_name || `NPC #${data.npc_id}`;
+            }
+            desc += `<p><strong>NPC:</strong> ${proposedNPC}</p>`;
           }
           if (data.item_id !== undefined && data.item_id !== current?.item_id) {
-            desc += `<p><strong>Item:</strong> ${data.item_id ? (proposal.item_name || 'Item #' + data.item_id) : 'None'}</p>`;
+            let proposedItem = 'None';
+            if (data.item_id) {
+              const itemName = await getItemName(data.item_id);
+              proposedItem = itemName || proposal.item_name || `Item #${data.item_id}`;
+            }
+            desc += `<p><strong>Item:</strong> ${proposedItem}</p>`;
           }
           
           desc += `</div>`;
@@ -11722,7 +11799,7 @@
             
             <div style="background: #2d2d2d; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
               <h4>Proposal Details</h4>
-              ${getProposalDescription(proposal)}
+              ${await getProposalDescription(proposal)}
               ${proposal.notes ? `<p><strong>Notes:</strong> ${proposal.notes}</p>` : ''}
             </div>
             

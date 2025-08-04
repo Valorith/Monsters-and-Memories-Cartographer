@@ -66,7 +66,7 @@ export default function npcsRouter(app, validateCSRF) {
     }
   });
 
-  // GET /api/npcs/:npcid - Get single NPC by npcid
+  // GET /api/npcs/:npcid - Get single NPC by npcid or id
   app.get('/api/npcs/:npcid', async (req, res) => {
     try {
       const { npcid } = req.params;
@@ -87,7 +87,7 @@ export default function npcsRouter(app, validateCSRF) {
         FROM npcs n
         LEFT JOIN LATERAL unnest(n.loot) AS loot_id ON true
         LEFT JOIN items i ON i.id = loot_id
-        WHERE n.npcid = $1
+        WHERE n.npcid = $1 OR n.id = $1
         GROUP BY n.id, n.npcid
       `, [npcid]);
       

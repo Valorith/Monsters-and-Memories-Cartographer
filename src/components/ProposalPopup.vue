@@ -73,9 +73,9 @@
           <div class="changes-list">
             <div v-for="(change, key) in getEditChanges()" :key="key" class="change-item">
               <span class="change-field">{{ formatFieldName(key) }}:</span>
-              <span class="change-old">{{ change.old || '(empty)' }}</span>
+              <span class="change-old">{{ formatChangeValue(key, change.old) || '(empty)' }}</span>
               <span class="change-arrow">→</span>
-              <span class="change-new">{{ change.new }}</span>
+              <span class="change-new">{{ formatChangeValue(key, change.new) }}</span>
             </div>
           </div>
         </template>
@@ -116,9 +116,9 @@
           <div class="changes-list">
             <div v-for="(change, key) in getNPCEditChanges()" :key="key" class="change-item">
               <span class="change-field">{{ formatFieldName(key) }}:</span>
-              <span class="change-old">{{ change.old || '(empty)' }}</span>
+              <span class="change-old">{{ formatChangeValue(key, change.old) || '(empty)' }}</span>
               <span class="change-arrow">→</span>
-              <span class="change-new">{{ change.new }}</span>
+              <span class="change-new">{{ formatChangeValue(key, change.new) }}</span>
             </div>
           </div>
         </template>
@@ -464,6 +464,79 @@ export default {
       emit('toggle-proposed-location', showingProposedLocation.value)
     }
     
+    const npcsCache = ref({})
+    const itemsCache = ref({})
+    
+    const formatChangeValue = (field, value) => {
+      if (value === null || value === undefined || value === '') {
+        return '(empty)'
+      }
+      
+      // Format NPC ID to name
+      if (field === 'npc_id' && value) {
+        if (npcsCache.value[value]) {
+          return npcsCache.value[value]
+        }
+        
+        // Fetch NPC name asynchronously
+        fetch(`/api/npcs/${value}`)
+          .then(response => {
+            if (!response.ok) {
+              console.warn(`NPC with ID ${value} not found`);
+              return null;
+            }
+            return response.json();
+          })
+          .then(npc => {
+            if (npc && npc.name) {
+              npcsCache.value[value] = npc.name;
+            } else {
+              // If NPC not found, show a fallback
+              npcsCache.value[value] = `NPC #${value}`;
+            }
+          })
+          .catch(error => {
+            console.warn('Failed to fetch NPC name:', error);
+            npcsCache.value[value] = `NPC #${value}`;
+          })
+        
+        return `NPC #${value}` // Return ID with prefix while loading
+      }
+      
+      // Format Item ID to name
+      if (field === 'item_id' && value) {
+        if (itemsCache.value[value]) {
+          return itemsCache.value[value]
+        }
+        
+        // Fetch item name asynchronously
+        fetch(`/api/items/${value}`)
+          .then(response => {
+            if (!response.ok) {
+              console.warn(`Item with ID ${value} not found`);
+              return null;
+            }
+            return response.json();
+          })
+          .then(item => {
+            if (item && item.name) {
+              itemsCache.value[value] = item.name;
+            } else {
+              // If item not found, show a fallback
+              itemsCache.value[value] = `Item #${value}`;
+            }
+          })
+          .catch(error => {
+            console.warn('Failed to fetch item name:', error);
+            itemsCache.value[value] = `Item #${value}`;
+          })
+        
+        return `Item #${value}` // Return ID with prefix while loading
+      }
+      
+      return value
+    }
+
     const vote = async (voteValue) => {
       if (isVoting.value) return
       
@@ -539,6 +612,9 @@ export default {
       getEditChanges,
       getNPCEditChanges,
       formatFieldName,
+      formatChangeValue,
+      npcsCache,
+      itemsCache,
       toggleProposedLocation,
       vote
     }
