@@ -406,8 +406,9 @@
     <MapFilters
       v-if="!isLoading"
       :poi-types="poiTypes"
-      :all-pois="allDisplayPOIs"
+      :all-pois="allUnfilteredPOIs"
       :is-authenticated="isAuthenticated"
+      :current-user-id="user?.id"
       :initial-filters="mapFilters"
       @update-filters="handleFilterUpdate"
     />
@@ -5925,6 +5926,85 @@ export default {
              selectedPOI.value.has_npc_proposal
     })
     
+    // All POIs unfiltered (for counting in filters)
+    const allUnfilteredPOIs = computed(() => {
+      const pois = []
+      
+      // Add official POIs
+      if (currentMapData.value && currentMapData.value.pois) {
+        currentMapData.value.pois.forEach(poi => {
+          pois.push({
+            ...poi,
+            is_custom: false,
+            is_proposal: false
+          })
+        })
+      }
+      
+      // Add ALL custom POIs (including pending ones)
+      if (isAuthenticated.value) {
+        customPOIs.value.forEach(poi => {
+          const isPending = poi.status === 'pending'
+          
+          // Find the corresponding proposal for this custom POI if it's pending
+          let proposalData = null
+          if (isPending && pendingProposals.value.length > 0) {
+            proposalData = pendingProposals.value.find(proposal => 
+              proposal.change_type === 'add_poi' && 
+              proposal.proposed_data.is_custom && 
+              proposal.proposer_id === user.value?.id &&
+              proposal.proposed_data.name === poi.name &&
+              proposal.proposed_data.x === poi.x &&
+              proposal.proposed_data.y === poi.y
+            )
+          }
+          
+          pois.push({
+            ...poi,
+            is_custom: true,
+            is_proposal: isPending,
+            proposal_type: isPending ? 'add' : null,
+            has_pending_proposal: isPending,
+            proposer_name: proposalData?.proposer_name || poi.owner_name,
+            proposer_id: proposalData?.proposer_id || poi.user_id,
+            upvotes: proposalData?.upvotes || (isPending ? 1 : 0),
+            downvotes: proposalData?.downvotes || 0,
+            user_vote: proposalData?.user_vote || (isPending && poi.user_id === user.value?.id ? 1 : 0),
+            vote_score: proposalData?.vote_score || (proposalData ? proposalData.upvotes - proposalData.downvotes : (isPending ? 1 : 0)),
+            proposal_id: proposalData?.id,
+            notes: proposalData?.notes || poi.notes
+          })
+        })
+      }
+      
+      // Add ALL proposal POIs
+      if (pendingProposals.value.length > 0) {
+        pendingProposals.value.forEach(proposal => {
+          if (proposal.change_type === 'add_poi' && !proposal.proposed_data.is_custom) {
+            const proposedPoi = {
+              ...proposal.proposed_data,
+              id: `proposal-${proposal.id}`,
+              is_proposal: true,
+              is_custom: false,
+              proposal_type: 'add',
+              proposal_id: proposal.id,
+              proposer_name: proposal.proposer_name,
+              proposer_id: proposal.proposer_id,
+              upvotes: proposal.upvotes,
+              downvotes: proposal.downvotes,
+              user_vote: proposal.user_vote,
+              vote_score: proposal.vote_score,
+              notes: proposal.notes,
+              has_pending_proposal: true
+            }
+            pois.push(proposedPoi)
+          }
+        })
+      }
+      
+      return pois
+    })
+    
     // All POIs for display (before filtering)
     const allDisplayPOIs = computed(() => {
       const pois = []
@@ -6567,6 +6647,7 @@ export default {
       handlePOISelected,
       // Filters
       poiTypes,
+      allUnfilteredPOIs,
       allDisplayPOIs,
       mapFilters,
       handleFilterUpdate,

@@ -91,6 +91,7 @@
                 @change="updateFilters"
               />
               <span class="checkbox-label">Official POIs</span>
+              <span class="source-count">{{ getSourceCount('official') }}</span>
             </label>
             <label class="checkbox-option" :class="{ selected: selectedSources.includes('custom') }" v-if="isAuthenticated">
               <input 
@@ -100,6 +101,7 @@
                 @change="updateFilters"
               />
               <span class="checkbox-label">My Custom POIs</span>
+              <span class="source-count">{{ getSourceCount('custom') }}</span>
             </label>
             <label class="checkbox-option" :class="{ selected: selectedSources.includes('shared') }" v-if="isAuthenticated">
               <input 
@@ -109,6 +111,7 @@
                 @change="updateFilters"
               />
               <span class="checkbox-label">Shared POIs</span>
+              <span class="source-count">{{ getSourceCount('shared') }}</span>
             </label>
             <label class="checkbox-option" :class="{ selected: selectedSources.includes('proposals') }">
               <input 
@@ -118,6 +121,7 @@
                 @change="updateFilters"
               />
               <span class="checkbox-label">Proposals</span>
+              <span class="source-count">{{ getSourceCount('proposals') }}</span>
             </label>
           </div>
         </div>
@@ -189,6 +193,10 @@ export default {
     isAuthenticated: {
       type: Boolean,
       default: false
+    },
+    currentUserId: {
+      type: Number,
+      default: null
     },
     initialFilters: {
       type: Object,
@@ -282,12 +290,66 @@ export default {
     }
     
     const getTypeCount = (typeId) => {
-      // Check both poi_type_id and type_id fields as different POIs might use different field names
-      return props.allPois.filter(poi => 
-        poi.poi_type_id === typeId || 
-        poi.type_id === typeId ||
-        poi.poi_type?.id === typeId
-      ).length
+      // Filter POIs by selected sources first, then count by type
+      return props.allPois.filter(poi => {
+        // First check if POI matches selected sources
+        let sourceMatch = false
+        
+        if (selectedSources.value.includes('official') && !poi.is_custom && !poi.is_proposal) {
+          sourceMatch = true
+        }
+        if (selectedSources.value.includes('custom') && poi.is_custom && poi.user_id === props.currentUserId) {
+          // Include my custom POIs, but only if they're not being shown as proposals
+          if (!poi.is_proposal || !selectedSources.value.includes('proposals')) {
+            sourceMatch = true
+          }
+        }
+        if (selectedSources.value.includes('shared') && poi.is_custom && !poi.is_proposal && poi.user_id !== props.currentUserId && poi.is_shared_active === true) {
+          sourceMatch = true
+        }
+        if (selectedSources.value.includes('proposals') && poi.is_proposal) {
+          sourceMatch = true
+        }
+        
+        // If source doesn't match, exclude this POI
+        if (!sourceMatch) return false
+        
+        // Then check if POI matches the type
+        return poi.poi_type_id === typeId || 
+               poi.type_id === typeId ||
+               poi.poi_type?.id === typeId
+      }).length
+    }
+    
+    const getSourceCount = (source) => {
+      switch(source) {
+        case 'official':
+          // Official POIs are those without created_by_user_id and not custom
+          return props.allPois.filter(poi => !poi.is_custom && !poi.is_proposal).length
+        
+        case 'custom':
+          // My custom POIs are those I created (including pending ones)
+          return props.allPois.filter(poi => 
+            poi.is_custom && 
+            poi.user_id === props.currentUserId
+          ).length
+        
+        case 'shared':
+          // Shared POIs are custom POIs shared with me (not created by me)
+          return props.allPois.filter(poi => 
+            poi.is_custom && 
+            !poi.is_proposal && 
+            poi.user_id !== props.currentUserId &&
+            poi.is_shared_active === true
+          ).length
+        
+        case 'proposals':
+          // Proposals are POIs marked as proposals
+          return props.allPois.filter(poi => poi.is_proposal).length
+        
+        default:
+          return 0
+      }
     }
     
     const savePreset = () => {
@@ -402,6 +464,7 @@ export default {
       toggleAllTypes,
       toggleAllSources,
       getTypeCount,
+      getSourceCount,
       savePreset,
       loadPreset,
       deletePreset
@@ -669,6 +732,17 @@ export default {
   text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
 }
 
+.source-count {
+  font-size: 0.875rem;
+  color: #7fb069;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 0.2rem 0.4rem;
+  border-radius: 10px;
+  font-weight: 600;
+  margin-left: auto;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+}
+
 .source-options,
 .connection-options {
   display: flex;
@@ -687,6 +761,7 @@ export default {
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
+  position: relative;
 }
 
 .radio-option:hover,
@@ -712,6 +787,7 @@ export default {
   font-size: 0.875rem;
   color: #e0e0e0;
   cursor: pointer;
+  flex: 1;
 }
 
 .presets-list {
