@@ -213,7 +213,14 @@ export default {
       let count = 0
       if (searchQuery.value) count++
       if (selectedTypes.value.length > 0 && selectedTypes.value.length < props.poiTypes.length) count++
-      if (selectedSources.value.length !== 2 || selectedSources.value.includes('proposals')) count++
+      // Check if sources differ from default (official, custom, shared - without proposals)
+      const defaultSources = ['official', 'custom', 'shared']
+      const hasNonDefaultSources = selectedSources.value.length !== defaultSources.length || 
+                                   selectedSources.value.some(s => !defaultSources.includes(s)) ||
+                                   !selectedSources.value.includes('official') || 
+                                   !selectedSources.value.includes('custom') || 
+                                   !selectedSources.value.includes('shared')
+      if (hasNonDefaultSources) count++
       if (!showConnections.value) count++
       if (!showLabels.value) count++
       return count
