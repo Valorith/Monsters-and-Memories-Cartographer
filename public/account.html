@@ -2025,6 +2025,19 @@
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     }
     
+    .proposal-card.collapsed {
+      padding: 1rem 1.5rem;
+    }
+    
+    .proposal-card.collapsed .proposal-header {
+      margin-bottom: 0;
+    }
+    
+    .proposal-card.expanded {
+      border-color: #4a7c59;
+      box-shadow: 0 4px 12px rgba(74, 124, 89, 0.3);
+    }
+    
     .proposal-header {
       display: flex;
       justify-content: space-between;
@@ -3563,6 +3576,20 @@
                 <option value="all">All Proposals</option>
                 <option value="mine">My Proposals</option>
                 <option value="not-voted" selected>Not Voted</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label>Sort by:</label>
+              <select id="proposal-sort" class="form-control" onchange="sortProposals()">
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="score-high">Highest Score</option>
+                <option value="score-low">Lowest Score</option>
+                <option value="votes-most">Most Votes</option>
+                <option value="votes-least">Least Votes</option>
+                <option value="name-asc">Name (A-Z)</option>
+                <option value="name-desc">Name (Z-A)</option>
+                <option value="type">Type</option>
               </select>
             </div>
             <div class="filter-group">
@@ -9732,10 +9759,12 @@
     let currentProposals = [];
     let proposalFilters = {
       type: '',
-      show: 'not-voted'  // Default to showing only proposals not voted on
+      show: 'not-voted',  // Default to showing only proposals not voted on
+      sort: 'newest'      // Default sort by newest first
     };
     let proposalsPage = 1;
-    const proposalsPerPage = 2;
+    const proposalsPerPage = 10;
+    let expandedProposalId = null;
 
     async function loadVotingData() {
       // Load voting statistics
@@ -9796,10 +9825,12 @@
       // Reset filters to default values
       document.getElementById('proposal-type-filter').value = '';
       document.getElementById('proposal-filter').value = 'not-voted';
+      document.getElementById('proposal-sort').value = 'newest';
       
       // Update the filter state
       proposalFilters.type = '';
       proposalFilters.show = 'not-voted';
+      proposalFilters.sort = 'newest';
       
       // Clear active card states
       clearActiveCards();
@@ -9870,18 +9901,7 @@
           currentProposals = proposals;
           
           // Apply filters
-          let filtered = proposals;
-          
-          if (proposalFilters.type) {
-            filtered = filtered.filter(p => p.change_type === proposalFilters.type);
-          }
-          
-          if (proposalFilters.show === 'mine') {
-            filtered = filtered.filter(p => p.proposer_id === currentUser.id);
-          } else if (proposalFilters.show === 'not-voted') {
-            // Only show proposals the user hasn't voted on
-            filtered = filtered.filter(p => !p.user_vote || p.user_vote === 0);
-          }
+          const filtered = getFilteredProposals();
           
           // Pagination
           const totalPages = Math.ceil(filtered.length / proposalsPerPage);
@@ -9903,6 +9923,120 @@
       }
     }
 
+    function toggleProposalExpansion(proposalId, event) {
+      // Prevent event bubbling
+      if (event) {
+        event.stopPropagation();
+      }
+      
+      // If clicking on the already expanded proposal, collapse it
+      if (expandedProposalId === proposalId) {
+        expandedProposalId = null;
+      } else {
+        // Otherwise, expand the clicked proposal and collapse others
+        expandedProposalId = proposalId;
+      }
+      
+      // Re-render the proposals list
+      const filtered = getFilteredProposals();
+      const totalPages = Math.ceil(filtered.length / proposalsPerPage);
+      const start = (proposalsPage - 1) * proposalsPerPage;
+      const paginated = filtered.slice(start, start + proposalsPerPage);
+      displayProposals(paginated);
+    }
+    
+    function getFilteredProposals() {
+      let filtered = currentProposals;
+      
+      if (proposalFilters.type) {
+        filtered = filtered.filter(p => p.change_type === proposalFilters.type);
+      }
+      
+      if (proposalFilters.show === 'mine') {
+        filtered = filtered.filter(p => p.proposer_id === currentUser.id);
+      } else if (proposalFilters.show === 'not-voted') {
+        filtered = filtered.filter(p => !p.user_vote || p.user_vote === 0);
+      }
+      
+      // Apply sorting
+      filtered = sortProposalsList(filtered);
+      
+      return filtered;
+    }
+    
+    function sortProposalsList(proposals) {
+      const sorted = [...proposals]; // Create a copy to avoid mutating the original
+      
+      switch (proposalFilters.sort) {
+        case 'newest':
+          sorted.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+          break;
+        case 'oldest':
+          sorted.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+          break;
+        case 'score-high':
+          sorted.sort((a, b) => (b.vote_score || 0) - (a.vote_score || 0));
+          break;
+        case 'score-low':
+          sorted.sort((a, b) => (a.vote_score || 0) - (b.vote_score || 0));
+          break;
+        case 'votes-most':
+          sorted.sort((a, b) => {
+            const totalVotesA = (a.upvotes || 0) + (a.downvotes || 0);
+            const totalVotesB = (b.upvotes || 0) + (b.downvotes || 0);
+            return totalVotesB - totalVotesA;
+          });
+          break;
+        case 'votes-least':
+          sorted.sort((a, b) => {
+            const totalVotesA = (a.upvotes || 0) + (a.downvotes || 0);
+            const totalVotesB = (b.upvotes || 0) + (b.downvotes || 0);
+            return totalVotesA - totalVotesB;
+          });
+          break;
+        case 'name-asc':
+          sorted.sort((a, b) => {
+            const nameA = getProposalTitle(a).toLowerCase();
+            const nameB = getProposalTitle(b).toLowerCase();
+            return nameA.localeCompare(nameB);
+          });
+          break;
+        case 'name-desc':
+          sorted.sort((a, b) => {
+            const nameA = getProposalTitle(a).toLowerCase();
+            const nameB = getProposalTitle(b).toLowerCase();
+            return nameB.localeCompare(nameA);
+          });
+          break;
+        case 'type':
+          sorted.sort((a, b) => {
+            const typeA = formatChangeType(a.change_type);
+            const typeB = formatChangeType(b.change_type);
+            return typeA.localeCompare(typeB);
+          });
+          break;
+      }
+      
+      return sorted;
+    }
+    
+    function sortProposals() {
+      // Update the sort filter
+      proposalFilters.sort = document.getElementById('proposal-sort').value;
+      
+      // Reset to first page when sorting changes
+      proposalsPage = 1;
+      
+      // Re-render the proposals with new sort
+      const filtered = getFilteredProposals();
+      const totalPages = Math.ceil(filtered.length / proposalsPerPage);
+      const start = (proposalsPage - 1) * proposalsPerPage;
+      const paginated = filtered.slice(start, start + proposalsPerPage);
+      
+      displayProposals(paginated);
+      updateProposalsPagination(totalPages);
+    }
+
     function displayProposals(proposals) {
       const list = document.getElementById('proposals-list');
       
@@ -9921,11 +10055,14 @@
       
       list.innerHTML = proposals.map(proposal => {
         const isOwner = proposal.proposer_id === currentUser.id;
+        const isExpanded = expandedProposalId === proposal.id;
         const voteClass = proposal.user_vote === 1 ? 'upvote active' : 
                          proposal.user_vote === -1 ? 'downvote active' : '';
         
         return `
-          <div class="proposal-card">
+          <div class="proposal-card ${isExpanded ? 'expanded' : 'collapsed'}" 
+               onclick="toggleProposalExpansion(${proposal.id}, event)"
+               style="cursor: pointer; transition: all 0.3s ease;">
             <div class="proposal-header">
               <div>
                 <div class="proposal-title">${getProposalTitle(proposal)}</div>
@@ -9935,46 +10072,64 @@
                   <span>${formatDate(proposal.created_at)}</span>
                   <span>•</span>
                   <span style="color: #888;">ID: ${proposal.id}</span>
+                  <span>•</span>
+                  <span class="proposal-type">${formatChangeType(proposal.change_type)}</span>
                 </div>
               </div>
-              <span class="proposal-type">${formatChangeType(proposal.change_type)}</span>
-            </div>
-            
-            <div class="proposal-content">
-              ${getProposalDescription(proposal)}
-            </div>
-            
-            <div class="proposal-voting">
-              <div class="vote-buttons">
-                <button class="vote-btn upvote ${proposal.user_vote === 1 || isOwner ? 'active' : ''}" 
-                        onclick="voteProposal(${proposal.id}, 1)"
-                        ${isOwner ? 'disabled title="Cannot vote on your own proposal"' : ''}>
-                  👍 ${proposal.upvotes || 0}
-                </button>
-                <button class="vote-btn downvote ${proposal.user_vote === -1 ? 'active' : ''}" 
-                        onclick="voteProposal(${proposal.id}, -1)"
-                        ${isOwner && proposal.user_vote !== -1 ? '' : isOwner ? 'title="Click to withdraw proposal"' : ''}>
-                  👎 ${proposal.downvotes || 0}
-                </button>
-              </div>
-              
-              <div class="vote-score ${proposal.vote_score >= 0 ? 'positive' : 'negative'}">
-                Score: ${proposal.vote_score >= 0 ? '+' : ''}${proposal.vote_score}
-              </div>
-              
-              ${proposal.vote_score >= 10 ? '<span class="proposal-status approved">Auto-Approval Pending</span>' : ''}
-              
-              <div class="proposal-actions">
-                ${['add_poi', 'edit_poi', 'move_poi', 'delete_poi', 'change_loot', 'add_npc', 'edit_npc'].includes(proposal.change_type) ? 
-                  `<button class="small-btn info-btn" onclick="viewProposalPOI(${proposal.id})">View on Map</button>` : ''}
-                ${isOwner && proposal.status === 'pending' ? 
-                  `<button class="small-btn danger-btn" onclick="deleteProposal(${proposal.id})">Delete</button>` : ''}
-                ${currentUser.is_admin ? 
-                  `<button class="small-btn admin-btn" onclick="showAdminProposalModal(${proposal.id})">Admin Review</button>` : ''}
+              <div style="display: flex; align-items: center; gap: 1rem;">
+                ${!isExpanded ? `
+                  <div class="vote-display" style="display: flex; gap: 0.5rem; align-items: center;">
+                    <span style="color: #4caf50;">👍 ${proposal.upvotes || 0}</span>
+                    <span style="color: #f44336;">👎 ${proposal.downvotes || 0}</span>
+                    <span class="vote-score ${proposal.vote_score >= 0 ? 'positive' : 'negative'}" 
+                          style="margin-left: 0.5rem;">
+                      Score: ${proposal.vote_score >= 0 ? '+' : ''}${proposal.vote_score}
+                    </span>
+                  </div>
+                ` : ''}
+                <span style="color: #999; font-size: 1.2rem;">
+                  ${isExpanded ? '▼' : '▶'}
+                </span>
               </div>
             </div>
             
-            ${renderVoteStatusBar(proposal)}
+            ${isExpanded ? `
+              <div class="proposal-content" style="margin-top: 1rem;">
+                ${getProposalDescription(proposal)}
+              </div>
+              
+              <div class="proposal-voting">
+                <div class="vote-buttons">
+                  <button class="vote-btn upvote ${proposal.user_vote === 1 || isOwner ? 'active' : ''}" 
+                          onclick="voteProposal(${proposal.id}, 1); event.stopPropagation();"
+                          ${isOwner ? 'disabled title="Cannot vote on your own proposal"' : ''}>
+                    👍 ${proposal.upvotes || 0}
+                  </button>
+                  <button class="vote-btn downvote ${proposal.user_vote === -1 ? 'active' : ''}" 
+                          onclick="voteProposal(${proposal.id}, -1); event.stopPropagation();"
+                          ${isOwner && proposal.user_vote !== -1 ? '' : isOwner ? 'title="Click to withdraw proposal"' : ''}>
+                    👎 ${proposal.downvotes || 0}
+                  </button>
+                </div>
+                
+                <div class="vote-score ${proposal.vote_score >= 0 ? 'positive' : 'negative'}">
+                  Score: ${proposal.vote_score >= 0 ? '+' : ''}${proposal.vote_score}
+                </div>
+                
+                ${proposal.vote_score >= 10 ? '<span class="proposal-status approved">Auto-Approval Pending</span>' : ''}
+                
+                <div class="proposal-actions">
+                  ${['add_poi', 'edit_poi', 'move_poi', 'delete_poi', 'change_loot', 'add_npc', 'edit_npc'].includes(proposal.change_type) ? 
+                    `<button class="small-btn info-btn" onclick="viewProposalPOI(${proposal.id}); event.stopPropagation();">View on Map</button>` : ''}
+                  ${isOwner && proposal.status === 'pending' ? 
+                    `<button class="small-btn danger-btn" onclick="deleteProposal(${proposal.id}); event.stopPropagation();">Delete</button>` : ''}
+                  ${currentUser.is_admin ? 
+                    `<button class="small-btn admin-btn" onclick="showAdminProposalModal(${proposal.id}); event.stopPropagation();">Admin Review</button>` : ''}
+                </div>
+              </div>
+              
+              ${renderVoteStatusBar(proposal)}
+            ` : ''}
           </div>
         `;
       }).join('');
@@ -13365,6 +13520,7 @@
     
     window.toggleEmojiPicker = toggleEmojiPicker;
     window.selectEmoji = selectEmoji;
+    window.sortProposals = sortProposals;
     
     // Donation Tiers Management Functions
     window.showCreateDonationTierModal = showCreateDonationTierModal;
