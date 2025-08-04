@@ -775,7 +775,29 @@ export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {
         // Handle POI-specific approval logic
         if (proposalData.change_type === 'add_poi') {
           const data = edited_data || proposalData.proposed_data;
+          // Validate NPC exists if npc_id is provided
+          if (data.npc_id) {
+            const npcCheck = await client.query(
+              'SELECT npcid FROM npcs WHERE npcid = $1',
+              [data.npc_id]
+            );
+            if (npcCheck.rows.length === 0) {
+              console.warn(`NPC with npcid ${data.npc_id} not found, clearing npc_id`);
+              data.npc_id = null;
+            }
+          }
           
+          // Validate Item exists if item_id is provided
+          if (data.item_id) {
+            const itemCheck = await client.query(
+              'SELECT id FROM items WHERE id = $1',
+              [data.item_id]
+            );
+            if (itemCheck.rows.length === 0) {
+              console.warn(`Item with id ${data.item_id} not found, clearing item_id`);
+              data.item_id = null;
+            }
+          }
           
           // Insert into main POIs table
           await client.query(
@@ -838,6 +860,31 @@ export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {
         } else if (proposalData.change_type === 'edit_poi') {
           // Update POI with proposed changes
           const data = edited_data || proposalData.proposed_data;
+          
+          // Validate NPC exists if npc_id is being updated
+          if (data.npc_id !== undefined && data.npc_id !== null) {
+            const npcCheck = await client.query(
+              'SELECT npcid FROM npcs WHERE npcid = $1',
+              [data.npc_id]
+            );
+            if (npcCheck.rows.length === 0) {
+              console.warn(`NPC with npcid ${data.npc_id} not found, setting to null`);
+              data.npc_id = null;
+            }
+          }
+          
+          // Validate Item exists if item_id is being updated
+          if (data.item_id !== undefined && data.item_id !== null) {
+            const itemCheck = await client.query(
+              'SELECT id FROM items WHERE id = $1',
+              [data.item_id]
+            );
+            if (itemCheck.rows.length === 0) {
+              console.warn(`Item with id ${data.item_id} not found, setting to null`);
+              data.item_id = null;
+            }
+          }
+          
           const updateFields = [];
           const updateValues = [];
           let paramCount = 1;
