@@ -9137,11 +9137,6 @@
           }
           
           // Create new NPC with minimal data
-            name: npcName,
-            url: npcUrl,
-            itemCount: itemNodes.length
-          });
-          
           const createResponse = await window.csrfHelper.fetchWithCSRF('/api/npcs', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
