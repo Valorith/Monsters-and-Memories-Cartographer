@@ -9263,12 +9263,6 @@
     }
     
     async function extractFromInspector() {
-      // Add timestamp to debug timing issues
-        isExtractingItems: window.isExtractingItems,
-        extractionCompleted: window.extractionCompleted,
-        batchImportItemsLength: batchImportItems.length
-      });
-      
       // Prevent double extraction
       if (window.isExtractingItems) {
         console.warn('Extraction already in progress, ignoring duplicate call');
