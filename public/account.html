@@ -10188,17 +10188,6 @@
       for (const url of urls) {
         const node = Object.values(inspectorTreeData).find(n => n.url === url && !n.parent);
         
-        // Debug logging for problem URL
-        if (url.includes('Wyrmsbane_Lieutenant')) {
-            url: url,
-            nodeFound: !!node,
-            nodeId: node?.id,
-            nodeStatus: node?.status,
-            nodeType: node?.type,
-            isCached: node?.status === 'cached',
-            allNodes: Object.values(inspectorTreeData).map(n => ({ id: n.id, url: n.url, status: n.status }))
-          });
-        }
         
         if (!node) {
           console.warn('No node found for URL:', url);
@@ -10240,14 +10229,6 @@
           progressBar.style.width = `${(analyzed / total) * 100}%`;
           progressPercent.textContent = `${Math.round((analyzed / total) * 100)}%`;
           
-          // Debug logging for Wyrmsbane
-          if (node.url && node.url.includes('Wyrmsbane_Lieutenant')) {
-              nodeId: node.id,
-              nodeUrl: node.url,
-              nodeStatus: node.status,
-              nodeType: node.type
-            });
-          }
           
           try {
             await analyzeUrlNode(node);
@@ -10263,15 +10244,6 @@
             node.errorMessage = error.message;
           }
           
-          // Debug logging for Wyrmsbane after analysis
-          if (node.url && node.url.includes('Wyrmsbane_Lieutenant')) {
-              nodeId: node.id,
-              nodeUrl: node.url,
-              nodeStatus: node.status,
-              nodeType: node.type,
-              nodeTitle: node.title
-            });
-          }
           
           // Register successful mappings
           if (node.status === 'success' && node.type !== 'unknown') {
@@ -10383,11 +10355,6 @@
         nodeType: node.type
       });
       
-      // Special debug for Wyrmsbane
-      if (node.url && node.url.includes('Wyrmsbane_Lieutenant')) {
-          node: JSON.parse(JSON.stringify(node)) // Deep copy to see full state
-        });
-      }
       
       // IMPORTANT: Never analyze a node that's already cached
       if (node.status === 'cached') {
@@ -10710,20 +10677,6 @@
           pageType = 'item';
         }
         
-        // Special logging for Wyrmsbane
-        if (cleanUrl.includes('Wyrmsbane_Lieutenant')) {
-            url: cleanUrl,
-            pageTitle: pageTitle,
-            hasNPCInfoBox: hasNPCInfoBox,
-            isItemListPage: isItemListPage,
-            hasItemInfoBox: hasItemInfoBox,
-            hasDropsFromSection: hasDropsFromSection,
-            itemSpecificFields: itemSpecificFields,
-            determinedPageType: pageType,
-            nodeStatusBeforeDecision: node.status,
-            nodeTypeBeforeDecision: node.type
-          });
-        }
         
         
         // Apply detection results based on page type
