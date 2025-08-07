@@ -9217,13 +9217,6 @@
         // Clear current loot and set new loot list - ensure IDs are integers
         const newLootIds = foundItems.map(item => parseInt(item.id));
         
-          npcId: matchingNPC.id,
-          npcName: matchingNPC.name,
-          currentLoot: matchingNPC.loot,
-          newLootIds: newLootIds,
-          newLootCount: newLootIds.length
-        });
-        
         // Update NPC via API - use individual NPC update endpoint
         const updateResponse = await window.csrfHelper.fetchWithCSRF(`/api/npcs/${matchingNPC.id}`, {
           method: 'PUT',
