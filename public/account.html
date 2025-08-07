@@ -10349,13 +10349,6 @@
     }
     
     async function analyzeUrlNode(node) {
-        nodeId: node.id,
-        nodeUrl: node.url,
-        nodeStatus: node.status,
-        nodeType: node.type
-      });
-      
-      
       // IMPORTANT: Never analyze a node that's already cached
       if (node.status === 'cached') {
         return;
