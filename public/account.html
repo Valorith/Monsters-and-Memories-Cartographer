@@ -9462,15 +9462,6 @@
           const nodeId = `node_${inspectorNodeId++}`;
           const mapping = mappings[url];
           
-          // Debug logging for problem URL
-          if (url.includes('Wyrmsbane_Lieutenant')) {
-              url: url,
-              mapping: mapping,
-              hasMapping: !!mapping,
-              mappingType: mapping?.type
-            });
-          }
-          
           if (mapping) {
             // Use cached data
             inspectorTreeData[nodeId] = {
@@ -9830,14 +9821,6 @@
       }
       
       
-      // Debug logging for problem URL
-      if (node.url && node.url.includes('Wyrmsbane_Lieutenant')) {
-          nodeId: nodeId,
-          url: node.url,
-          previousStatus: node.status,
-          previousType: node.type
-        });
-      }
       
       // Reset node status
       node.status = 'loading';
