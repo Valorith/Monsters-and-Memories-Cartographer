@@ -118,9 +118,9 @@ export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {
           -- Add NPC name if linked
           CASE 
             WHEN cp.change_type IN ('add_poi', 'edit_poi') AND cp.proposed_data->>'npc_id' IS NOT NULL THEN 
-              (SELECT name FROM npcs WHERE id = (cp.proposed_data->>'npc_id')::int)
+              (SELECT name FROM npcs WHERE npcid = (cp.proposed_data->>'npc_id')::int)
             WHEN cp.change_type = 'delete_poi' AND cp.target_id IS NOT NULL THEN
-              (SELECT n.name FROM pois p JOIN npcs n ON p.npc_id = n.id WHERE p.id = cp.target_id)
+              (SELECT n.name FROM pois p JOIN npcs n ON p.npc_id = n.npcid WHERE p.id = cp.target_id)
             ELSE NULL
           END as npc_name,
           -- Add Item name if linked
@@ -397,7 +397,37 @@ export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {
         if (proposalData.change_type === 'add_poi') {
           const data = proposalData.proposed_data;
           
+          // Validate NPC exists if npc_id is provided
+          if (data.npc_id) {
+            console.log(`[auto-approval add_poi] Validating NPC with value: ${data.npc_id}`);
+            // First try to find by npcid
+            let npcCheck = await client.query(
+              'SELECT npcid, name FROM npcs WHERE npcid = $1',
+              [data.npc_id]
+            );
+            
+            // If not found by npcid, this might be an old proposal using id instead
+            if (npcCheck.rows.length === 0) {
+              console.log(`[auto-approval add_poi] Not found by npcid, checking if this is an id...`);
+              npcCheck = await client.query(
+                'SELECT npcid, name FROM npcs WHERE id = $1',
+                [data.npc_id]
+              );
+              
+              if (npcCheck.rows.length > 0) {
+                console.log(`[auto-approval add_poi] Found by id, converting ${data.npc_id} to npcid ${npcCheck.rows[0].npcid}`);
+                data.npc_id = npcCheck.rows[0].npcid;
+              } else {
+                console.warn(`NPC with id/npcid ${data.npc_id} not found, clearing npc_id`);
+                data.npc_id = null;
+              }
+            } else {
+              console.log(`[auto-approval add_poi] Found NPC with npcid ${data.npc_id} (${npcCheck.rows[0].name})`);
+            }
+          }
+          
           // Insert into main POIs table
+          console.log(`[auto-approval add_poi] Inserting POI with npc_id: ${data.npc_id}`);
           await client.query(
             `INSERT INTO pois (map_id, name, description, x, y, type_id, icon, icon_size, 
                               label_visible, label_position, created_by, created_by_user_id, npc_id, item_id)
@@ -447,6 +477,31 @@ export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {
         } else if (proposalData.change_type === 'edit_poi') {
           // Update POI with proposed changes
           const data = proposalData.proposed_data;
+          
+          // Validate NPC exists if npc_id is being updated
+          if (data.npc_id !== undefined && data.npc_id !== null) {
+            // First try to find by npcid
+            let npcCheck = await client.query(
+              'SELECT npcid FROM npcs WHERE npcid = $1',
+              [data.npc_id]
+            );
+            
+            // If not found by npcid, this might be an old proposal using id instead
+            if (npcCheck.rows.length === 0) {
+              npcCheck = await client.query(
+                'SELECT npcid FROM npcs WHERE id = $1',
+                [data.npc_id]
+              );
+              
+              if (npcCheck.rows.length > 0) {
+                data.npc_id = npcCheck.rows[0].npcid;
+              } else {
+                console.warn(`NPC with id/npcid ${data.npc_id} not found, setting to null`);
+                data.npc_id = null;
+              }
+            }
+          }
+          
           const updateFields = [];
           const updateValues = [];
           let paramCount = 1;
@@ -487,18 +542,38 @@ export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {
             [proposalData.target_id]
           );
         } else if (proposalData.change_type === 'change_loot') {
-          // Update loot items for NPC
+          // Update loot items for NPC using junction table
           const data = proposalData.proposed_data;
           
           if (data.loot_items && Array.isArray(data.loot_items) && data.npc_id) {
             // The loot_items array contains the complete new loot list
             const newItemIds = data.loot_items.map(item => item.item_id);
             
-            // Update NPC with new loot array
-            await client.query(
-              'UPDATE npcs SET loot = $1 WHERE npcid = $2 OR id = $2',
-              [newItemIds, data.npc_id]
+            // Get the actual NPC id (not npcid) for the junction table
+            const npcResult = await client.query(
+              'SELECT id FROM npcs WHERE npcid = $1 OR id = $1',
+              [data.npc_id]
             );
+            
+            if (npcResult.rows.length > 0) {
+              const npcId = npcResult.rows[0].id;
+              
+              // Delete existing loot relationships
+              await client.query('DELETE FROM npc_loot WHERE npc_id = $1', [npcId]);
+              
+              // Insert new loot relationships
+              if (newItemIds.length > 0) {
+                const values = newItemIds.map((itemId, index) => 
+                  `($1, $${index + 2})`
+                ).join(', ');
+                
+                const params = [npcId, ...newItemIds];
+                await client.query(
+                  `INSERT INTO npc_loot (npc_id, item_id) VALUES ${values}`,
+                  params
+                );
+              }
+            }
           }
         } else if (proposalData.change_type === 'add_item') {
           // Add new item to database
@@ -777,13 +852,30 @@ export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {
           const data = edited_data || proposalData.proposed_data;
           // Validate NPC exists if npc_id is provided
           if (data.npc_id) {
-            const npcCheck = await client.query(
-              'SELECT npcid FROM npcs WHERE npcid = $1',
+            console.log(`[add_poi] Validating NPC with value: ${data.npc_id}`);
+            // First try to find by npcid
+            let npcCheck = await client.query(
+              'SELECT npcid, name FROM npcs WHERE npcid = $1',
               [data.npc_id]
             );
+            
+            // If not found by npcid, this might be an old proposal using id instead
             if (npcCheck.rows.length === 0) {
-              console.warn(`NPC with npcid ${data.npc_id} not found, clearing npc_id`);
-              data.npc_id = null;
+              console.log(`[add_poi] Not found by npcid, checking if this is an id...`);
+              npcCheck = await client.query(
+                'SELECT npcid, name FROM npcs WHERE id = $1',
+                [data.npc_id]
+              );
+              
+              if (npcCheck.rows.length > 0) {
+                console.log(`[add_poi] Found by id, converting ${data.npc_id} to npcid ${npcCheck.rows[0].npcid}`);
+                data.npc_id = npcCheck.rows[0].npcid;
+              } else {
+                console.warn(`NPC with id/npcid ${data.npc_id} not found, clearing npc_id`);
+                data.npc_id = null;
+              }
+            } else {
+              console.log(`[add_poi] Found NPC with npcid ${data.npc_id} (${npcCheck.rows[0].name})`);
             }
           }
           
@@ -800,6 +892,7 @@ export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {
           }
           
           // Insert into main POIs table
+          console.log(`[add_poi admin] Inserting POI with npc_id: ${data.npc_id}`);
           await client.query(
             `INSERT INTO pois (map_id, name, description, x, y, type_id, icon, icon_size, 
                               label_visible, label_position, created_by, created_by_user_id, npc_id, item_id)
@@ -863,13 +956,30 @@ export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {
           
           // Validate NPC exists if npc_id is being updated
           if (data.npc_id !== undefined && data.npc_id !== null) {
-            const npcCheck = await client.query(
-              'SELECT npcid FROM npcs WHERE npcid = $1',
+            console.log(`[edit_poi] Validating NPC with value: ${data.npc_id}`);
+            // First try to find by npcid
+            let npcCheck = await client.query(
+              'SELECT npcid, name FROM npcs WHERE npcid = $1',
               [data.npc_id]
             );
+            
+            // If not found by npcid, this might be an old proposal using id instead
             if (npcCheck.rows.length === 0) {
-              console.warn(`NPC with npcid ${data.npc_id} not found, setting to null`);
-              data.npc_id = null;
+              console.log(`[edit_poi] Not found by npcid, checking if this is an id...`);
+              npcCheck = await client.query(
+                'SELECT npcid, name FROM npcs WHERE id = $1',
+                [data.npc_id]
+              );
+              
+              if (npcCheck.rows.length > 0) {
+                console.log(`[edit_poi] Found by id, converting ${data.npc_id} to npcid ${npcCheck.rows[0].npcid}`);
+                data.npc_id = npcCheck.rows[0].npcid;
+              } else {
+                console.warn(`NPC with id/npcid ${data.npc_id} not found, setting to null`);
+                data.npc_id = null;
+              }
+            } else {
+              console.log(`[edit_poi] Found NPC with npcid ${data.npc_id} (${npcCheck.rows[0].name})`);
             }
           }
           

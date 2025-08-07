@@ -295,25 +295,159 @@
       @mouseenter="cancelTooltipHide"
       @mouseleave="hideItemTooltip"
     >
+      <!-- Header with icon and name -->
       <div class="tooltip-header">
-        <span v-if="tooltipItem.icon_type === 'emoji'" class="tooltip-icon">{{ tooltipItem.icon_value }}</span>
-        <iconify-icon v-else :icon="tooltipItem.icon_value" class="tooltip-icon" width="24"></iconify-icon>
-        <span class="tooltip-name">{{ tooltipItem.name }}</span>
+        <div class="header-content">
+          <span v-if="tooltipItem.icon_type === 'emoji'" class="tooltip-icon">{{ tooltipItem.icon_value || '📦' }}</span>
+          <iconify-icon v-else-if="tooltipItem.icon_type === 'iconify'" :icon="tooltipItem.icon_value" class="tooltip-icon" width="28"></iconify-icon>
+          <div class="header-text">
+            <div class="tooltip-name">{{ tooltipItem.name }}</div>
+            <div v-if="tooltipItem.item_type" class="tooltip-type">{{ formatItemType(tooltipItem.item_type) }}</div>
+          </div>
+        </div>
       </div>
+      
+      <!-- Slot and basic info -->
+      <div v-if="tooltipItem.slot || (tooltipItem.slots && tooltipItem.slots.length > 0) || tooltipItem.skill" class="tooltip-basic-info">
+        <div v-if="tooltipItem.slot || (tooltipItem.slots && tooltipItem.slots.length > 0)" class="info-line">
+          <span class="info-label">Slot:</span>
+          <span class="info-value">{{ tooltipItem.slots && tooltipItem.slots.length > 0 ? tooltipItem.slots.join(', ') : tooltipItem.slot }}</span>
+        </div>
+        <div v-if="tooltipItem.skill" class="info-line">
+          <span class="info-label">Skill:</span>
+          <span class="info-value">{{ tooltipItem.skill }}</span>
+        </div>
+      </div>
+      
+      <!-- Combat Stats for weapons -->
+      <div v-if="hasTooltipCombatStats" class="tooltip-section combat-section">
+        <div v-if="tooltipItem.damage" class="combat-line">
+          <span class="combat-label">Damage:</span>
+          <span class="combat-value">{{ tooltipItem.damage }}</span>
+        </div>
+        <div v-if="tooltipItem.delay" class="combat-line">
+          <span class="combat-label">Delay:</span>
+          <span class="combat-value">{{ tooltipItem.delay }}</span>
+        </div>
+        <div v-if="tooltipItem.attack_speed && tooltipItem.attack_speed !== 0 && tooltipItem.attack_speed !== '0' && tooltipItem.attack_speed !== '0.0'" class="combat-line">
+          <span class="combat-label">Attack Speed:</span>
+          <span class="combat-value">{{ tooltipItem.attack_speed }}</span>
+        </div>
+      </div>
+      
+      <!-- Defensive Stats -->
+      <div v-if="tooltipItem.ac || tooltipItem.block" class="tooltip-section defensive-section">
+        <div v-if="tooltipItem.ac" class="stat-line">
+          <span class="stat-value" :class="{ negative: tooltipItem.ac < 0 }">{{ formatStatValue(tooltipItem.ac) }} AC</span>
+        </div>
+        <div v-if="tooltipItem.block" class="stat-line">
+          <span class="stat-value" :class="{ negative: tooltipItem.block < 0 }">{{ formatStatValue(tooltipItem.block) }} Block</span>
+        </div>
+      </div>
+      
+      <!-- Primary Stats -->
+      <div v-if="hasTooltipStats" class="tooltip-section stats-section">
+        <div class="stats-grid">
+          <div v-if="tooltipItem.str" class="stat-item" :class="{ negative: tooltipItem.str < 0 }">
+            <span class="stat-label">STR</span>
+            <span class="stat-value">{{ formatStatValue(tooltipItem.str) }}</span>
+          </div>
+          <div v-if="tooltipItem.sta" class="stat-item" :class="{ negative: tooltipItem.sta < 0 }">
+            <span class="stat-label">STA</span>
+            <span class="stat-value">{{ formatStatValue(tooltipItem.sta) }}</span>
+          </div>
+          <div v-if="tooltipItem.agi" class="stat-item" :class="{ negative: tooltipItem.agi < 0 }">
+            <span class="stat-label">AGI</span>
+            <span class="stat-value">{{ formatStatValue(tooltipItem.agi) }}</span>
+          </div>
+          <div v-if="tooltipItem.dex" class="stat-item" :class="{ negative: tooltipItem.dex < 0 }">
+            <span class="stat-label">DEX</span>
+            <span class="stat-value">{{ formatStatValue(tooltipItem.dex) }}</span>
+          </div>
+          <div v-if="tooltipItem.wis" class="stat-item" :class="{ negative: tooltipItem.wis < 0 }">
+            <span class="stat-label">WIS</span>
+            <span class="stat-value">{{ formatStatValue(tooltipItem.wis) }}</span>
+          </div>
+          <div v-if="tooltipItem.int" class="stat-item" :class="{ negative: tooltipItem.int < 0 }">
+            <span class="stat-label">INT</span>
+            <span class="stat-value">{{ formatStatValue(tooltipItem.int) }}</span>
+          </div>
+          <div v-if="tooltipItem.cha" class="stat-item" :class="{ negative: tooltipItem.cha < 0 }">
+            <span class="stat-label">CHA</span>
+            <span class="stat-value">{{ formatStatValue(tooltipItem.cha) }}</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- HP/Mana bonuses -->
+      <div v-if="tooltipItem.health || tooltipItem.mana" class="tooltip-section bonus-section">
+        <div v-if="tooltipItem.health" class="bonus-line">
+          <span class="bonus-value" :class="{ negative: tooltipItem.health < 0 }">{{ formatStatValue(tooltipItem.health) }} Hit Points</span>
+        </div>
+        <div v-if="tooltipItem.mana" class="bonus-line">
+          <span class="bonus-value" :class="{ negative: tooltipItem.mana < 0 }">{{ formatStatValue(tooltipItem.mana) }} Mana</span>
+        </div>
+      </div>
+      
+      <!-- Resistances -->
+      <div v-if="hasTooltipResistances" class="tooltip-section resistance-section">
+        <div class="section-header">Resistances</div>
+        <div class="resistance-grid">
+          <div v-if="tooltipItem.resist_fire" class="resistance-item" :class="{ negative: tooltipItem.resist_fire < 0 }">
+            <span class="resistance-icon">🔥</span>
+            <span class="resistance-value">{{ formatStatValue(tooltipItem.resist_fire) }}</span>
+          </div>
+          <div v-if="tooltipItem.resist_cold || tooltipItem.resist_ice" class="resistance-item" :class="{ negative: (tooltipItem.resist_cold || tooltipItem.resist_ice) < 0 }">
+            <span class="resistance-icon">❄️</span>
+            <span class="resistance-value">{{ formatStatValue(tooltipItem.resist_cold || tooltipItem.resist_ice) }}</span>
+          </div>
+          <div v-if="tooltipItem.resist_magic" class="resistance-item" :class="{ negative: tooltipItem.resist_magic < 0 }">
+            <span class="resistance-icon">✨</span>
+            <span class="resistance-value">{{ formatStatValue(tooltipItem.resist_magic) }}</span>
+          </div>
+          <div v-if="tooltipItem.resist_poison" class="resistance-item" :class="{ negative: tooltipItem.resist_poison < 0 }">
+            <span class="resistance-icon">☠️</span>
+            <span class="resistance-value">{{ formatStatValue(tooltipItem.resist_poison) }}</span>
+          </div>
+          <div v-if="tooltipItem.resist_disease" class="resistance-item" :class="{ negative: tooltipItem.resist_disease < 0 }">
+            <span class="resistance-icon">🦠</span>
+            <span class="resistance-value">{{ formatStatValue(tooltipItem.resist_disease) }}</span>
+          </div>
+          <div v-if="tooltipItem.resist_electricity" class="resistance-item" :class="{ negative: tooltipItem.resist_electricity < 0 }">
+            <span class="resistance-icon">⚡</span>
+            <span class="resistance-value">{{ formatStatValue(tooltipItem.resist_electricity) }}</span>
+          </div>
+          <div v-if="tooltipItem.resist_corruption" class="resistance-item" :class="{ negative: tooltipItem.resist_corruption < 0 }">
+            <span class="resistance-icon">💀</span>
+            <span class="resistance-value">{{ formatStatValue(tooltipItem.resist_corruption) }}</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Race/Class requirements -->
+      <div v-if="(tooltipItem.race && tooltipItem.race !== 'ALL') || (tooltipItem.class && tooltipItem.class !== 'ALL')" class="tooltip-section requirements-section">
+        <div v-if="tooltipItem.race && tooltipItem.race !== 'ALL'" class="requirement-line">
+          <span class="requirement-label">Race:</span>
+          <span class="requirement-value">{{ tooltipItem.race }}</span>
+        </div>
+        <div v-if="tooltipItem.class && tooltipItem.class !== 'ALL'" class="requirement-line">
+          <span class="requirement-label">Class:</span>
+          <span class="requirement-value">{{ tooltipItem.class }}</span>
+        </div>
+      </div>
+      
+      <!-- Weight/Size at bottom -->
+      <div v-if="(tooltipItem.weight && tooltipItem.weight > 0) || (tooltipItem.size && tooltipItem.size !== 'Medium')" class="tooltip-section property-section">
+        <div class="property-line">
+          <span v-if="tooltipItem.weight && tooltipItem.weight > 0" class="property-item">Weight: {{ tooltipItem.weight }}</span>
+          <span v-if="tooltipItem.size && tooltipItem.size !== 'Medium'" class="property-item">Size: {{ tooltipItem.size }}</span>
+        </div>
+      </div>
+      
+      <!-- Description -->
       <div v-if="tooltipItem.description" class="tooltip-description" v-html="formatDescription(tooltipItem.description)"></div>
-      <div v-if="tooltipItem.slot" class="tooltip-slot">Slot: {{ tooltipItem.slot }}</div>
-      <div v-if="hasTooltipStats" class="tooltip-stats">
-        <span v-if="tooltipItem.str" class="stat">STR +{{ tooltipItem.str }}</span>
-        <span v-if="tooltipItem.sta" class="stat">STA +{{ tooltipItem.sta }}</span>
-        <span v-if="tooltipItem.agi" class="stat">AGI +{{ tooltipItem.agi }}</span>
-        <span v-if="tooltipItem.dex" class="stat">DEX +{{ tooltipItem.dex }}</span>
-        <span v-if="tooltipItem.wis" class="stat">WIS +{{ tooltipItem.wis }}</span>
-        <span v-if="tooltipItem.int" class="stat">INT +{{ tooltipItem.int }}</span>
-        <span v-if="tooltipItem.cha" class="stat">CHA +{{ tooltipItem.cha }}</span>
-        <span v-if="tooltipItem.ac" class="stat">AC +{{ tooltipItem.ac }}</span>
-        <span v-if="tooltipItem.health" class="stat">HP +{{ tooltipItem.health }}</span>
-        <span v-if="tooltipItem.mana" class="stat">MP +{{ tooltipItem.mana }}</span>
-      </div>
+      
+      <!-- Actions -->
       <div v-if="isAuthenticated && !isAdmin" class="tooltip-actions">
         <button class="tooltip-edit-btn" @click="proposeItemEdit" title="Propose changes to this item">
           <span class="btn-icon">✏️</span>
@@ -591,8 +725,33 @@ export default {
       if (!tooltipItem.value) return false
       return tooltipItem.value.str || tooltipItem.value.sta || tooltipItem.value.agi || 
              tooltipItem.value.dex || tooltipItem.value.wis || tooltipItem.value.int || 
-             tooltipItem.value.cha || tooltipItem.value.ac || tooltipItem.value.health || 
-             tooltipItem.value.mana
+             tooltipItem.value.cha
+    })
+    
+    const hasTooltipSecondaryStats = computed(() => {
+      if (!tooltipItem.value) return false
+      return tooltipItem.value.ac || tooltipItem.value.health || tooltipItem.value.mana
+    })
+    
+    const hasTooltipBasicProperties = computed(() => {
+      if (!tooltipItem.value) return false
+      return tooltipItem.value.item_type || (tooltipItem.value.size && tooltipItem.value.size !== 'Medium') || 
+             tooltipItem.value.weight || tooltipItem.value.skill
+    })
+    
+    const hasTooltipCombatStats = computed(() => {
+      if (!tooltipItem.value) return false
+      return tooltipItem.value.damage || tooltipItem.value.delay || 
+             (tooltipItem.value.attack_speed && tooltipItem.value.attack_speed !== 0 && 
+              tooltipItem.value.attack_speed !== '0' && tooltipItem.value.attack_speed !== '0.0')
+    })
+    
+    const hasTooltipResistances = computed(() => {
+      if (!tooltipItem.value) return false
+      return tooltipItem.value.resist_cold || tooltipItem.value.resist_corruption || 
+             tooltipItem.value.resist_disease || tooltipItem.value.resist_electricity || 
+             tooltipItem.value.resist_fire || tooltipItem.value.resist_magic || 
+             tooltipItem.value.resist_poison
     })
     
     const tooltipStyle = computed(() => ({
@@ -624,6 +783,18 @@ export default {
       
       // Make URLs clickable
       return escaped.replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">$1</a>')
+    }
+    
+    // Format stat values with + or - prefix
+    const formatStatValue = (value) => {
+      if (!value) return '0'
+      return value > 0 ? `+${value}` : `${value}`
+    }
+    
+    // Format item type for display
+    const formatItemType = (type) => {
+      if (!type) return ''
+      return type.charAt(0).toUpperCase() + type.slice(1)
     }
     
     // Computed property for POI description
@@ -890,6 +1061,10 @@ export default {
     watch(() => props.visible, (newVal) => {
       if (newVal) {
         document.addEventListener('click', handleClickOutside)
+        // Fetch NPC/Item data when popup becomes visible
+        fetchNPCData()
+        fetchItemData()
+        fetchActiveProposals()
       } else {
         document.removeEventListener('click', handleClickOutside)
         showEditDropdown.value = false
@@ -928,11 +1103,17 @@ export default {
       itemData,
       hasStats,
       formatDescription,
+      formatStatValue,
+      formatItemType,
       formattedDescription,
       tooltipItem,
       tooltipVisible,
       tooltipStyle,
       hasTooltipStats,
+      hasTooltipSecondaryStats,
+      hasTooltipBasicProperties,
+      hasTooltipCombatStats,
+      hasTooltipResistances,
       showItemTooltip,
       startTooltipHideTimer,
       cancelTooltipHide,
@@ -1604,6 +1785,28 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* Custom scrollbar for loot list */
+.loot-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.loot-list::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+.loot-list::-webkit-scrollbar-thumb {
+  background: rgba(40, 167, 69, 0.5);
+  border-radius: 3px;
+}
+
+.loot-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(40, 167, 69, 0.7);
 }
 
 .loot-item {
@@ -1701,84 +1904,365 @@ export default {
   max-width: 350px;
 }
 
-/* Item Tooltip Styles */
+/* Item Tooltip Styles - MMO Style */
 .item-tooltip {
   position: fixed;
-  background: rgba(30, 30, 30, 0.98);
-  border: 1px solid #555;
+  background: linear-gradient(to bottom, rgba(15, 15, 20, 0.98), rgba(10, 10, 15, 0.98));
+  border: 1px solid #2a2a3a;
   border-radius: 6px;
-  padding: 0.75rem;
-  max-width: 250px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
+  padding: 0;
+  min-width: 280px;
+  max-width: 360px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   pointer-events: auto;
+  font-size: 14px;
+  color: #e0e0e0;
+  backdrop-filter: blur(8px);
   z-index: 9999;
-  cursor: default;
 }
 
+/* Header section */
 .tooltip-header {
+  background: linear-gradient(to bottom, rgba(30, 30, 40, 0.6), rgba(20, 20, 30, 0.4));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 12px 16px;
+  border-radius: 6px 6px 0 0;
+}
+
+.header-content {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid #444;
+  gap: 12px;
 }
 
 .tooltip-icon {
-  font-size: 1.5rem;
+  font-size: 28px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+
+.header-text {
+  flex: 1;
 }
 
 .tooltip-name {
+  color: #fff;
   font-weight: 600;
-  color: #4fc3f7;
-  font-size: 0.95rem;
+  font-size: 16px;
+  line-height: 1.2;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 
+.tooltip-type {
+  color: #999;
+  font-size: 12px;
+  text-transform: capitalize;
+  margin-top: 2px;
+}
+
+/* Basic info section */
+.tooltip-basic-info {
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.info-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 0;
+}
+
+.info-label {
+  color: #888;
+  font-size: 13px;
+}
+
+.info-value {
+  color: #ddd;
+  font-size: 13px;
+}
+
+/* Section styling */
+.tooltip-section {
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.tooltip-section:last-of-type {
+  border-bottom: none;
+}
+
+/* Combat section */
+.combat-section {
+  background: rgba(255, 50, 50, 0.03);
+}
+
+.combat-line {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+
+.combat-label {
+  color: #aaa;
+  font-size: 13px;
+}
+
+.combat-value {
+  color: #ff9999;
+  font-weight: 500;
+}
+
+/* Defensive stats */
+.defensive-section {
+  background: rgba(50, 150, 255, 0.03);
+  text-align: center;
+}
+
+.stat-line {
+  display: inline-block;
+  margin: 0 8px;
+}
+
+.stat-line .stat-value {
+  color: #66b3ff;
+  font-weight: 500;
+  font-size: 15px;
+}
+
+/* Stats grid */
+.stats-section {
+  background: rgba(50, 255, 50, 0.02);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  gap: 8px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 4px 8px;
+  transition: all 0.2s;
+}
+
+.stat-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.stat-item.negative {
+  background: rgba(255, 0, 0, 0.05);
+  border-color: rgba(255, 0, 0, 0.2);
+}
+
+.stat-label {
+  color: #999;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.stat-value {
+  color: #4dff4d;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.stat-item.negative .stat-value {
+  color: #ff6666;
+}
+
+/* Bonus section */
+.bonus-section {
+  background: rgba(255, 215, 0, 0.02);
+  text-align: center;
+}
+
+.bonus-line {
+  padding: 2px 0;
+}
+
+.bonus-value {
+  color: #ffd700;
+  font-weight: 500;
+}
+
+.bonus-value.negative {
+  color: #ff6666;
+}
+
+/* Resistances */
+.resistance-section {
+  background: rgba(150, 100, 255, 0.02);
+}
+
+.section-header {
+  color: #bbb;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.resistance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+  gap: 6px;
+}
+
+.resistance-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 4px;
+  transition: all 0.2s;
+}
+
+.resistance-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.resistance-item.negative {
+  background: rgba(255, 0, 0, 0.05);
+  border-color: rgba(255, 0, 0, 0.2);
+}
+
+.resistance-icon {
+  font-size: 16px;
+  margin-bottom: 2px;
+}
+
+.resistance-value {
+  color: #8888ff;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.resistance-item.negative .resistance-value {
+  color: #ff8888;
+}
+
+/* Requirements */
+.requirements-section {
+  background: rgba(255, 100, 100, 0.02);
+}
+
+.requirement-line {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+
+.requirement-label {
+  color: #ff9999;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.requirement-value {
+  color: #ffcccc;
+  font-size: 13px;
+}
+
+/* Properties */
+.property-section {
+  background: rgba(100, 100, 100, 0.02);
+  padding: 8px 16px;
+}
+
+.property-line {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+}
+
+.property-item {
+  color: #888;
+  font-size: 12px;
+}
+
+/* Description */
 .tooltip-description {
-  font-size: 0.8rem;
-  color: #ccc;
-  font-style: italic;
-  margin-bottom: 0.5rem;
-  line-height: 1.3;
+  padding: 12px 16px;
+  line-height: 1.5;
+  color: #aaa;
+  font-size: 13px;
   word-wrap: break-word;
   overflow-wrap: break-word;
-  hyphens: auto;
   max-width: 100%;
+  background: rgba(0, 0, 0, 0.2);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.tooltip-description :deep(a),
-.tooltip-description :deep(a:link),
-.tooltip-description :deep(a:visited),
-.tooltip-description :deep(a:active) {
-  color: #ffffff !important;
-  text-decoration: underline !important;
-  cursor: pointer;
+.tooltip-description :deep(a) {
+  color: #4a9eff;
+  text-decoration: underline;
 }
 
 .tooltip-description :deep(a:hover) {
-  color: #f5f5f5 !important;
+  color: #6bb6ff;
 }
 
-.tooltip-slot {
-  font-size: 0.85rem;
-  color: #ffc107;
-  margin-bottom: 0.5rem;
+/* Actions */
+.tooltip-actions {
+  padding: 10px 16px;
+  background: rgba(255, 215, 0, 0.02);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 0 0 6px 6px;
 }
 
-.tooltip-stats {
+.tooltip-edit-btn {
+  background: rgba(255, 215, 0, 0.1);
+  border: 1px solid rgba(255, 215, 0, 0.3);
+  border-radius: 4px;
+  color: #FFD700;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  font-size: 0.8rem;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+  width: 100%;
+  justify-content: center;
 }
 
-.tooltip-stats .stat {
-  background: rgba(79, 195, 247, 0.15);
-  padding: 0.2rem 0.5rem;
-  border-radius: 3px;
-  color: #4fc3f7;
+.tooltip-edit-btn:hover {
+  background: rgba(255, 215, 0, 0.2);
+  border-color: rgba(255, 215, 0, 0.5);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(255, 215, 0, 0.2);
+}
+
+.btn-icon {
+  font-size: 14px;
+}
+
+.btn-text {
   font-weight: 500;
-  white-space: nowrap;
+}
+
+/* Keep old selectors for backward compatibility */
+.tooltip-stats,
+.tooltip-secondary-stats,
+.tooltip-properties,
+.tooltip-combat,
+.tooltip-resistances {
+  /* Styles handled by new section classes */
 }
 
 /* Make loot item names hoverable */

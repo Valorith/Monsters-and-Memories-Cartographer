@@ -91,7 +91,7 @@
               <option 
                 v-for="npc in filteredNPCs" 
                 :key="npc.id" 
-                :value="npc.id"
+                :value="npc.npcid"
               >
                 {{ npc.name }} (Level {{ npc.level }})
               </option>

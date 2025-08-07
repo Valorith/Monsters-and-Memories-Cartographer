@@ -173,7 +173,8 @@ export default {
       try {
         const response = await fetch(`/api/items/${props.item.id}/npcs`);
         if (response.ok) {
-          npcs.value = await response.json();
+          const data = await response.json();
+          npcs.value = data.npcs || [];
         }
       } catch (error) {
         console.error('Error loading NPCs:', error);

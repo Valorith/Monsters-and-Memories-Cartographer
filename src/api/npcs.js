@@ -18,7 +18,11 @@ export default function npcsRouter(app, validateCSRF) {
     try {
     const result = await pool.query(`
       SELECT 
-        n.*,
+        n.id, n.npcid, n.npc_type, n.name, n.description,
+        n.hp, n.mp, n.ac, n.str, n.sta, n.agi, n.dex, 
+        n.wis, n.int, n.cha, n.attack_speed, n.min_dmg, 
+        n.max_dmg, n.level, n.created_at, n.updated_at,
+        COALESCE(array_agg(nl.item_id) FILTER (WHERE nl.item_id IS NOT NULL), '{}') as loot,
         COALESCE(
           json_agg(
             json_build_object(
@@ -31,9 +35,9 @@ export default function npcsRouter(app, validateCSRF) {
           '[]'::json
         ) as loot_items
       FROM npcs n
-      LEFT JOIN LATERAL unnest(n.loot) AS loot_id ON true
-      LEFT JOIN items i ON i.id = loot_id
-      GROUP BY n.id, n.npcid
+      LEFT JOIN npc_loot nl ON n.id = nl.npc_id
+      LEFT JOIN items i ON nl.item_id = i.id
+      GROUP BY n.id
       ORDER BY n.id DESC
     `);
     res.json(result.rows);
@@ -49,17 +53,18 @@ export default function npcsRouter(app, validateCSRF) {
       const { id } = req.params;
       const result = await pool.query(`
         SELECT 
-          i.id as item_id,
-          i.name as item_name,
+          i.id,
+          i.name,
+          i.icon_type,
           i.icon_value
         FROM npcs n
-        CROSS JOIN LATERAL unnest(n.loot) AS item_id
-        JOIN items i ON i.id = item_id
+        JOIN npc_loot nl ON n.id = nl.npc_id
+        JOIN items i ON nl.item_id = i.id
         WHERE n.npcid = $1 OR n.id = $1
         ORDER BY i.name
       `, [id]);
       
-      res.json(result.rows);
+      res.json({ items: result.rows });
     } catch (error) {
       console.error('Error fetching NPC loot:', error);
       res.status(500).json({ error: 'Failed to fetch NPC loot' });
@@ -72,7 +77,11 @@ export default function npcsRouter(app, validateCSRF) {
       const { npcid } = req.params;
       const result = await pool.query(`
         SELECT 
-          n.*,
+          n.id, n.npcid, n.npc_type, n.name, n.description,
+          n.hp, n.mp, n.ac, n.str, n.sta, n.agi, n.dex, 
+          n.wis, n.int, n.cha, n.attack_speed, n.min_dmg, 
+          n.max_dmg, n.level, n.created_at, n.updated_at,
+          COALESCE(array_agg(nl.item_id) FILTER (WHERE nl.item_id IS NOT NULL), '{}') as loot,
           COALESCE(
             json_agg(
               json_build_object(
@@ -85,10 +94,10 @@ export default function npcsRouter(app, validateCSRF) {
             '[]'::json
           ) as loot_items
         FROM npcs n
-        LEFT JOIN LATERAL unnest(n.loot) AS loot_id ON true
-        LEFT JOIN items i ON i.id = loot_id
+        LEFT JOIN npc_loot nl ON n.id = nl.npc_id
+        LEFT JOIN items i ON nl.item_id = i.id
         WHERE n.npcid = $1 OR n.id = $1
-        GROUP BY n.id, n.npcid
+        GROUP BY n.id
       `, [npcid]);
       
       if (result.rows.length === 0) {
@@ -111,20 +120,60 @@ export default function npcsRouter(app, validateCSRF) {
   } = req.body;
 
   try {
-    const result = await pool.query(`
-      INSERT INTO npcs (
-        npc_type, name, description, loot, hp, mp, ac,
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+      
+      // Insert the NPC without the loot array
+      const result = await client.query(`
+        INSERT INTO npcs (
+          npc_type, name, description, hp, mp, ac,
+          str, sta, agi, dex, wis, int, cha,
+          attack_speed, min_dmg, max_dmg, level
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        RETURNING *, npcid
+      `, [
+        npc_type, name, description, hp, mp, ac,
         str, sta, agi, dex, wis, int, cha,
         attack_speed, min_dmg, max_dmg, level
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
-      RETURNING *, npcid
-    `, [
-      npc_type, name, description, loot || [], hp, mp, ac,
-      str, sta, agi, dex, wis, int, cha,
-      attack_speed, min_dmg, max_dmg, level
-    ]);
-
-    res.json(result.rows[0]);
+      ]);
+      
+      const newNpc = result.rows[0];
+      
+      // Insert loot relationships into junction table
+      if (loot && loot.length > 0) {
+        const values = loot.map((itemId, index) => 
+          `($1, $${index + 2})`
+        ).join(', ');
+        
+        const params = [newNpc.id, ...loot];
+        await client.query(
+          `INSERT INTO npc_loot (npc_id, item_id) VALUES ${values}`,
+          params
+        );
+      }
+      
+      // Fetch the loot items for the response
+      const lootResult = await client.query(`
+        SELECT i.*
+        FROM npc_loot nl
+        JOIN items i ON nl.item_id = i.id
+        WHERE nl.npc_id = $1
+      `, [newNpc.id]);
+      
+      newNpc.loot = loot || [];
+      newNpc.loot_items = lootResult.rows;
+      
+      await client.query('COMMIT');
+      res.json(newNpc);
+      
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
     } catch (error) {
       console.error('Error creating NPC:', error);
       res.status(500).json({ error: 'Failed to create NPC' });
@@ -141,26 +190,71 @@ export default function npcsRouter(app, validateCSRF) {
   } = req.body;
 
   try {
-    const result = await pool.query(`
-      UPDATE npcs SET
-        npc_type = $2, name = $3, description = $4, loot = $5,
-        hp = $6, mp = $7, ac = $8,
-        str = $9, sta = $10, agi = $11, dex = $12, wis = $13, int = $14, cha = $15,
-        attack_speed = $16, min_dmg = $17, max_dmg = $18, level = $19,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = $1
-      RETURNING *
-    `, [
-      id, npc_type, name, description, loot || [],
-      hp, mp, ac, str, sta, agi, dex, wis, int, cha,
-      attack_speed, min_dmg, max_dmg, level
-    ]);
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+      
+      // Update the NPC record without the loot array
+      const result = await client.query(`
+        UPDATE npcs SET
+          npc_type = $2, name = $3, description = $4,
+          hp = $5, mp = $6, ac = $7,
+          str = $8, sta = $9, agi = $10, dex = $11, wis = $12, int = $13, cha = $14,
+          attack_speed = $15, min_dmg = $16, max_dmg = $17, level = $18,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+        RETURNING *
+      `, [
+        id, npc_type, name, description,
+        hp, mp, ac, str, sta, agi, dex, wis, int, cha,
+        attack_speed, min_dmg, max_dmg, level
+      ]);
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'NPC not found' });
+      if (result.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'NPC not found' });
+      }
+
+      const updatedNpc = result.rows[0];
+
+      // Update junction table
+      // First, delete existing loot relationships
+      await client.query('DELETE FROM npc_loot WHERE npc_id = $1', [id]);
+      
+      // Then insert new loot relationships
+      if (loot && loot.length > 0) {
+        const values = loot.map((itemId, index) => 
+          `($1, $${index + 2})`
+        ).join(', ');
+        
+        const params = [id, ...loot];
+        await client.query(
+          `INSERT INTO npc_loot (npc_id, item_id) VALUES ${values}`,
+          params
+        );
+      }
+      
+      // Fetch the loot items for the response
+      const lootResult = await client.query(`
+        SELECT i.*
+        FROM npc_loot nl
+        JOIN items i ON nl.item_id = i.id
+        WHERE nl.npc_id = $1
+      `, [id]);
+      
+      updatedNpc.loot = loot || [];
+      updatedNpc.loot_items = lootResult.rows;
+      
+      await client.query('COMMIT');
+      res.json(updatedNpc);
+      
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
     }
-
-    res.json(result.rows[0]);
     } catch (error) {
       console.error('Error updating NPC:', error);
       res.status(500).json({ error: 'Failed to update NPC' });
@@ -202,23 +296,39 @@ export default function npcsRouter(app, validateCSRF) {
     const updatedNpcs = [];
     
     for (const npc of npcs) {
+      // Update NPC without loot array
       const result = await client.query(`
         UPDATE npcs SET
-          npc_type = $2, name = $3, description = $4, loot = $5,
-          hp = $6, mp = $7, ac = $8,
-          str = $9, sta = $10, agi = $11, dex = $12, wis = $13, int = $14, cha = $15,
-          attack_speed = $16, min_dmg = $17, max_dmg = $18, level = $19,
+          npc_type = $2, name = $3, description = $4,
+          hp = $5, mp = $6, ac = $7,
+          str = $8, sta = $9, agi = $10, dex = $11, wis = $12, int = $13, cha = $14,
+          attack_speed = $15, min_dmg = $16, max_dmg = $17, level = $18,
           updated_at = CURRENT_TIMESTAMP
         WHERE id = $1
         RETURNING *
       `, [
-        npc.id, npc.npc_type, npc.name, npc.description, npc.loot || [],
+        npc.id, npc.npc_type, npc.name, npc.description,
         npc.hp, npc.mp, npc.ac,
         npc.str, npc.sta, npc.agi, npc.dex, npc.wis, npc.int, npc.cha,
         npc.attack_speed, npc.min_dmg, npc.max_dmg, npc.level
       ]);
       
       if (result.rows.length > 0) {
+        // Update loot in junction table
+        await client.query('DELETE FROM npc_loot WHERE npc_id = $1', [npc.id]);
+        
+        if (npc.loot && npc.loot.length > 0) {
+          const values = npc.loot.map((itemId, index) => 
+            `($1, $${index + 2})`
+          ).join(', ');
+          
+          const params = [npc.id, ...npc.loot];
+          await client.query(
+            `INSERT INTO npc_loot (npc_id, item_id) VALUES ${values}`,
+            params
+          );
+        }
+        
         updatedNpcs.push(result.rows[0]);
       }
     }

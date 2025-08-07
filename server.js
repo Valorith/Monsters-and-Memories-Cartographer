@@ -4,7 +4,8 @@ import { dirname, join } from 'path';
 import dotenv from 'dotenv';
 import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
-import pool, { checkPoolHealth } from './src/db/database.js';
+import pool, { checkPoolHealth, closePool } from './src/db/database.js';
+import sessionPool from './src/db/session-pool.js';
 import migrate from './src/db/migrate.js';
 import passport from './src/auth/passport-config.js';
 import multer from 'multer';
@@ -25,6 +26,7 @@ import changeProposalsRouter from './src/api/change-proposals.js';
 import searchRouter from './src/api/search.js';
 import kofiWebhookRouter from './src/api/kofi-webhook.js';
 import donationTiersRouter from './src/api/donation-tiers.js';
+import urlMappingsRouter from './src/api/url-mappings.js';
 
 // Try to load sharp, but make it optional
 let sharp;
@@ -301,10 +303,17 @@ if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) {
 
 app.use(session({
   store: new PgSession({
-    pool: pool,
-    tableName: 'session', // connect-pg-simple expects 'session' table by default
+    pool: sessionPool, // Use dedicated session pool
+    tableName: 'session',
     pruneSessionInterval: 60 * 60, // Prune expired sessions every hour
-    ttl: 7 * 24 * 60 * 60 // Session TTL in seconds (7 days)
+    ttl: 7 * 24 * 60 * 60, // Session TTL in seconds (7 days)
+    // Error handler to prevent crashes
+    errorLog: (error) => {
+      // Only log non-timeout errors
+      if (!error.message?.includes('timeout')) {
+        console.error('[Session Store] Error:', error.message);
+      }
+    }
   }),
   secret: process.env.SESSION_SECRET || (process.env.NODE_ENV === 'development' ? 'dev-session-secret-change-me' : undefined),
   resave: false,
@@ -582,6 +591,9 @@ kofiWebhookRouter(app, validateCSRF);
 // Donation tiers routes
 const donationTiersRoutes = donationTiersRouter(validateCSRF);
 app.use('/api/donations', donationTiersRoutes);
+
+// URL Mappings routes
+urlMappingsRouter(app, validateCSRF);
 
 // Get all maps - cached for 5 minutes
 app.get('/api/maps', 
@@ -4670,6 +4682,49 @@ app.get('/account', async (req, res) => {
   }
 });
 
+// Health check endpoint
+app.get('/api/health', async (req, res) => {
+  try {
+    // Check main pool
+    const mainPoolHealth = await checkPoolHealth();
+    
+    // Check session pool
+    let sessionPoolHealth = { healthy: false };
+    try {
+      const result = await sessionPool.query('SELECT 1');
+      sessionPoolHealth = {
+        healthy: true,
+        stats: {
+          totalCount: sessionPool.totalCount,
+          idleCount: sessionPool.idleCount,
+          waitingCount: sessionPool.waitingCount
+        }
+      };
+    } catch (error) {
+      sessionPoolHealth.error = error.message;
+    }
+    
+    const overallHealth = mainPoolHealth.healthy && sessionPoolHealth.healthy;
+    
+    res.status(overallHealth ? 200 : 503).json({
+      status: overallHealth ? 'healthy' : 'unhealthy',
+      timestamp: new Date().toISOString(),
+      database: {
+        main: mainPoolHealth,
+        sessions: sessionPoolHealth
+      },
+      uptime: process.uptime(),
+      memory: process.memoryUsage()
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'error',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // Handle all other routes by serving index.html (for Vue Router)
 app.get('*', (req, res) => {
   res.sendFile(join(__dirname, 'dist', 'index.html'));
@@ -4704,5 +4759,45 @@ initializeDatabase().then(async () => {
     } else {
       console.error('Server error:', err);
     }
+  });
+  
+  // Graceful shutdown handling
+  const gracefulShutdown = async (signal) => {
+    console.log(`\n${signal} received. Starting graceful shutdown...`);
+    
+    // Stop accepting new connections
+    server.close(() => {
+      console.log('HTTP server closed');
+    });
+    
+    try {
+      // Close database pools
+      await closePool();
+      console.log('Main database pool closed');
+      
+      await sessionPool.end();
+      console.log('Session database pool closed');
+      
+      console.log('Graceful shutdown completed');
+      process.exit(0);
+    } catch (error) {
+      console.error('Error during graceful shutdown:', error);
+      process.exit(1);
+    }
+  };
+  
+  // Handle termination signals
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  
+  // Handle uncaught errors
+  process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+    gracefulShutdown('uncaughtException');
+  });
+  
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    // Don't exit on unhandled rejections, just log them
   });
 });

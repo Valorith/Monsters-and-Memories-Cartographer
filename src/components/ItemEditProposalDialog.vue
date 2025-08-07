@@ -97,6 +97,132 @@
                 </span>
               </div>
             </div>
+            
+            <!-- Weight and Size -->
+            <div class="form-row">
+              <div class="form-group">
+                <label for="weight">Weight</label>
+                <input 
+                  id="weight"
+                  v-model.number="proposedData.weight" 
+                  type="number" 
+                  class="form-control"
+                  :class="{ 'changed': proposedData.weight !== currentData.weight }"
+                  min="0"
+                  step="0.01"
+                />
+                <span v-if="proposedData.weight !== currentData.weight" class="change-indicator">
+                  (was: {{ currentData.weight || 0 }})
+                </span>
+              </div>
+              
+              <div class="form-group">
+                <label for="size">Size</label>
+                <select 
+                  id="size"
+                  v-model="proposedData.size" 
+                  class="form-control"
+                  :class="{ 'changed': proposedData.size !== currentData.size }"
+                >
+                  <option value="Small">Small</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Large">Large</option>
+                  <option value="Giant">Giant</option>
+                </select>
+                <span v-if="proposedData.size !== currentData.size" class="change-indicator">
+                  (was: {{ currentData.size || 'Medium' }})
+                </span>
+              </div>
+            </div>
+            
+            <!-- Damage and Delay -->
+            <div class="form-row">
+              <div class="form-group">
+                <label for="damage">Damage</label>
+                <input 
+                  id="damage"
+                  v-model.number="proposedData.damage" 
+                  type="number" 
+                  class="form-control"
+                  :class="{ 'changed': proposedData.damage !== currentData.damage }"
+                  min="0"
+                />
+                <span v-if="proposedData.damage !== currentData.damage" class="change-indicator">
+                  (was: {{ currentData.damage || 0 }})
+                </span>
+              </div>
+              
+              <div class="form-group">
+                <label for="delay">Delay</label>
+                <input 
+                  id="delay"
+                  v-model.number="proposedData.delay" 
+                  type="number" 
+                  class="form-control"
+                  :class="{ 'changed': proposedData.delay !== currentData.delay }"
+                  min="0"
+                />
+                <span v-if="proposedData.delay !== currentData.delay" class="change-indicator">
+                  (was: {{ currentData.delay || 0 }})
+                </span>
+              </div>
+            </div>
+            
+            <!-- Skill -->
+            <div class="form-group">
+              <label for="skill">Skill</label>
+              <select 
+                id="skill"
+                v-model="proposedData.skill" 
+                class="form-control"
+                :class="{ 'changed': proposedData.skill !== currentData.skill }"
+              >
+                <option :value="null">None</option>
+                <option value="Archery">Archery</option>
+                <option value="Slashing">Slashing</option>
+                <option value="Bludgeoning">Bludgeoning</option>
+                <option value="Piercing">Piercing</option>
+                <option value="Throwing">Throwing</option>
+                <option value="Brass">Brass</option>
+                <option value="Percussion">Percussion</option>
+                <option value="Stringed">Stringed</option>
+                <option value="Wind">Wind</option>
+                <option value="Singing">Singing</option>
+              </select>
+              <span v-if="proposedData.skill !== currentData.skill" class="change-indicator">
+                (was: {{ currentData.skill || 'None' }})
+              </span>
+            </div>
+            
+            <!-- Multiple Slots -->
+            <div class="form-group">
+              <label>Slots</label>
+              <div class="multi-select-container">
+                <div class="multi-select-display" @click="showSlotDropdown = !showSlotDropdown">
+                  {{ selectedSlotsDisplay || 'Select slots...' }}
+                  <span class="dropdown-arrow">▼</span>
+                </div>
+                <div v-if="showSlotDropdown" class="multi-select-dropdown">
+                  <div 
+                    v-for="slot in slotOptions" 
+                    :key="slot"
+                    class="multi-select-option"
+                    @click="toggleSlot(slot)"
+                  >
+                    <input 
+                      type="checkbox" 
+                      :checked="proposedData.slots.includes(slot)"
+                      @click.stop
+                      @change="toggleSlot(slot)"
+                    />
+                    <span>{{ slot }}</span>
+                  </div>
+                </div>
+              </div>
+              <span v-if="!arraysEqual(proposedData.slots, currentData.slots)" class="change-indicator">
+                (was: {{ currentData.slots?.join(', ') || currentData.slot || 'None' }})
+              </span>
+            </div>
           </div>
           
           <div class="form-section">
@@ -116,6 +242,28 @@
                 />
                 <span v-if="proposedData[stat.key] !== currentData[stat.key]" class="change-indicator">
                   (was: {{ currentData[stat.key] || 0 }})
+                </span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="form-section">
+            <h4>Resistances</h4>
+            
+            <div class="stats-grid">
+              <div v-for="resist in resistanceFields" :key="resist.key" class="form-group stat-group">
+                <label :for="resist.key">{{ resist.label }}</label>
+                <input 
+                  :id="resist.key"
+                  v-model.number="proposedData[resist.key]" 
+                  type="number" 
+                  class="form-control stat-input"
+                  :class="{ 'changed': proposedData[resist.key] !== currentData[resist.key] }"
+                  min="-999"
+                  max="999"
+                />
+                <span v-if="proposedData[resist.key] !== currentData[resist.key]" class="change-indicator">
+                  (was: {{ currentData[resist.key] || 0 }})
                 </span>
               </div>
             </div>
@@ -199,13 +347,40 @@ export default {
       { key: 'attack_speed', label: 'Attack Speed', max: 99 }
     ]
     
+    // Define resistance fields
+    const resistanceFields = [
+      { key: 'resist_cold', label: 'Cold' },
+      { key: 'resist_corruption', label: 'Corruption' },
+      { key: 'resist_disease', label: 'Disease' },
+      { key: 'resist_electricity', label: 'Electricity' },
+      { key: 'resist_fire', label: 'Fire' },
+      { key: 'resist_magic', label: 'Magic' },
+      { key: 'resist_poison', label: 'Poison' }
+    ]
+    
+    // Slot options
+    const slotOptions = [
+      'Head', 'Face', 'Ears', 'Neck', 'Shoulders', 'Arms', 'Back',
+      'Wrist1', 'Wrist2', 'Range', 'Hands', 'Primary', 'Secondary',
+      'Finger1', 'Finger2', 'Chest', 'Legs', 'Feet', 'Waist', 'Ammo'
+    ]
+    
+    const showSlotDropdown = ref(false)
+    
     // All fields that can be edited
     const allFields = [
       { key: 'name', label: 'Name' },
       { key: 'description', label: 'Description' },
       { key: 'item_type', label: 'Type' },
       { key: 'slot', label: 'Slot' },
-      ...statFields
+      { key: 'slots', label: 'Slots' },
+      { key: 'weight', label: 'Weight' },
+      { key: 'size', label: 'Size' },
+      { key: 'damage', label: 'Damage' },
+      { key: 'delay', label: 'Delay' },
+      { key: 'skill', label: 'Skill' },
+      ...statFields,
+      ...resistanceFields
     ]
     
     // Initialize data when dialog opens
@@ -215,32 +390,63 @@ export default {
         
         // Copy current data
         allFields.forEach(field => {
-          currentData[field.key] = props.item[field.key] || (field.key === 'description' || field.key === 'slot' ? '' : 0)
-          proposedData[field.key] = props.item[field.key] || (field.key === 'description' || field.key === 'slot' ? '' : 0)
+          if (field.key === 'slots') {
+            // Handle slots array
+            currentData.slots = props.item.slots || (props.item.slot ? [props.item.slot] : [])
+            proposedData.slots = [...currentData.slots]
+          } else if (field.key === 'size') {
+            currentData.size = props.item.size || 'Medium'
+            proposedData.size = currentData.size
+          } else if (field.key === 'skill') {
+            currentData.skill = props.item.skill || null
+            proposedData.skill = currentData.skill
+          } else {
+            const defaultValue = ['description', 'slot', 'name', 'item_type'].includes(field.key) ? '' : 0
+            currentData[field.key] = props.item[field.key] || defaultValue
+            proposedData[field.key] = props.item[field.key] || defaultValue
+          }
         })
         
         // Ensure required fields have values
         if (!proposedData.name) proposedData.name = props.item.name || ''
         if (!proposedData.item_type) proposedData.item_type = props.item.item_type || 'misc'
+        
+        // Close dropdown when dialog opens
+        showSlotDropdown.value = false
       }
     })
     
+    // Helper function to compare arrays
+    const arraysEqual = (a, b) => {
+      if (!Array.isArray(a) || !Array.isArray(b)) return false
+      if (a.length !== b.length) return false
+      return a.every(item => b.includes(item)) && b.every(item => a.includes(item))
+    }
+    
     // Check if there are any changes
     const hasChanges = computed(() => {
-      return allFields.some(field => 
-        proposedData[field.key] !== currentData[field.key]
-      )
+      return allFields.some(field => {
+        if (field.key === 'slots') {
+          return !arraysEqual(proposedData.slots, currentData.slots)
+        }
+        return proposedData[field.key] !== currentData[field.key]
+      })
     })
     
     // Get list of changes
     const changesList = computed(() => {
       return allFields
-        .filter(field => proposedData[field.key] !== currentData[field.key])
+        .filter(field => {
+          if (field.key === 'slots') {
+            return !arraysEqual(proposedData.slots, currentData.slots)
+          }
+          return proposedData[field.key] !== currentData[field.key]
+        })
         .map(field => ({
           field: field.key,
           label: field.label,
-          old: currentData[field.key],
-          new: proposedData[field.key]
+          old: field.key === 'slots' ? (currentData.slots?.join(', ') || 'None') : currentData[field.key],
+          new: field.key === 'slots' ? (proposedData.slots?.join(', ') || 'None') : proposedData[field.key]
         }))
     })
     
@@ -289,6 +495,20 @@ export default {
       }
     }
     
+    // Slot management functions
+    const toggleSlot = (slot) => {
+      const index = proposedData.slots.indexOf(slot)
+      if (index > -1) {
+        proposedData.slots.splice(index, 1)
+      } else {
+        proposedData.slots.push(slot)
+      }
+    }
+    
+    const selectedSlotsDisplay = computed(() => {
+      return proposedData.slots?.length > 0 ? proposedData.slots.join(', ') : ''
+    })
+    
     const handleClose = () => {
       emit('close')
     }
@@ -298,10 +518,16 @@ export default {
       currentData,
       proposedData,
       statFields,
+      resistanceFields,
+      slotOptions,
+      showSlotDropdown,
       hasChanges,
       changesList,
       submitProposal,
-      handleClose
+      handleClose,
+      toggleSlot,
+      selectedSlotsDisplay,
+      arraysEqual
     }
   }
 }
@@ -620,5 +846,62 @@ textarea.form-control {
   .stats-grid {
     grid-template-columns: repeat(3, 1fr);
   }
+}
+
+/* Multi-select dropdown styles */
+.multi-select-container {
+  position: relative;
+}
+
+.multi-select-display {
+  padding: 0.5rem;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: #1a1a1a;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 2.5rem;
+}
+
+.multi-select-display:hover {
+  border-color: #666;
+}
+
+.dropdown-arrow {
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.multi-select-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #1a1a1a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  margin-top: 0.25rem;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 10;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+.multi-select-option {
+  padding: 0.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.multi-select-option:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.multi-select-option input[type="checkbox"] {
+  margin: 0;
 }
 </style>

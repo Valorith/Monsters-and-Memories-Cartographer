@@ -55,12 +55,12 @@ const pool = new Pool({
   min: process.env.DB_POOL_MIN ? parseInt(process.env.DB_POOL_MIN) : 2,  // Minimum number of clients in the pool
   
   // Connection timeout settings (in milliseconds)
-  connectionTimeoutMillis: 30000, // 30 seconds to connect
-  idleTimeoutMillis: 10000,       // 10 seconds before idle connection is closed (shorter for Railway)
+  connectionTimeoutMillis: 60000, // 60 seconds to connect (increased)
+  idleTimeoutMillis: 30000,       // 30 seconds before idle connection is closed
   
   // Query timeout
-  query_timeout: 60000,            // 60 seconds query timeout
-  statement_timeout: 60000,        // 60 seconds statement timeout
+  query_timeout: 120000,           // 120 seconds query timeout (increased)
+  statement_timeout: 120000,       // 120 seconds statement timeout (increased)
   
   // Keep alive settings to prevent unexpected disconnections
   keepAlive: true,
@@ -83,7 +83,7 @@ pool.on('connect', (client) => {
   }
   
   // Set session parameters for each new connection
-  client.query('SET statement_timeout = 60000') // 60 seconds
+  client.query('SET statement_timeout = 120000') // 120 seconds
     .catch(err => console.error('Error setting statement timeout:', err));
 });
 

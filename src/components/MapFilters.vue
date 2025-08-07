@@ -315,9 +315,7 @@ export default {
         if (!sourceMatch) return false
         
         // Then check if POI matches the type
-        return poi.poi_type_id === typeId || 
-               poi.type_id === typeId ||
-               poi.poi_type?.id === typeId
+        return poi.type_id === typeId
       }).length
     }
     

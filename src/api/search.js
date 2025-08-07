@@ -235,6 +235,8 @@ export default function searchRouter(app) {
           p.map_id,
           p.type_id,
           p.icon_size,
+          p.npc_id,
+          p.item_id,
           m.name as map_name,
           pt.name as type_name,
           pt.icon_type as type_icon_type,

@@ -52,17 +52,32 @@
             </div>
             
             <div class="form-group">
-              <label for="item-slot">Slot</label>
-              <select 
-                id="item-slot"
-                v-model="formData.slot" 
-                class="form-control"
-              >
-                <option value="">-- Select Slot --</option>
-                <option v-for="slot in itemSlots" :key="slot" :value="slot">
-                  {{ slot }}
-                </option>
-              </select>
+              <label for="item-slots">Slot(s)</label>
+              <div class="multi-select-container">
+                <div 
+                  class="multi-select-display"
+                  @click="showSlotDropdown = !showSlotDropdown"
+                >
+                  {{ selectedSlotsDisplay || 'Select slots...' }}
+                  <span class="dropdown-arrow">▼</span>
+                </div>
+                <div v-if="showSlotDropdown" class="multi-select-dropdown">
+                  <div 
+                    v-for="slot in itemSlots" 
+                    :key="slot"
+                    class="multi-select-option"
+                    @click="toggleSlot(slot)"
+                  >
+                    <input 
+                      type="checkbox" 
+                      :checked="formData.slots.includes(slot)"
+                      @click.stop
+                      @change="toggleSlot(slot)"
+                    />
+                    <label>{{ slot }}</label>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           
@@ -281,6 +296,166 @@
             </div>
           </div>
           
+          <!-- Weight and Size -->
+          <div class="form-row">
+            <div class="form-group">
+              <label for="item-weight">Weight</label>
+              <input 
+                id="item-weight"
+                v-model.number="formData.weight" 
+                type="number" 
+                class="form-control"
+                placeholder="0.0"
+                min="0"
+                step="0.01"
+              />
+            </div>
+            
+            <div class="form-group">
+              <label for="item-size">Size</label>
+              <select 
+                id="item-size"
+                v-model="formData.size" 
+                class="form-control"
+              >
+                <option value="Small">Small</option>
+                <option value="Medium">Medium</option>
+                <option value="Large">Large</option>
+                <option value="Giant">Giant</option>
+              </select>
+            </div>
+          </div>
+          
+          <!-- Damage and Delay -->
+          <div class="form-row">
+            <div class="form-group">
+              <label for="item-damage">Damage</label>
+              <input 
+                id="item-damage"
+                v-model.number="formData.damage" 
+                type="number" 
+                class="form-control"
+                placeholder="0"
+                min="0"
+              />
+            </div>
+            
+            <div class="form-group">
+              <label for="item-delay">Delay</label>
+              <input 
+                id="item-delay"
+                v-model.number="formData.delay" 
+                type="number" 
+                class="form-control"
+                placeholder="0"
+                min="0"
+              />
+            </div>
+          </div>
+          
+          <!-- Skill -->
+          <div class="form-group">
+            <label for="item-skill">Skill</label>
+            <select 
+              id="item-skill"
+              v-model="formData.skill" 
+              class="form-control"
+            >
+              <option :value="null">None</option>
+              <option value="Archery">Archery</option>
+              <option value="Slashing">Slashing</option>
+              <option value="Bludgeoning">Bludgeoning</option>
+              <option value="Piercing">Piercing</option>
+              <option value="Throwing">Throwing</option>
+              <option value="Brass">Brass</option>
+              <option value="Percussion">Percussion</option>
+              <option value="Stringed">Stringed</option>
+              <option value="Wind">Wind</option>
+              <option value="Singing">Singing</option>
+            </select>
+          </div>
+          
+          <!-- Resistances -->
+          <h4>Resistances</h4>
+          <div class="stat-grid">
+            <div class="form-group">
+              <label for="item-resist-cold">Cold</label>
+              <input 
+                id="item-resist-cold"
+                v-model.number="formData.resist_cold" 
+                type="number" 
+                class="form-control"
+                placeholder="0"
+              />
+            </div>
+            
+            <div class="form-group">
+              <label for="item-resist-corruption">Corruption</label>
+              <input 
+                id="item-resist-corruption"
+                v-model.number="formData.resist_corruption" 
+                type="number" 
+                class="form-control"
+                placeholder="0"
+              />
+            </div>
+            
+            <div class="form-group">
+              <label for="item-resist-disease">Disease</label>
+              <input 
+                id="item-resist-disease"
+                v-model.number="formData.resist_disease" 
+                type="number" 
+                class="form-control"
+                placeholder="0"
+              />
+            </div>
+            
+            <div class="form-group">
+              <label for="item-resist-electricity">Electricity</label>
+              <input 
+                id="item-resist-electricity"
+                v-model.number="formData.resist_electricity" 
+                type="number" 
+                class="form-control"
+                placeholder="0"
+              />
+            </div>
+            
+            <div class="form-group">
+              <label for="item-resist-fire">Fire</label>
+              <input 
+                id="item-resist-fire"
+                v-model.number="formData.resist_fire" 
+                type="number" 
+                class="form-control"
+                placeholder="0"
+              />
+            </div>
+            
+            <div class="form-group">
+              <label for="item-resist-magic">Magic</label>
+              <input 
+                id="item-resist-magic"
+                v-model.number="formData.resist_magic" 
+                type="number" 
+                class="form-control"
+                placeholder="0"
+              />
+            </div>
+            
+            <div class="form-group">
+              <label for="item-resist-poison">Poison</label>
+              <input 
+                id="item-resist-poison"
+                v-model.number="formData.resist_poison" 
+                type="number" 
+                class="form-control"
+                placeholder="0"
+              />
+            </div>
+          </div>
+          
           <div class="form-group">
             <label for="item-description">Description</label>
             <textarea 
@@ -319,7 +494,7 @@
 </template>
 
 <script>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useToast } from '../composables/useToast'
 import { useCSRF } from '../composables/useCSRF'
 
@@ -353,12 +528,26 @@ export default {
       health: 0,
       mana: 0,
       ac: 0,
+      weight: 0,
+      size: 'Medium',
+      resist_cold: 0,
+      resist_corruption: 0,
+      resist_disease: 0,
+      resist_electricity: 0,
+      resist_fire: 0,
+      resist_magic: 0,
+      resist_poison: 0,
+      slots: [],
+      skill: null,
+      damage: 0,
+      delay: 0,
       description: ''
     })
     
     const proposalNotes = ref('')
     const submitting = ref(false)
     const showEmojiPicker = ref(false)
+    const showSlotDropdown = ref(false)
     const selectedEmojiCategory = ref('items')
     
     const iconTypes = [
@@ -393,6 +582,10 @@ export default {
       return category ? category.emojis : []
     })
     
+    const selectedSlotsDisplay = computed(() => {
+      return formData.value.slots.length > 0 ? formData.value.slots.join(', ') : ''
+    })
+    
     const isFormValid = computed(() => {
       return formData.value.name.trim() && 
              formData.value.icon_value.trim() && 
@@ -424,15 +617,40 @@ export default {
         health: 0,
         mana: 0,
         ac: 0,
+        weight: 0,
+        size: 'Medium',
+        resist_cold: 0,
+        resist_corruption: 0,
+        resist_disease: 0,
+        resist_electricity: 0,
+        resist_fire: 0,
+        resist_magic: 0,
+        resist_poison: 0,
+        skill: null,
+        damage: 0,
+        delay: 0,
+        slots: [],
         description: ''
       }
       proposalNotes.value = ''
       showEmojiPicker.value = false
+      showSlotDropdown.value = false
     }
     
     const selectEmoji = (emoji) => {
       formData.value.icon_value = emoji
       showEmojiPicker.value = false
+    }
+    
+    const toggleSlot = (slot) => {
+      const index = formData.value.slots.indexOf(slot)
+      if (index > -1) {
+        formData.value.slots.splice(index, 1)
+      } else {
+        formData.value.slots.push(slot)
+      }
+      // Update legacy slot field for backward compatibility
+      formData.value.slot = formData.value.slots[0] || ''
     }
     
     const submitProposal = async () => {
@@ -455,6 +673,7 @@ export default {
             icon_value: formData.value.icon_value.trim(),
             item_type: formData.value.item_type || null,
             slot: formData.value.slot || null,
+            slots: formData.value.slots || [],
             str: formData.value.str || 0,
             sta: formData.value.sta || 0,
             agi: formData.value.agi || 0,
@@ -466,6 +685,18 @@ export default {
             health: formData.value.health || 0,
             mana: formData.value.mana || 0,
             ac: formData.value.ac || 0,
+            weight: formData.value.weight || 0,
+            size: formData.value.size || 'Medium',
+            skill: formData.value.skill || null,
+            damage: formData.value.damage || 0,
+            delay: formData.value.delay || 0,
+            resist_cold: formData.value.resist_cold || 0,
+            resist_corruption: formData.value.resist_corruption || 0,
+            resist_disease: formData.value.resist_disease || 0,
+            resist_electricity: formData.value.resist_electricity || 0,
+            resist_fire: formData.value.resist_fire || 0,
+            resist_magic: formData.value.resist_magic || 0,
+            resist_poison: formData.value.resist_poison || 0,
             description: formData.value.description.trim() || null
           },
           notes: proposalNotes.value.trim()
@@ -498,12 +729,29 @@ export default {
       emit('close')
     }
     
+    // Handle click outside for dropdowns
+    const handleClickOutside = (event) => {
+      if (showSlotDropdown.value && !event.target.closest('.multi-select-container')) {
+        showSlotDropdown.value = false
+      }
+    }
+    
+    onMounted(() => {
+      document.addEventListener('click', handleClickOutside)
+    })
+    
+    onUnmounted(() => {
+      document.removeEventListener('click', handleClickOutside)
+    })
+    
     return {
       formData,
       proposalNotes,
       submitting,
       showEmojiPicker,
+      showSlotDropdown,
       selectedEmojiCategory,
+      selectedSlotsDisplay,
       iconTypes,
       itemTypes,
       itemSlots,
@@ -511,6 +759,7 @@ export default {
       currentCategoryEmojis,
       isFormValid,
       selectEmoji,
+      toggleSlot,
       submitProposal,
       handleClose
     }
@@ -869,5 +1118,69 @@ textarea.form-control {
   .emoji-categories {
     justify-content: center;
   }
+}
+
+/* Multi-select styles */
+.multi-select-container {
+  position: relative;
+}
+
+.multi-select-display {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #374151;
+  border-radius: 0.375rem;
+  background: #1f2937;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 2.5rem;
+}
+
+.multi-select-display:hover {
+  background: #374151;
+}
+
+.dropdown-arrow {
+  font-size: 0.75rem;
+  transition: transform 0.2s;
+}
+
+.multi-select-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 0.25rem;
+  background: #1f2937;
+  border: 1px solid #374151;
+  border-radius: 0.375rem;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 10;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.multi-select-option {
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.multi-select-option:hover {
+  background: #374151;
+}
+
+.multi-select-option input[type="checkbox"] {
+  cursor: pointer;
+}
+
+.multi-select-option label {
+  cursor: pointer;
+  margin: 0;
+  flex: 1;
 }
 </style>

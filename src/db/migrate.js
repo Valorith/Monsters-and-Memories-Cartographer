@@ -311,6 +311,38 @@ async function migrate() {
       console.log('Removed dropped_by from items table (will be in NPC table instead)');
     }
     
+    // Add resistances, weight, and size to items
+    const addResistancesPath = path.join(__dirname, 'add-resistances-weight-size-to-items.sql');
+    if (fs.existsSync(addResistancesPath)) {
+      const addResistancesSchema = fs.readFileSync(addResistancesPath, 'utf8');
+      await pool.query(addResistancesSchema);
+      console.log('Added resistances, weight, and size fields to items table');
+    }
+    
+    // Add skill to items
+    const addSkillPath = path.join(__dirname, 'add-skill-to-items.sql');
+    if (fs.existsSync(addSkillPath)) {
+      const addSkillSchema = fs.readFileSync(addSkillPath, 'utf8');
+      await pool.query(addSkillSchema);
+      console.log('Added skill field to items table');
+    }
+    
+    // Add damage and delay to items
+    const addDamageDelayPath = path.join(__dirname, 'add-damage-delay-to-items.sql');
+    if (fs.existsSync(addDamageDelayPath)) {
+      const addDamageDelaySchema = fs.readFileSync(addDamageDelayPath, 'utf8');
+      await pool.query(addDamageDelaySchema);
+      console.log('Added damage and delay fields to items table');
+    }
+    
+    // Add race and class to items
+    const addRaceClassPath = path.join(__dirname, 'add-race-class-to-items.sql');
+    if (fs.existsSync(addRaceClassPath)) {
+      const addRaceClassSchema = fs.readFileSync(addRaceClassPath, 'utf8');
+      await pool.query(addRaceClassSchema);
+      console.log('Added race and class fields to items table');
+    }
+    
     // Create NPCs table
     const createNpcsTablePath = path.join(__dirname, 'create-npcs-table.sql');
     if (fs.existsSync(createNpcsTablePath)) {
@@ -428,6 +460,18 @@ async function migrate() {
         console.log('Donation matching function updated');
       } catch (error) {
         console.error('Error updating donation matching:', error.message);
+      }
+    }
+    
+    // Create URL mappings table
+    const urlMappingsPath = path.join(__dirname, 'create-url-mappings-table.sql');
+    if (fs.existsSync(urlMappingsPath)) {
+      try {
+        const urlMappingsSchema = fs.readFileSync(urlMappingsPath, 'utf8');
+        await pool.query(urlMappingsSchema);
+        console.log('URL mappings table created');
+      } catch (error) {
+        console.error('Error creating URL mappings table:', error.message);
       }
     }
     
