@@ -70,7 +70,7 @@
                 <span class="stat-label">DELAY</span>
                 <span class="stat-value">{{ item.delay }}</span>
               </div>
-              <div v-if="item.attack_speed" class="stat">
+              <div v-if="item.attack_speed && Number(item.attack_speed) !== 0" class="stat">
                 <span class="stat-label">ATK SPD</span>
                 <span class="stat-value">{{ item.attack_speed }}</span>
               </div>
@@ -375,7 +375,8 @@ export default {
 
     const hasCombatStats = computed(() => {
       if (!props.item) return false;
-      return props.item.damage || props.item.delay || props.item.attack_speed || 
+      return props.item.damage || props.item.delay || 
+             (props.item.attack_speed && Number(props.item.attack_speed) !== 0) || 
              props.item.ac || props.item.block;
     });
 

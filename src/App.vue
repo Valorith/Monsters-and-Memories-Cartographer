@@ -371,6 +371,7 @@
       :npc="npcListModal.npc"
       @close="npcListModal.visible = false"
       @select-poi="handlePOINavigation"
+      @select-item="handleItemSelectedFromNPC"
     />
     
     <div class="controls">
@@ -4320,6 +4321,14 @@ export default {
       npcListModal.value.npc = npc
       npcListModal.value.visible = true
     }
+
+    // Handle item selection from NPC modal
+    const handleItemSelectedFromNPC = async (item) => {
+      // Close NPC modal
+      npcListModal.value.visible = false
+      // Open item modal using the existing handler
+      await handleItemSelected(item)
+    }
     
     // Handle POI navigation from NPC modal
     const handlePOINavigation = async (poi) => {
@@ -6685,6 +6694,7 @@ export default {
       npcListModal,
       handleItemSelected,
       handleNPCSelected,
+      handleItemSelectedFromNPC,
       handlePOINavigation,
       isTransitioningMap,
       // Proposal popup handlers

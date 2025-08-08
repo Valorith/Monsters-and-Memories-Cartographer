@@ -84,6 +84,33 @@
           <p>{{ npc.description }}</p>
         </div>
 
+        <!-- Loot/Drops Section -->
+        <div class="loot-section">
+          <h4>Drops</h4>
+          <div v-if="loadingLoot" class="loading">
+            <span class="spinner">⟳</span> Loading loot...
+          </div>
+          <div v-else-if="loot.length === 0" class="no-loot">
+            No loot information available for this NPC.
+          </div>
+          <div v-else class="loot-grid">
+            <div 
+              v-for="item in loot" 
+              :key="item.id"
+              class="loot-item"
+              @click="selectItem(item)"
+              @mouseenter="hoveredItem = item.id"
+              @mouseleave="hoveredItem = null"
+            >
+              <div class="item-icon">
+                <span v-if="item.icon_type === 'emoji'" class="icon-emoji">{{ item.icon_value || '📦' }}</span>
+                <iconify-icon v-else-if="item.icon_type === 'iconify'" :icon="item.icon_value" width="24" height="24"></iconify-icon>
+              </div>
+              <div class="item-name">{{ item.name }}</div>
+            </div>
+          </div>
+        </div>
+
         <!-- POI Locations -->
         <div class="locations-section">
           <h4>Found at {{ pois.length }} location{{ pois.length === 1 ? '' : 's' }}</h4>
@@ -141,11 +168,14 @@ export default {
       default: null
     }
   },
-  emits: ['close', 'select-poi'],
+  emits: ['close', 'select-poi', 'select-item'],
   setup(props, { emit }) {
     const pois = ref([]);
     const loadingPOIs = ref(false);
     const hoveredPOI = ref(null);
+    const loot = ref([]);
+    const loadingLoot = ref(false);
+    const hoveredItem = ref(null);
 
     const groupedPOIs = computed(() => {
       const groups = {};
@@ -197,22 +227,48 @@ export default {
       }
     };
 
+    const loadLoot = async () => {
+      if (!props.npc || !props.npc.npcid) return;
+      
+      loadingLoot.value = true;
+      loot.value = [];
+      
+      try {
+        const response = await fetch(`/api/npcs/${props.npc.npcid}/loot`);
+        if (response.ok) {
+          const data = await response.json();
+          loot.value = data.items || [];
+        }
+      } catch (error) {
+        console.error('Error loading loot:', error);
+      } finally {
+        loadingLoot.value = false;
+      }
+    };
+
     const selectPOI = (poi) => {
       emit('select-poi', poi);
       emit('close');
     };
 
-    // Load POIs when NPC changes
+    const selectItem = (item) => {
+      emit('select-item', item);
+      emit('close');
+    };
+
+    // Load POIs and loot when NPC changes
     watch(() => props.npc, (newNPC) => {
       if (newNPC && props.visible) {
         loadPOIs();
+        loadLoot();
       }
     });
 
-    // Load POIs when modal becomes visible
+    // Load POIs and loot when modal becomes visible
     watch(() => props.visible, (newVisible) => {
       if (newVisible && props.npc) {
         loadPOIs();
+        loadLoot();
       }
     });
 
@@ -223,7 +279,11 @@ export default {
       groupedPOIs,
       hasAttributes,
       getPoiIcon,
-      selectPOI
+      selectPOI,
+      loot,
+      loadingLoot,
+      hoveredItem,
+      selectItem
     };
   }
 };
@@ -563,6 +623,90 @@ export default {
 }
 
 .modal-content::-webkit-scrollbar-thumb:hover {
+  background: #5fa772;
+}
+
+/* Loot Section */
+.loot-section {
+  margin-bottom: 1.5rem;
+}
+
+.loot-section h4 {
+  color: #FFD700;
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+}
+
+.no-loot {
+  text-align: center;
+  color: #999;
+  padding: 1rem;
+  font-style: italic;
+  font-size: 0.9rem;
+}
+
+.loot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 0.5rem;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.loot-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0.25rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid #444;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.loot-item:hover {
+  background: rgba(255, 215, 0, 0.1);
+  border-color: rgba(255, 215, 0, 0.3);
+  transform: translateY(-1px);
+}
+
+.loot-item .item-icon {
+  font-size: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+.loot-item .item-name {
+  color: #FFD700;
+  font-size: 0.75rem;
+  font-weight: 500;
+  word-break: break-word;
+  line-height: 1.1;
+}
+
+/* Loot grid scrollbar */
+.loot-grid::-webkit-scrollbar {
+  width: 6px;
+}
+
+.loot-grid::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 3px;
+}
+
+.loot-grid::-webkit-scrollbar-thumb {
+  background: #4a7c59;
+  border-radius: 3px;
+}
+
+.loot-grid::-webkit-scrollbar-thumb:hover {
   background: #5fa772;
 }
 </style>
