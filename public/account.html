@@ -9513,7 +9513,7 @@
         }
         
         // Start analyzing URLs
-        analyzeUrlsHierarchically(uniqueUrls);
+        await analyzeUrlsHierarchically(uniqueUrls);
       } else {
         // Just show the URLs without analyzing
         // Show Extract button in disabled state (but not if extraction is completed)
@@ -10182,11 +10182,16 @@
       
       
       for (const url of urls) {
-        const node = Object.values(inspectorTreeData).find(n => n.url === url && !n.parent);
+        const node = Object.values(inspectorTreeData).find(n => n.url === url && n.parent === null);
         
         
         if (!node) {
           console.warn('No node found for URL:', url);
+          console.warn('Available nodes:', Object.values(inspectorTreeData).map(n => ({
+            url: n.url,
+            parent: n.parent,
+            id: n.id
+          })));
           continue;
         }
         
