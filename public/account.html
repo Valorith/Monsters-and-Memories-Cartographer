@@ -10729,13 +10729,6 @@
               for (const childId of node.children) {
                 const childNode = inspectorTreeData[childId];
                 
-                // Debug logging for Wyrmsbane
-                if (childNode && childNode.url && childNode.url.includes('Wyrmsbane_Lieutenant')) {
-                    childId: childId,
-                    childNode: childNode,
-                    status: childNode.status
-                  });
-                }
                 
                 if (childNode && childNode.status === 'loading') {
                   try {
@@ -10888,14 +10881,6 @@
           node.icon = '⚔️';
           node.status = 'success';
           
-          // Special logging for Wyrmsbane
-          if (cleanUrl.includes('Wyrmsbane_Lieutenant')) {
-              nodeId: node.id,
-              nodeTitle: node.title,
-              nodeStatus: node.status,
-              nodeType: node.type
-            });
-          }
           
           // Items are leaf nodes - no children to process
         } else if (pageType === 'spell') {
@@ -10903,13 +10888,6 @@
           node.icon = '✨';
           node.status = 'success';
           
-          // Log spell detection for debugging
-          if (cleanUrl.includes('Intelligence') || cleanUrl.includes('Strength')) {
-              url: cleanUrl,
-              nodeId: node.id,
-              nodeTitle: node.title
-            });
-          }
           
           // Spells are not items - mark them as such
         }
@@ -10941,17 +10919,6 @@
         node.status = 'error';
         node.errorMessage = error.message;
       } finally {
-        // Special logging for Wyrmsbane final state
-        if (cleanUrl.includes('Wyrmsbane_Lieutenant')) {
-            nodeId: node.id,
-            nodeTitle: node.title,
-            nodeType: node.type,
-            nodeStatus: node.status,
-            nodeIcon: node.icon,
-            nodeErrorMessage: node.errorMessage,
-            url: cleanUrl
-          });
-        }
         
         // Ensure node is never left in loading state
         if (node.status === 'loading') {
@@ -11040,27 +11007,17 @@
         // Debug logging for problem URL
         const wyrmsbanUrl = urls.find(u => u.includes('Wyrmsbane_Lieutenant'));
         if (wyrmsbanUrl) {
-            url: wyrmsbanUrl,
-            allUrls: urls
-          });
         }
         
         const response = await window.csrfHelper.fetchWithCSRF('/api/url-mappings/check-batch', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ urls })
+          body: JSON.stringify({ urls: uniqueUrls })
         });
         
         if (response.ok) {
           const mappings = await response.json();
           
-          // Debug logging for problem URL
-          if (wyrmsbanUrl) {
-              hasMapping: !!mappings[wyrmsbanUrl],
-              mapping: mappings[wyrmsbanUrl],
-              allMappingKeys: Object.keys(mappings)
-            });
-          }
           
           // Update cache
           Object.assign(urlMappingsCache, mappings);
@@ -14001,14 +13958,6 @@
       const hasNPCSections = pageText.includes('spawn location') || pageText.includes('respawn time') ||
                             pageText.includes('faction:') || pageText.includes('aggro radius');
       
-      if (baseUrl.includes('Bone_Construct')) {
-          hasNPCStats,
-          hasLootSections,
-          looksLikeNPCName,
-          hasNPCSections,
-          pageTitle
-        });
-      }
       
       if ((!hasNPCStats && !looksLikeNPCName && !hasNPCSections) || !hasLootSections) {
         // Not an NPC page or no loot sections

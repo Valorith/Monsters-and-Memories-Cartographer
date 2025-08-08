@@ -40,6 +40,8 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.4",
+    "acorn": "^8.15.0",
+    "acorn-loose": "^8.5.2",
     "concurrently": "^8.2.2",
     "nodemon": "^3.0.2",
     "vite": "^5.2.0"
