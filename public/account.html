@@ -9086,10 +9086,8 @@
       if (urls.length === 0) return;
       
       // Update the data inspector to show we're starting analysis
+      // This will initialize the tree and start the analysis
       updateDataInspector('urls', urls, true); // true = start analysis
-      
-      // Start the URL analysis
-      await analyzeUrlsForInspector(urls);
     }
     
     async function addItemsToNPC() {
@@ -10187,11 +10185,6 @@
         
         if (!node) {
           console.warn('No node found for URL:', url);
-          console.warn('Available nodes:', Object.values(inspectorTreeData).map(n => ({
-            url: n.url,
-            parent: n.parent,
-            id: n.id
-          })));
           continue;
         }
         
