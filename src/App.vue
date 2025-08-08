@@ -4289,8 +4289,25 @@ export default {
     }
     
     // Handle item selection from search (shows item info modal)
-    const handleItemSelected = (item) => {
-      itemInfoModal.value.item = item
+    const handleItemSelected = async (item) => {
+      // If we only have partial item data, fetch the full item
+      if (item.id && !item.damage && !item.weight) {
+        try {
+          const response = await fetch(`/api/items/${item.id}`)
+          if (response.ok) {
+            const fullItem = await response.json()
+            itemInfoModal.value.item = fullItem
+          } else {
+            // Fallback to partial data if fetch fails
+            itemInfoModal.value.item = item
+          }
+        } catch (error) {
+          console.error('Error fetching full item data:', error)
+          itemInfoModal.value.item = item
+        }
+      } else {
+        itemInfoModal.value.item = item
+      }
       itemInfoModal.value.visible = true
     }
     

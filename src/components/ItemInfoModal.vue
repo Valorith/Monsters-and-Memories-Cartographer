@@ -22,50 +22,143 @@
         <!-- Item Stats -->
         <div v-if="hasStats" class="item-stats">
           <h4>Statistics</h4>
-          <div class="stats-grid">
-            <div v-if="item.str" class="stat">
-              <span class="stat-label">STR</span>
-              <span class="stat-value">+{{ item.str }}</span>
+          
+          <!-- Primary Attributes -->
+          <div v-if="hasPrimaryStats" class="stat-section">
+            <h5>Attributes</h5>
+            <div class="stats-grid">
+              <div v-if="item.str" class="stat">
+                <span class="stat-label">STR</span>
+                <span class="stat-value" :class="{ negative: item.str < 0 }">{{ formatStatValue(item.str) }}</span>
+              </div>
+              <div v-if="item.sta" class="stat">
+                <span class="stat-label">STA</span>
+                <span class="stat-value" :class="{ negative: item.sta < 0 }">{{ formatStatValue(item.sta) }}</span>
+              </div>
+              <div v-if="item.agi" class="stat">
+                <span class="stat-label">AGI</span>
+                <span class="stat-value" :class="{ negative: item.agi < 0 }">{{ formatStatValue(item.agi) }}</span>
+              </div>
+              <div v-if="item.dex" class="stat">
+                <span class="stat-label">DEX</span>
+                <span class="stat-value" :class="{ negative: item.dex < 0 }">{{ formatStatValue(item.dex) }}</span>
+              </div>
+              <div v-if="item.wis" class="stat">
+                <span class="stat-label">WIS</span>
+                <span class="stat-value" :class="{ negative: item.wis < 0 }">{{ formatStatValue(item.wis) }}</span>
+              </div>
+              <div v-if="item.int" class="stat">
+                <span class="stat-label">INT</span>
+                <span class="stat-value" :class="{ negative: item.int < 0 }">{{ formatStatValue(item.int) }}</span>
+              </div>
+              <div v-if="item.cha" class="stat">
+                <span class="stat-label">CHA</span>
+                <span class="stat-value" :class="{ negative: item.cha < 0 }">{{ formatStatValue(item.cha) }}</span>
+              </div>
             </div>
-            <div v-if="item.sta" class="stat">
-              <span class="stat-label">STA</span>
-              <span class="stat-value">+{{ item.sta }}</span>
+          </div>
+
+          <!-- Combat Stats -->
+          <div v-if="hasCombatStats" class="stat-section">
+            <h5>Combat</h5>
+            <div class="stats-grid">
+              <div v-if="item.damage" class="stat">
+                <span class="stat-label">DMG</span>
+                <span class="stat-value">{{ item.damage }}</span>
+              </div>
+              <div v-if="item.delay" class="stat">
+                <span class="stat-label">DELAY</span>
+                <span class="stat-value">{{ item.delay }}</span>
+              </div>
+              <div v-if="item.attack_speed" class="stat">
+                <span class="stat-label">ATK SPD</span>
+                <span class="stat-value">{{ item.attack_speed }}</span>
+              </div>
+              <div v-if="item.ac" class="stat">
+                <span class="stat-label">AC</span>
+                <span class="stat-value" :class="{ negative: item.ac < 0 }">{{ formatStatValue(item.ac) }}</span>
+              </div>
+              <div v-if="item.block" class="stat">
+                <span class="stat-label">BLOCK</span>
+                <span class="stat-value" :class="{ negative: item.block < 0 }">{{ formatStatValue(item.block) }}</span>
+              </div>
             </div>
-            <div v-if="item.agi" class="stat">
-              <span class="stat-label">AGI</span>
-              <span class="stat-value">+{{ item.agi }}</span>
+          </div>
+
+          <!-- Resources -->
+          <div v-if="hasResourceStats" class="stat-section">
+            <h5>Resources</h5>
+            <div class="stats-grid">
+              <div v-if="item.health" class="stat">
+                <span class="stat-label">HP</span>
+                <span class="stat-value" :class="{ negative: item.health < 0 }">{{ formatStatValue(item.health) }}</span>
+              </div>
+              <div v-if="item.mana" class="stat">
+                <span class="stat-label">MP</span>
+                <span class="stat-value" :class="{ negative: item.mana < 0 }">{{ formatStatValue(item.mana) }}</span>
+              </div>
             </div>
-            <div v-if="item.dex" class="stat">
-              <span class="stat-label">DEX</span>
-              <span class="stat-value">+{{ item.dex }}</span>
+          </div>
+
+          <!-- Resistances -->
+          <div v-if="hasResistances" class="stat-section">
+            <h5>Resistances</h5>
+            <div class="stats-grid">
+              <div v-if="item.resist_cold" class="stat">
+                <span class="stat-label">COLD</span>
+                <span class="stat-value" :class="{ negative: item.resist_cold < 0 }">{{ formatStatValue(item.resist_cold) }}</span>
+              </div>
+              <div v-if="item.resist_fire" class="stat">
+                <span class="stat-label">FIRE</span>
+                <span class="stat-value" :class="{ negative: item.resist_fire < 0 }">{{ formatStatValue(item.resist_fire) }}</span>
+              </div>
+              <div v-if="item.resist_electricity" class="stat">
+                <span class="stat-label">ELEC</span>
+                <span class="stat-value" :class="{ negative: item.resist_electricity < 0 }">{{ formatStatValue(item.resist_electricity) }}</span>
+              </div>
+              <div v-if="item.resist_poison" class="stat">
+                <span class="stat-label">POISON</span>
+                <span class="stat-value" :class="{ negative: item.resist_poison < 0 }">{{ formatStatValue(item.resist_poison) }}</span>
+              </div>
+              <div v-if="item.resist_disease" class="stat">
+                <span class="stat-label">DISEASE</span>
+                <span class="stat-value" :class="{ negative: item.resist_disease < 0 }">{{ formatStatValue(item.resist_disease) }}</span>
+              </div>
+              <div v-if="item.resist_magic" class="stat">
+                <span class="stat-label">MAGIC</span>
+                <span class="stat-value" :class="{ negative: item.resist_magic < 0 }">{{ formatStatValue(item.resist_magic) }}</span>
+              </div>
+              <div v-if="item.resist_corruption" class="stat">
+                <span class="stat-label">CORRUPT</span>
+                <span class="stat-value" :class="{ negative: item.resist_corruption < 0 }">{{ formatStatValue(item.resist_corruption) }}</span>
+              </div>
             </div>
-            <div v-if="item.wis" class="stat">
-              <span class="stat-label">WIS</span>
-              <span class="stat-value">+{{ item.wis }}</span>
-            </div>
-            <div v-if="item.int" class="stat">
-              <span class="stat-label">INT</span>
-              <span class="stat-value">+{{ item.int }}</span>
-            </div>
-            <div v-if="item.cha" class="stat">
-              <span class="stat-label">CHA</span>
-              <span class="stat-value">+{{ item.cha }}</span>
-            </div>
-            <div v-if="item.health" class="stat">
-              <span class="stat-label">HP</span>
-              <span class="stat-value">+{{ item.health }}</span>
-            </div>
-            <div v-if="item.mana" class="stat">
-              <span class="stat-label">MP</span>
-              <span class="stat-value">+{{ item.mana }}</span>
-            </div>
-            <div v-if="item.ac" class="stat">
-              <span class="stat-label">AC</span>
-              <span class="stat-value">+{{ item.ac }}</span>
-            </div>
-            <div v-if="item.attack_speed" class="stat">
-              <span class="stat-label">ATK SPD</span>
-              <span class="stat-value">{{ item.attack_speed }}</span>
+          </div>
+
+          <!-- Item Properties -->
+          <div v-if="hasProperties" class="stat-section">
+            <h5>Properties</h5>
+            <div class="properties-list">
+              <div v-if="item.weight" class="property">
+                <span class="property-label">Weight:</span>
+                <span class="property-value">{{ item.weight }}</span>
+              </div>
+              <div v-if="item.size" class="property">
+                <span class="property-label">Size:</span>
+                <span class="property-value">{{ item.size }}</span>
+              </div>
+              <div v-if="item.skill" class="property">
+                <span class="property-label">Skill:</span>
+                <span class="property-value">{{ item.skill }}</span>
+              </div>
+              <div v-if="item.race && item.race !== 'ALL'" class="property">
+                <span class="property-label">Race:</span>
+                <span class="property-value">{{ item.race }}</span>
+              </div>
+              <div v-if="item.class && item.class !== 'ALL'" class="property">
+                <span class="property-label">Class:</span>
+                <span class="property-value">{{ item.class }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -85,27 +178,117 @@
           <div v-else-if="npcs.length === 0" class="no-npcs">
             No NPCs found that drop this item.
           </div>
-          <div v-else class="npcs-list">
-            <div 
-              v-for="npc in npcs" 
-              :key="npc.id"
-              class="npc-item"
-              @click="selectNPC(npc)"
-              @mouseenter="hoveredNPC = npc.id"
-              @mouseleave="hoveredNPC = null"
-            >
-              <div class="npc-icon">👤</div>
-              <div class="npc-info">
-                <div class="npc-name">{{ npc.name }}</div>
-                <div class="npc-details">
-                  Level {{ npc.level }} • {{ npc.location_count || 0 }} location{{ npc.location_count === 1 ? '' : 's' }}
+          <div v-else>
+            <!-- Top Pagination Controls -->
+            <div v-if="totalPages > 1" class="pagination pagination-top">
+              <button 
+                class="pagination-btn" 
+                :disabled="currentPage === 1"
+                @click="prevPage"
+              >
+                ←
+              </button>
+              
+              <div class="pagination-pages">
+                <button 
+                  v-for="page in Math.min(5, totalPages)" 
+                  :key="page"
+                  class="pagination-page"
+                  :class="{ active: currentPage === page }"
+                  @click="goToPage(page)"
+                >
+                  {{ page }}
+                </button>
+                
+                <span v-if="totalPages > 5" class="pagination-ellipsis">...</span>
+                
+                <button 
+                  v-if="totalPages > 5"
+                  class="pagination-page"
+                  :class="{ active: currentPage === totalPages }"
+                  @click="goToPage(totalPages)"
+                >
+                  {{ totalPages }}
+                </button>
+              </div>
+              
+              <button 
+                class="pagination-btn" 
+                :disabled="currentPage === totalPages"
+                @click="nextPage"
+              >
+                →
+              </button>
+            </div>
+            
+            <div class="npcs-list">
+              <div 
+                v-for="npc in paginatedNPCs" 
+                :key="npc.id"
+                class="npc-item"
+                @click="selectNPC(npc)"
+                @mouseenter="hoveredNPC = npc.id"
+                @mouseleave="hoveredNPC = null"
+              >
+                <div class="npc-icon">👤</div>
+                <div class="npc-info">
+                  <div class="npc-name">{{ npc.name }}</div>
+                  <div class="npc-details">
+                    Level {{ npc.level }} • {{ npc.location_count || 0 }} location{{ npc.location_count === 1 ? '' : 's' }}
+                  </div>
                 </div>
+                <div class="npc-stats">
+                  <div class="npc-stat">HP: {{ npc.hp }}</div>
+                  <div class="npc-stat">AC: {{ npc.ac }}</div>
+                </div>
+                <div class="arrow-icon">→</div>
               </div>
-              <div class="npc-stats">
-                <div class="npc-stat">HP: {{ npc.hp }}</div>
-                <div class="npc-stat">AC: {{ npc.ac }}</div>
+            </div>
+            
+            <!-- Pagination Controls -->
+            <div v-if="totalPages > 1" class="pagination">
+              <button 
+                class="pagination-btn" 
+                :disabled="currentPage === 1"
+                @click="prevPage"
+              >
+                ←
+              </button>
+              
+              <div class="pagination-pages">
+                <button 
+                  v-for="page in Math.min(5, totalPages)" 
+                  :key="page"
+                  class="pagination-page"
+                  :class="{ active: currentPage === page }"
+                  @click="goToPage(page)"
+                >
+                  {{ page }}
+                </button>
+                
+                <span v-if="totalPages > 5" class="pagination-ellipsis">...</span>
+                
+                <button 
+                  v-if="totalPages > 5"
+                  class="pagination-page"
+                  :class="{ active: currentPage === totalPages }"
+                  @click="goToPage(totalPages)"
+                >
+                  {{ totalPages }}
+                </button>
               </div>
-              <div class="arrow-icon">→</div>
+              
+              <button 
+                class="pagination-btn" 
+                :disabled="currentPage === totalPages"
+                @click="nextPage"
+              >
+                →
+              </button>
+            </div>
+            
+            <div class="pagination-info">
+              Showing {{ (currentPage - 1) * itemsPerPage + 1 }}-{{ Math.min(currentPage * itemsPerPage, npcs.length) }} of {{ npcs.length }} NPCs
             </div>
           </div>
         </div>
@@ -150,6 +333,28 @@ export default {
     const loadingNPCs = ref(false);
     const hoveredNPC = ref(null);
     
+    // Pagination state
+    const currentPage = ref(1);
+    const itemsPerPage = ref(10);
+    const totalPages = computed(() => Math.ceil(npcs.value.length / itemsPerPage.value));
+    
+    // Computed property for paginated NPCs
+    const paginatedNPCs = computed(() => {
+      const start = (currentPage.value - 1) * itemsPerPage.value;
+      const end = start + itemsPerPage.value;
+      return npcs.value.slice(start, end);
+    });
+    
+    // Pagination methods
+    const goToPage = (page) => {
+      if (page >= 1 && page <= totalPages.value) {
+        currentPage.value = page;
+      }
+    };
+    
+    const nextPage = () => goToPage(currentPage.value + 1);
+    const prevPage = () => goToPage(currentPage.value - 1);
+    
     // Tooltip state
     const hoveredItem = ref(null);
     const tooltipVisible = ref(false);
@@ -158,17 +363,53 @@ export default {
 
     const hasStats = computed(() => {
       if (!props.item) return false;
+      return hasPrimaryStats.value || hasCombatStats.value || hasResourceStats.value || hasResistances.value || hasProperties.value;
+    });
+
+    const hasPrimaryStats = computed(() => {
+      if (!props.item) return false;
       return props.item.str || props.item.sta || props.item.agi || 
              props.item.dex || props.item.wis || props.item.int || 
-             props.item.cha || props.item.health || props.item.mana || 
-             props.item.ac || props.item.attack_speed;
+             props.item.cha;
     });
+
+    const hasCombatStats = computed(() => {
+      if (!props.item) return false;
+      return props.item.damage || props.item.delay || props.item.attack_speed || 
+             props.item.ac || props.item.block;
+    });
+
+    const hasResourceStats = computed(() => {
+      if (!props.item) return false;
+      return props.item.health || props.item.mana;
+    });
+
+    const hasResistances = computed(() => {
+      if (!props.item) return false;
+      return props.item.resist_cold || props.item.resist_fire || 
+             props.item.resist_electricity || props.item.resist_poison || 
+             props.item.resist_disease || props.item.resist_magic || 
+             props.item.resist_corruption;
+    });
+
+    const hasProperties = computed(() => {
+      if (!props.item) return false;
+      return props.item.weight || props.item.size || props.item.skill || 
+             (props.item.race && props.item.race !== 'ALL') || 
+             (props.item.class && props.item.class !== 'ALL');
+    });
+
+    const formatStatValue = (value) => {
+      if (value > 0) return `+${value}`;
+      return String(value);
+    };
 
     const loadNPCs = async () => {
       if (!props.item || !props.item.id) return;
       
       loadingNPCs.value = true;
       npcs.value = [];
+      currentPage.value = 1; // Reset to first page
       
       try {
         const response = await fetch(`/api/items/${props.item.id}/npcs`);
@@ -248,8 +489,22 @@ export default {
       loadingNPCs,
       hoveredNPC,
       hasStats,
+      hasPrimaryStats,
+      hasCombatStats,
+      hasResourceStats,
+      hasResistances,
+      hasProperties,
       selectNPC,
       formatDescription,
+      formatStatValue,
+      // Pagination
+      paginatedNPCs,
+      currentPage,
+      totalPages,
+      itemsPerPage,
+      goToPage,
+      nextPage,
+      prevPage,
       // Tooltip
       hoveredItem,
       tooltipVisible,
@@ -410,6 +665,51 @@ export default {
   font-weight: bold;
 }
 
+.stat-value.negative {
+  color: #ff4d4d;
+}
+
+/* Stat Sections */
+.stat-section {
+  margin-bottom: 1.5rem;
+}
+
+.stat-section:last-child {
+  margin-bottom: 0;
+}
+
+.stat-section h5 {
+  color: #b8860b;
+  margin: 0 0 0.75rem 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Properties List */
+.properties-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.property {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.property-label {
+  color: #999;
+  font-size: 0.9rem;
+}
+
+.property-value {
+  color: #e0e0e0;
+  font-size: 0.9rem;
+}
+
 /* Item Description */
 .item-description {
   margin-bottom: 1.5rem;
@@ -528,6 +828,88 @@ export default {
 .arrow-icon {
   color: #FFD700;
   font-size: 1.25rem;
+}
+
+/* Pagination Styles */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #444;
+}
+
+.pagination-top {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  padding-top: 0;
+  padding-bottom: 1rem;
+  border-top: none;
+  border-bottom: 1px solid #444;
+}
+
+.pagination-btn {
+  background: rgba(255, 215, 0, 0.1);
+  border: 1px solid rgba(255, 215, 0, 0.3);
+  color: #FFD700;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1.2rem;
+  transition: all 0.2s;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  background: rgba(255, 215, 0, 0.2);
+  border-color: #FFD700;
+}
+
+.pagination-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagination-pages {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.pagination-page {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid #444;
+  color: #e0e0e0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 2.5rem;
+}
+
+.pagination-page:hover {
+  background: rgba(255, 215, 0, 0.1);
+  border-color: rgba(255, 215, 0, 0.3);
+}
+
+.pagination-page.active {
+  background: rgba(255, 215, 0, 0.2);
+  border-color: #FFD700;
+  color: #FFD700;
+  font-weight: bold;
+}
+
+.pagination-ellipsis {
+  color: #999;
+  padding: 0 0.5rem;
+}
+
+.pagination-info {
+  text-align: center;
+  color: #999;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
 }
 
 /* Scrollbar styling */
