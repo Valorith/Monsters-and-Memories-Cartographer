@@ -9946,8 +9946,6 @@
             
             showMessage(`Successfully re-extracted: ${itemData.name}`, 'success');
             updateRetryAllButton();
-        updateAddToNPCButton();
-          updateAddToNPCButton();
             updateAddToNPCButton();
           } else {
             // Parsing failed again
@@ -9956,8 +9954,6 @@
             node.errorMessage = 'Failed to parse item data (retry)';
             updateTreeNode(nodeId);
             updateRetryAllButton();
-        updateAddToNPCButton();
-          updateAddToNPCButton();
             updateAddToNPCButton();
             console.error('Item extraction retry failed - parsing error:', nodeId, node.title);
           }
@@ -10529,14 +10525,6 @@
                                 pageTitle.toLowerCase().includes('marshal') ||
                                 pageTitle.toLowerCase().includes('guard') ||
                                 pageTitle.toLowerCase().includes('keeper');
-        
-          hasNPCStructure,
-          npcIndicators,
-          hasNPCStatsTable,
-          hasLootSections,
-          looksLikeNPCName,
-          pageTitle
-        });
         
         // Remove all this duplicate detection logic - we'll use the simpler version below
         
