@@ -10551,13 +10551,6 @@
         
         hasNPCInfoBox = (npcSpecificFields >= 2) || (hasRaceAndLevel && (hasUniqueLootSection || hasCommonLootSection));
         
-          npcSpecificFields,
-          hasUniqueLootSection,
-          hasCommonLootSection,
-          hasRaceAndLevel,
-          hasNPCInfoBox
-        });
-        
         // 2. Check for Item List patterns (multiple items)
         // Don't call parseItemListPage here - it should only be called AFTER we determine it's a list
         const hasSetCategory = pageText.match(/Category:.*\bSets?\b/i) !== null;
@@ -10569,12 +10562,6 @@
         
         // Be very conservative about list detection - only obvious lists
         const isItemListPage = hasSetCategory || hasCategoryListing || titleSuggestsList;
-        
-          hasSetCategory,
-          hasCategoryListing,
-          titleSuggestsList,
-          isListPage: isItemListPage
-        });
         
         // 3. Check for Individual Item patterns (single item)
         let itemSpecificFields = 0;
