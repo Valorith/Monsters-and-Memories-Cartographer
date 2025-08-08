@@ -208,7 +208,7 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       imgSrc: ["'self'", "data:", "https:", "blob:"],
-      connectSrc: ["'self'", "https://accounts.google.com", "https://www.google-analytics.com", "https://analytics.google.com", "https://stats.g.doubleclick.net"],
+      connectSrc: ["'self'", "https://accounts.google.com", "https://www.google-analytics.com", "https://analytics.google.com", "https://stats.g.doubleclick.net", "https://api.allorigins.win", "https://corsproxy.io"],
       frameSrc: ["'self'", "https://accounts.google.com"],
     },
   },

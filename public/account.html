@@ -11012,7 +11012,7 @@
         const response = await window.csrfHelper.fetchWithCSRF('/api/url-mappings/check-batch', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ urls: uniqueUrls })
+          body: JSON.stringify({ urls: urls })
         });
         
         if (response.ok) {
