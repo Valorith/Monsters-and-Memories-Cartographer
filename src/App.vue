@@ -101,6 +101,7 @@
         ref="mapCanvas"
         class="map-canvas"
         :class="{ 'admin-cursor': isAdmin && !isDragging }"
+        tabindex="0"
         @mousedown="handleMouseDown"
         @mousemove="handleMouseMove"
         @mouseup="handleMouseUp"
@@ -183,6 +184,7 @@
       @propose-loot="showLootProposalDialog"
       @propose-npc-edit="showNPCEditProposal"
       @propose-item-edit="showItemEditProposal"
+      @add-npc="showAddNPCDialog"
     />
     
     <!-- Proposal Popup -->
@@ -197,6 +199,7 @@
       :currentUserId="user?.id"
       @close="handleProposalPopupClose"
       @vote-success="handleProposalVoteSuccess"
+      @show-npcs="showProposalNPCs"
       @toggle-proposed-location="handleToggleProposedLocation"
       @proposal-withdrawn="handleProposalWithdrawn"
     />
@@ -357,6 +360,41 @@
       @select="handleItemProposalSelected"
     />
     
+    <!-- Proposal NPCs Modal -->
+    <div v-if="showProposalNPCsModal" class="modal-overlay" @click.self="closeProposalNPCsModal">
+      <div class="modal-content npc-list-modal" @click.stop>
+        <div class="modal-header">
+          <h3>Multi-Mob POI NPCs</h3>
+          <button class="close-btn" @click.stop="closeProposalNPCsModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div v-if="proposalNPCsList && proposalNPCsList.length > 0" class="npc-list">
+            <div class="npc-list-header">
+              This multi-mob POI includes {{ proposalNPCsList.length }} NPCs:
+            </div>
+            <div v-for="npc in proposalNPCsList" :key="npc.npcid" class="npc-list-item">
+              <div class="npc-main-info">
+                <span class="npc-name">{{ npc.name }}</span>
+                <span class="npc-level">Level {{ npc.level }}</span>
+              </div>
+              <div class="npc-id">ID: {{ npc.npcid }}</div>
+            </div>
+          </div>
+          <div v-else class="no-npcs">
+            No NPCs found for this proposal.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add NPC Dialog -->
+    <AddNPCDialog
+      :visible="addNPCDialog.visible"
+      :poi="addNPCDialog.poi"
+      @close="addNPCDialog.visible = false"
+      @npc-added="handleNPCAdded"
+    />
+    
     <!-- Item Info Modal -->
     <ItemInfoModal
       :visible="itemInfoModal.visible"
@@ -505,6 +543,7 @@ import POILootProposalDialog from './components/POILootProposalDialog.vue'
 import ItemProposalDialog from './components/ItemProposalDialog.vue'
 import ItemEditProposalDialog from './components/ItemEditProposalDialog.vue'
 import ItemSearchDialog from './components/ItemSearchDialog.vue'
+import AddNPCDialog from './components/AddNPCDialog.vue'
 import NPCProposalDialog from './components/NPCProposalDialog.vue'
 import NPCEditProposalDialog from './components/NPCEditProposalDialog.vue'
 import WelcomeModal from './components/WelcomeModal.vue'
@@ -548,6 +587,7 @@ export default {
     ItemProposalDialog,
     ItemEditProposalDialog,
     ItemSearchDialog,
+    AddNPCDialog,
     NPCProposalDialog,
     NPCEditProposalDialog,
     ItemInfoModal,
@@ -585,6 +625,9 @@ export default {
     const pendingChange = ref(null) // For showing confirm/cancel UI
     const activeConnectorArrow = ref(null) // For showing arrow to paired connector
     const isCopyMode = ref(false) // Track if C key is held for copy mode
+    const wasCopyDrag = ref(false) // Track if the current action was a copy drag
+    const wasMapDragged = ref(false) // Track if the map was dragged
+    const startDragPosition = ref(null) // Track where drag started
     const arrowTimeoutId = ref(null) // For clearing arrow timeout
     const potentialDragItem = ref(null) // Track item clicked without Alt for drag hint
     const dragHintShown = ref(false) // Prevent multiple hints
@@ -668,6 +711,11 @@ export default {
       visible: false
     })
     
+    const addNPCDialog = ref({
+      visible: false,
+      poi: null
+    })
+    
     // Item and NPC modals
     const itemInfoModal = ref({
       visible: false,
@@ -739,6 +787,10 @@ export default {
     
     // User dropdown state
     const showUserDropdown = ref(false)
+    
+    // Proposal NPCs Modal
+    const showProposalNPCsModal = ref(false)
+    const proposalNPCsList = ref([])
     
     // Item dropdown state
     const itemDropdownVisible = ref(false)
@@ -989,27 +1041,23 @@ export default {
               angle += (2 * Math.PI) / group.length
             })
           } else {
-            // Add one POI of each type at the center position
-            let offset = 0
-            typeMap.forEach((representativePOI, type) => {
-              const offsetAngle = (offset * 2 * Math.PI) / typeMap.size
-              const offsetDistance = typeMap.size > 1 ? 15 : 0
-              
-              groups.push({
-                ...representativePOI,
-                originalX: representativePOI.x,  // Preserve original position
-                originalY: representativePOI.y,
-                x: centerX + Math.cos(offsetAngle) * offsetDistance,
-                y: centerY + Math.sin(offsetAngle) * offsetDistance,
-                isGrouped: true,
-                groupSize: group.length,
-                groupTypes: typeMap.size,
-                groupId: groupId,
-                groupedPOIs: group, // Include all POIs in the group for tooltip
-                showGroupBadge: offset === 0, // Only show badge on the first POI of the group
-                is_custom: representativePOI.is_custom  // Explicitly preserve is_custom flag
-              })
-              offset++
+            // When zoomed out enough to cluster, show only one icon representing the entire group
+            // Use the first POI as the representative
+            const representativePOI = group[0]
+            
+            groups.push({
+              ...representativePOI,
+              originalX: representativePOI.x,  // Preserve original position
+              originalY: representativePOI.y,
+              x: centerX,
+              y: centerY,
+              isGrouped: true,
+              groupSize: group.length,
+              groupTypes: typeMap.size,
+              groupId: groupId,
+              groupedPOIs: group, // Include all POIs in the group for tooltip
+              showGroupBadge: true, // Always show badge for grouped POIs
+              is_custom: representativePOI.is_custom  // Explicitly preserve is_custom flag
             })
           }
         } else {
@@ -1025,7 +1073,7 @@ export default {
     }
     
     // Store the current grouped POIs for consistent access
-    let currentGroupedPOIs = []
+    const currentGroupedPOIs = ref([])
     
     const render = () => {
       baseRender()
@@ -1111,7 +1159,7 @@ export default {
       })
       
       // Group all POIs when zoomed out and store for click detection
-      currentGroupedPOIs = groupPOIsWhenZoomedOut(allPOIs)
+      currentGroupedPOIs.value = groupPOIsWhenZoomedOut(allPOIs)
       
       // Draw dotted line during drag (before POIs so it appears behind)
       // Show for proposal drags, custom POI drags, and copy drags
@@ -1177,8 +1225,8 @@ export default {
       
       // Draw all POIs - regular POIs first, then custom POIs on top
       // This ensures custom POIs are always visible
-      const regularPOIs = currentGroupedPOIs.filter(poi => !poi.is_custom)
-      const customPOIsToRender = currentGroupedPOIs.filter(poi => poi.is_custom)
+      const regularPOIs = currentGroupedPOIs.value.filter(poi => !poi.is_custom)
+      const customPOIsToRender = currentGroupedPOIs.value.filter(poi => poi.is_custom)
       
       
       // Check if proposals are visible
@@ -1693,6 +1741,14 @@ export default {
         
         reset(mapCanvas.value)
         render()
+        
+        // Force another render after a short delay to ensure currentGroupedPOIs is populated
+        setTimeout(() => {
+          render()
+          // Ensure drag state is reset after map load
+          wasMapDragged.value = false
+          startDragPosition.value = null
+        }, 50)
       } catch (err) {
         console.error('Failed to load map:', err)
         error(`Failed to load map: ${map.name}`)
@@ -1702,6 +1758,18 @@ export default {
     }
     
     const handleMapClick = (e) => {
+      // Skip click handling if this was a copy drag or if C key is currently held
+      if (wasCopyDrag.value || isCopyMode.value) {
+        wasCopyDrag.value = false
+        return
+      }
+      
+      // Skip click handling if the map was dragged
+      if (wasMapDragged.value) {
+        wasMapDragged.value = false
+        return
+      }
+      
       const rect = mapCanvas.value.getBoundingClientRect()
       const canvasX = e.clientX - rect.left
       const canvasY = e.clientY - rect.top
@@ -1762,7 +1830,7 @@ export default {
         }
         
         // Check for POI clicks - only allow deletion of regular POIs (not custom POIs)
-        const clickedPOI = currentGroupedPOIs.find(poi =>
+        const clickedPOI = currentGroupedPOIs.value.find(poi =>
           isPOIHit(poi, imagePos.x, imagePos.y)
         )
         
@@ -1838,28 +1906,12 @@ export default {
         }
       }
       
-      // If not clicking on proposed location, check for POI clicks
-      if (!clickedPOI) {
-        clickedPOI = currentGroupedPOIs.find(poi =>
-          isPOIHit(poi, imagePos.x, imagePos.y)
-        )
-      }
-      
-      // Check for connector clicks
-      const clickedConnector = currentMapData.value.connectors?.find(conn =>
-        isConnectorHit(conn, imagePos.x, imagePos.y)
-      )
-      
-      // Check for connection clicks
-      let clickedConnection = currentMapData.value.connections.find(conn =>
-        isConnectionHit(conn, imagePos.x, imagePos.y)
-      )
-      
-      // Check for zone connector
+      // Check for zone connectors first (they should have priority over POIs)
       let clickedZoneConnector = null
+      let clickedConnection = null
       
-      // Also check zone connectors
-      if (!clickedConnection && currentMapData.value.zoneConnectors) {
+      
+      if (currentMapData.value.zoneConnectors) {
         const clickedZone = currentMapData.value.zoneConnectors.find(zone => {
           if (zone.from_map_id === maps.value[selectedMapIndex.value]?.id) {
             const conn = {
@@ -1874,7 +1926,6 @@ export default {
         })
         
         if (clickedZone) {
-          // Set clickedZoneConnector directly instead of clickedConnection
           clickedZoneConnector = {
             ...clickedZone,
             x: clickedZone.from_x,
@@ -1888,13 +1939,35 @@ export default {
             isZoneConnector: true,
             targetMapId: clickedZone.to_map_id
           }
-          // Also set clickedConnection for navigation
+          // Set clickedConnection for navigation
           clickedConnection = {
             targetMapId: clickedZone.to_map_id,
             label: clickedZone.from_label,
             x: clickedZone.from_x,
             y: clickedZone.from_y
           }
+        }
+      }
+      
+      // Check for connector clicks
+      const clickedConnector = currentMapData.value.connectors?.find(conn =>
+        isConnectorHit(conn, imagePos.x, imagePos.y)
+      )
+      
+      // Check for regular connection clicks only if no zone connector was clicked
+      if (!clickedConnection) {
+        clickedConnection = currentMapData.value.connections.find(conn =>
+          isConnectionHit(conn, imagePos.x, imagePos.y)
+        )
+      }
+      
+      // Now check for POI clicks only if no zone connector was clicked
+      if (!clickedPOI && !clickedZoneConnector) {
+        // Make sure currentGroupedPOIs is available
+        if (currentGroupedPOIs.value && currentGroupedPOIs.value.length > 0) {
+          clickedPOI = currentGroupedPOIs.value.find(poi =>
+            isPOIHit(poi, imagePos.x, imagePos.y)
+          )
         }
       }
       
@@ -2127,6 +2200,8 @@ export default {
         if (targetMapIndex !== -1) {
           selectedMapIndex.value = targetMapIndex
           loadSelectedMap()
+        } else {
+          console.warn('Zone connector clicked but target map not found:', clickedConnection)
         }
         return
       }
@@ -2252,7 +2327,7 @@ export default {
       // Show context menu for authenticated users
       if (isAuthenticated.value && !isAdmin.value) {
         // Check if clicking on any POI (regular or custom) - only allow editing own custom POIs
-        const clickedPOI = currentGroupedPOIs.find(poi =>
+        const clickedPOI = currentGroupedPOIs.value.find(poi =>
           isPOIHit(poi, imagePos.x, imagePos.y)
         )
         
@@ -2312,7 +2387,7 @@ export default {
         return
       }
       
-      const clickedPOI = currentGroupedPOIs.find(poi =>
+      const clickedPOI = currentGroupedPOIs.value.find(poi =>
         isPOIHit(poi, imagePos.x, imagePos.y)
       )
       
@@ -2438,6 +2513,11 @@ export default {
         return
       }
       
+      // Track the starting position for map drag detection
+      if (!draggedItem.value) {
+        startDragPosition.value = { x: e.clientX, y: e.clientY }
+      }
+      
       // Check if Alt key is held for dragging or C key is held for copying
       if ((e.altKey || isCopyMode.value) && !e.shiftKey) {
         const rect = mapCanvas.value.getBoundingClientRect()
@@ -2445,8 +2525,13 @@ export default {
         const canvasY = e.clientY - rect.top
         const imagePos = canvasToImage(canvasX, canvasY)
         
+        // Debug log for first attempt
+        if (isCopyMode.value && (!currentGroupedPOIs.value || currentGroupedPOIs.value.length === 0)) {
+          console.log('[Copy Mode] currentGroupedPOIs is empty on first attempt')
+        }
+        
         // Check for POI hit using the grouped POIs
-        const clickedPOI = currentGroupedPOIs.find(poi =>
+        const clickedPOI = currentGroupedPOIs.value.find(poi =>
           isPOIHit(poi, imagePos.x, imagePos.y)
         )
         
@@ -2506,8 +2591,12 @@ export default {
             }
             // Track if this is a proposal drag (non-admin dragging regular POI)
             draggedItem.value.isProposalDrag = isRegularPOI && !isAdmin.value && isAuthenticated.value
+            
             // Track if this is a copy operation
             draggedItem.value.isCopyDrag = isCopyMode.value
+            if (isCopyMode.value) {
+              wasCopyDrag.value = true
+            }
             return
           }
         }
@@ -2561,7 +2650,7 @@ export default {
           const imagePos = canvasToImage(canvasX, canvasY)
           
           // Check if clicking on any draggable item
-          const clickedPOI = currentGroupedPOIs.find(poi =>
+          const clickedPOI = currentGroupedPOIs.value.find(poi =>
             isPOIHit(poi, imagePos.x, imagePos.y)
           )
           const clickedConnection = currentMapData.value.connections.find(conn =>
@@ -2616,13 +2705,13 @@ export default {
           hoveredPOI.value = proposedPOI
         } else {
           // Update hovered items using the grouped POIs
-          hoveredPOI.value = currentGroupedPOIs.find(poi =>
+          hoveredPOI.value = currentGroupedPOIs.value.find(poi =>
             isPOIHit(poi, imagePos.x, imagePos.y)
           )
         }
       } else {
         // Update hovered items using the grouped POIs
-        hoveredPOI.value = currentGroupedPOIs.find(poi =>
+        hoveredPOI.value = currentGroupedPOIs.value.find(poi =>
           isPOIHit(poi, imagePos.x, imagePos.y)
         )
       }
@@ -2727,6 +2816,21 @@ export default {
         return
       }
       
+      // Check if the map was dragged (not just clicked)
+      if (!draggedItem.value && startDragPosition.value && e) {
+        const dragDistance = Math.sqrt(
+          Math.pow(e.clientX - startDragPosition.value.x, 2) + 
+          Math.pow(e.clientY - startDragPosition.value.y, 2)
+        )
+        // Consider it a drag if moved more than 5 pixels
+        if (dragDistance > 5) {
+          wasMapDragged.value = true
+        }
+      }
+      
+      // Reset the start drag position
+      startDragPosition.value = null
+      
       // Reset potential drag tracking
       potentialDragItem.value = null
       dragHintShown.value = false
@@ -2759,6 +2863,7 @@ export default {
         draggedItem.value = null
         dragItemType.value = null
         dragOffset.value = { x: 0, y: 0 }
+        // Don't clear wasCopyDrag here - let handleMapClick clear it
       } else {
         endDrag()
       }
@@ -3280,6 +3385,12 @@ export default {
       
       // Escape key handling
       if (e.key === 'Escape') {
+        // Close proposal NPCs modal if open
+        if (showProposalNPCsModal.value) {
+          closeProposalNPCsModal()
+          return
+        }
+        
         // Cancel any pending connector operation
         if (pendingConnector.value || pendingConnectorPair.value.first) {
           cancelConnector()
@@ -3333,11 +3444,12 @@ export default {
       poi.x = originalPosition.value.x
       poi.y = originalPosition.value.y
       
-      // Determine the appropriate message based on POI type
-      const isCustom = poi.is_custom || poi.id.toString().startsWith('custom_') || dragItemType.value === 'customPoi'
-      const promptMessage = isCustom 
-        ? 'Enter a name for the copied POI (will be created immediately):'
-        : 'Enter a name for the copied POI (will create a change proposal for community voting):'
+      // Determine the appropriate message based on admin status
+      const promptMessage = isAdmin.value
+        ? 'Enter a name for the copied POI:'
+        : (poi.is_custom || poi.id.toString().startsWith('custom_') || dragItemType.value === 'customPoi')
+          ? 'Enter a name for the copied POI (will be created immediately):'
+          : 'Enter a name for the copied POI (will create a change proposal for community voting):'
       
       // Show custom prompt for POI name with current name pre-filled
       const newName = await showPrompt(
@@ -3354,10 +3466,134 @@ export default {
       }
       
       try {
-        // Check if it's a custom POI (either by is_custom flag or by ID prefix)
-        const isCustom = poi.is_custom || poi.id.toString().startsWith('custom_') || dragItemType.value === 'customPoi'
+        // For multi-mob POIs, fetch NPC associations if not already loaded
+        let npcAssociations = poi.npc_associations || []
+        if (poi.multi_mob && !poi.npc_associations && poi.id) {
+          try {
+            const response = await fetch(`/api/pois/${poi.id}/npcs`)
+            if (response.ok) {
+              npcAssociations = await response.json()
+            }
+          } catch (err) {
+            console.warn('Failed to fetch NPC associations for copy:', err)
+          }
+        }
         
-        if (isCustom) {
+        // In admin mode, always create regular POIs directly
+        if (isAdmin.value) {
+          // For custom POIs, we need to get the full data including type_id
+          let poiTypeId = poi.type_id || poi.poi_type_id || null
+          
+          // If copying from a custom POI, get the type_id from the full custom POI data
+          if (poi.is_custom || poi.id.toString().startsWith('custom_')) {
+            const customPoiId = poi.id.toString().replace('custom_', '')
+            const customPoiData = customPOIs.value.find(cp => cp.id.toString() === customPoiId)
+            if (customPoiData) {
+              // Custom POIs may have poi_type_id instead of type_id
+              poiTypeId = customPoiData.poi_type_id || customPoiData.type_id || poiTypeId
+            }
+          }
+          
+          // If we still don't have a type_id, try to get it from the dragged POI's other properties
+          if (!poiTypeId && poi.poi_type && poi.poi_type.id) {
+            poiTypeId = poi.poi_type.id
+          }
+          
+          
+          // Admin copy - create regular POI immediately
+          const newPOI = await poisAPI.save({
+            map_id: maps.value[selectedMapIndex.value].id,
+            x: newX,
+            y: newY,
+            name: newName.trim(),
+            description: poi.description || '',
+            type_id: poiTypeId,
+            icon_size: poi.icon_size || 48,
+            label_visible: poi.label_visible !== false,
+            label_position: poi.label_position || 'bottom',
+            npc_id: (!poi.multi_mob && poi.npc_id) ? poi.npc_id : null,
+            // Preserve multi_mob flag if copying from a multi-mob POI
+            multi_mob: poi.multi_mob || false
+          })
+          
+          
+          // Update local cache
+          if (!dbMapData.value[maps.value[selectedMapIndex.value].id]) {
+            dbMapData.value[maps.value[selectedMapIndex.value].id] = { pois: [] }
+          }
+          
+          
+          // Process the POI to extract icon information
+          const processedPOI = processPOI(newPOI)
+          dbMapData.value[maps.value[selectedMapIndex.value].id].pois.push(processedPOI)
+          
+          // Force re-render to show the new POI with correct icon
+          render()
+          
+          // Copy NPC associations for multi-mob POIs
+          // Admins can add multiple NPCs to any POI, even if it's not originally multi-mob
+          if (npcAssociations.length > 0) {
+            const successfulAssociations = []
+            for (const assoc of npcAssociations) {
+              try {
+                const npcId = assoc.npcid || assoc.npc_id
+                const response = await fetchWithCSRF(`/api/pois/${newPOI.id}/npcs`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                    npc_id: npcId
+                  })
+                })
+                if (response.ok) {
+                  const result = await response.json()
+                  // For admin-created associations, create a clean association object
+                  successfulAssociations.push({
+                    association_id: result.association_id,
+                    npcid: npcId,
+                    name: assoc.name,
+                    level: assoc.level,
+                    hp: assoc.hp,
+                    ac: assoc.ac,
+                    min_dmg: assoc.min_dmg,
+                    max_dmg: assoc.max_dmg,
+                    attack_speed: assoc.attack_speed,
+                    description: assoc.description,
+                    upvotes: 0,
+                    downvotes: 0,
+                    vote_score: 0,
+                    user_vote: 0,
+                    loot_items: assoc.loot_items || []
+                  })
+                }
+              } catch (err) {
+                console.warn(`Failed to copy NPC association for NPC ${assoc.npcid || assoc.npc_id}:`, err)
+              }
+            }
+            
+            // Update the POI in cache with successful associations
+            if (successfulAssociations.length > 0) {
+              const poiIndex = dbMapData.value[maps.value[selectedMapIndex.value].id].pois.findIndex(p => p.id === processedPOI.id)
+              if (poiIndex !== -1) {
+                dbMapData.value[maps.value[selectedMapIndex.value].id].pois[poiIndex].npc_associations = successfulAssociations
+                // Only mark as multi_mob if we successfully added multiple NPCs
+                if (successfulAssociations.length > 1) {
+                  dbMapData.value[maps.value[selectedMapIndex.value].id].pois[poiIndex].multi_mob = true
+                }
+              }
+            }
+          } else if (poi.npc_id && !poi.multi_mob) {
+            // For single NPC POIs, just copy the npc_id (already done in the save)
+          }
+          
+          success(`POI "${newName}" created successfully`)
+        } else {
+          // Non-admin users
+          // Check if it's a custom POI (either by is_custom flag or by ID prefix)
+          const isCustom = poi.is_custom || poi.id.toString().startsWith('custom_') || dragItemType.value === 'customPoi'
+          
+          if (isCustom) {
           // Copy custom POI - create new custom POI immediately
           // Get the numeric custom POI ID
           const customPoiId = poi.id.toString().replace('custom_', '')
@@ -3374,12 +3610,13 @@ export default {
               y: newY,
               name: newName.trim(),
               description: poi.description || '',
-              icon: poi.icon,
-              icon_type: poi.icon_type,
-              icon_size: poi.icon_size || 24,
+              icon: poi.icon || null,
+              icon_type: poi.icon_type || null,
+              icon_size: poi.icon_size || 48,
               label_visible: poi.label_visible !== false,
               label_position: poi.label_position || 'bottom',
-              poi_type_id: customPoiData?.poi_type_id || poi.poi_type_id || null
+              type_id: poi.type_id || customPoiData?.type_id || customPoiData?.poi_type_id || poi.poi_type_id || null,
+              npc_id: poi.npc_id || null
             })
           })
           
@@ -3392,6 +3629,72 @@ export default {
           // Add the new custom POI to our local state
           // The response from the API should already have the correct structure
           customPOIs.value.push(newPoi)
+          
+          // If this is a multi-mob POI, prepare to store the associations
+          let copiedAssociations = []
+          
+          // Copy NPC associations if the original POI has any
+          if (poi.npc_id || npcAssociations.length > 0) {
+            try {
+              // First check if this is a multi-mob POI
+              let isMultiMob = poi.multi_mob || false
+              
+              if (!isMultiMob && poi.type_id) {
+                // Only fetch if we don't already have the multi_mob flag
+                const typeResponse = await fetch(`/api/poi-types/${poi.type_id}`)
+                if (typeResponse.ok) {
+                  const typeData = await typeResponse.json()
+                  isMultiMob = typeData.multi_mob
+                }
+              }
+              
+              if (isMultiMob && npcAssociations.length > 0) {
+                // Copy all NPC associations for multi-mob POIs
+                for (const assoc of npcAssociations) {
+                  const npcId = assoc.npcid || assoc.npc_id
+                  await fetchWithCSRF(`/api/pois/custom_${newPoi.id}/npcs`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                      npc_id: npcId
+                    })
+                  })
+                  // Add to local associations array
+                  copiedAssociations.push({
+                    ...assoc,
+                    poi_id: newPoi.id
+                  })
+                }
+                // Update the new POI in our local state with the associations
+                const poiIndex = customPOIs.value.findIndex(p => p.id === newPoi.id)
+                if (poiIndex !== -1) {
+                  customPOIs.value[poiIndex] = {
+                    ...customPOIs.value[poiIndex],
+                    npc_associations: copiedAssociations,
+                    multi_mob: true
+                  }
+                }
+              } else if (poi.npc_id && !isMultiMob) {
+                // For non-multi-mob POIs, update the custom POI with the npc_id
+                await fetchWithCSRF(`/api/custom-pois/${newPoi.id}`, {
+                  method: 'PUT',
+                  headers: {
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                    ...newPoi,
+                    npc_id: poi.npc_id
+                  })
+                })
+              }
+            } catch (err) {
+              console.warn('Failed to copy NPC associations:', err)
+              // Don't fail the entire copy operation if NPC copy fails
+            }
+          }
+          
           success(`Custom POI "${poi.name}" copied successfully`)
         } else {
           // Copy regular POI - create new POI proposal
@@ -3408,7 +3711,10 @@ export default {
               type_id: poi.type_id || poi.type || null,
               icon_size: poi.icon_size || 48,
               label_visible: poi.label_visible !== false,
-              label_position: poi.label_position || 'bottom'
+              label_position: poi.label_position || 'bottom',
+              // Include NPC associations in the proposal
+              npc_id: poi.npc_id || null,
+              npc_associations: npcAssociations
             }
           }
           
@@ -3427,6 +3733,7 @@ export default {
           
           success(`Copy proposal for "${poi.name}" submitted for community voting`)
         }
+        } // End of non-admin users block
         
         render()
       } catch (err) {
@@ -4253,18 +4560,31 @@ export default {
         return
       }
       
-      // Fetch full POI data with NPC info
-      try {
-        const response = await fetch(`/api/pois/${poi.id}/full`)
-        if (!response.ok) throw new Error('Failed to fetch POI data')
-        const fullPoiData = await response.json()
-        
-        
-        lootProposalDialog.value.poi = fullPoiData
+      // Check if this is from a multi-mob POI with selected NPC data
+      if (poi._selected_npc) {
+        // Create a POI data object with the selected NPC info
+        const poiWithNPC = {
+          ...poi,
+          npc_name: poi._selected_npc.name,
+          npc_level: poi._selected_npc.level,
+          npc_id: poi._selected_npc.npcid
+        }
+        lootProposalDialog.value.poi = poiWithNPC
         lootProposalDialog.value.visible = true
-      } catch (err) {
-        error('Failed to load POI data')
-        console.error('Error fetching POI:', err)
+      } else {
+        // Fetch full POI data with NPC info for single-NPC POIs
+        try {
+          const response = await fetch(`/api/pois/${poi.id}/full`)
+          if (!response.ok) throw new Error('Failed to fetch POI data')
+          const fullPoiData = await response.json()
+          
+          
+          lootProposalDialog.value.poi = fullPoiData
+          lootProposalDialog.value.visible = true
+        } catch (err) {
+          error('Failed to load POI data')
+          console.error('Error fetching POI:', err)
+        }
       }
     }
     
@@ -4358,18 +4678,25 @@ export default {
         return
       }
       
-      // Fetch full NPC data
-      try {
-        const response = await fetch(`/api/npcs/${poi.npc_id}`)
-        if (response.ok) {
-          const npcData = await response.json()
-          npcEditProposalDialog.value.npc = npcData
-          npcEditProposalDialog.value.visible = true
-        } else {
+      // Check if this is from a multi-mob POI with selected NPC data
+      if (poi._selected_npc) {
+        // Use the pre-selected NPC data from multi-mob list
+        npcEditProposalDialog.value.npc = poi._selected_npc
+        npcEditProposalDialog.value.visible = true
+      } else {
+        // Fetch full NPC data for single-NPC POIs
+        try {
+          const response = await fetch(`/api/npcs/${poi.npc_id}`)
+          if (response.ok) {
+            const npcData = await response.json()
+            npcEditProposalDialog.value.npc = npcData
+            npcEditProposalDialog.value.visible = true
+          } else {
+            error('Failed to load NPC details')
+          }
+        } catch (err) {
           error('Failed to load NPC details')
         }
-      } catch (err) {
-        error('Failed to load NPC details')
       }
     }
     
@@ -4379,12 +4706,41 @@ export default {
       itemEditProposalDialog.value.visible = true
     }
     
+    const showProposalNPCs = (proposal) => {
+      if (proposal && proposal.npc_associations) {
+        proposalNPCsList.value = proposal.npc_associations
+        showProposalNPCsModal.value = true
+      }
+    }
+    
+    const closeProposalNPCsModal = () => {
+      showProposalNPCsModal.value = false
+      proposalNPCsList.value = []
+    }
+    
+    const showAddNPCDialog = async () => {
+      // Check if POI is multi-mob type
+      if (!selectedPOI.value) return
+      
+      // Show NPC selection dialog
+      addNPCDialog.value.poi = selectedPOI.value
+      addNPCDialog.value.visible = true
+    }
+    
     const handleProposalSubmitted = async () => {
       // Refresh the POI data to show pending proposal indicator
       await loadSelectedMap()
       
       // Close POI popup if open
       selectedPOI.value = null
+    }
+    
+    const handleNPCAdded = async (npc) => {
+      // Refresh the POI popup to show the newly added NPC
+      if (selectedPOI.value) {
+        // Trigger a re-fetch of NPC data in the popup
+        selectedPOI.value = { ...selectedPOI.value }
+      }
     }
     
     const deleteConnection = async (connectionId) => {
@@ -5081,6 +5437,7 @@ export default {
         const response = await fetch(`/api/maps/${maps.value[selectedMapIndex.value].id}/custom-pois`)
         if (response.ok) {
           const pois = await response.json()
+          console.log('[loadCustomPOIs] Loaded custom POIs:', pois.map(p => ({ id: p.id, name: p.name, status: p.status })))
           // Mark POIs as custom for proper identification and set icon from POI type
           customPOIs.value = pois.map(poi => {
             // Set the icon based on the POI type data
@@ -5111,6 +5468,8 @@ export default {
               is_custom: true,
               icon: icon,
               icon_type: iconType,
+              multi_mob: poi.multi_mob || false,
+              npc_associations: poi.npc_associations || [],
               // Keep the original type data for reference
               poi_type: {
                 name: poi.type_name,
@@ -5474,7 +5833,15 @@ export default {
           is_proposal: true,
           is_deletion: preview.changeType === 'delete_poi',  // Special flag for deletion
           proposer_name: preview.proposerName,
-          is_custom: false
+          is_custom: false,
+          // Include voting data
+          upvotes: preview.upvotes || 0,
+          downvotes: preview.downvotes || 0,
+          user_vote: preview.user_vote || 0,
+          proposer_id: preview.proposer_id,
+          proposer_donation_tier_name: preview.proposer_donation_tier_name,
+          proposer_donation_tier_color: preview.proposer_donation_tier_color,
+          proposer_donation_tier_icon: preview.proposer_donation_tier_icon
         }
         
         // Check if we have valid coordinates
@@ -5568,7 +5935,20 @@ export default {
         is_proposal: true,
         is_proposed: true,
         proposer_name: preview.proposerName,
-        is_custom: false
+        is_custom: false,
+        // Include multi-mob and NPC associations for proposal
+        is_multi_mob: preview.is_multi_mob,
+        npc_associations: preview.npc_associations,
+        // Also include the custom POI id if this is from a custom POI
+        custom_poi_id: proposed.custom_poi_id,
+        // Include voting data
+        upvotes: preview.upvotes || 0,
+        downvotes: preview.downvotes || 0,
+        user_vote: preview.user_vote || 0,
+        proposer_id: preview.proposer_id,
+        proposer_donation_tier_name: preview.proposer_donation_tier_name,
+        proposer_donation_tier_color: preview.proposer_donation_tier_color,
+        proposer_donation_tier_icon: preview.proposer_donation_tier_icon
       }
       
       // Process the POI to set up icon properly (like regular POIs)
@@ -5717,7 +6097,7 @@ export default {
       }
       
       // Check periodically for POI refresh requests
-      const checkForPOIRefresh = () => {
+      const checkForPOIRefresh = async () => {
         const shouldRefreshPOIs = sessionStorage.getItem('refresh_pois')
         if (shouldRefreshPOIs) {
           sessionStorage.removeItem('refresh_pois')
@@ -5725,8 +6105,10 @@ export default {
             const currentMap = maps.value[selectedMapIndex.value]
             if (currentMap.id && dbMapData.value[currentMap.id]) {
               delete dbMapData.value[currentMap.id]
-              loadSelectedMap()
+              await loadSelectedMap()
             }
+            // Also refresh custom POIs to update their status
+            await loadCustomPOIs()
           }
         }
       }
@@ -5998,7 +6380,9 @@ export default {
             user_vote: proposalData?.user_vote || (isPending && poi.user_id === user.value?.id ? 1 : 0),
             vote_score: proposalData?.vote_score || (proposalData ? proposalData.upvotes - proposalData.downvotes : (isPending ? 1 : 0)),
             proposal_id: proposalData?.id,
-            notes: proposalData?.notes || poi.notes
+            notes: proposalData?.notes || poi.notes,
+            // Ensure consistent field naming for multi-mob
+            is_multi_mob: poi.multi_mob || proposalData?.is_multi_mob || false
           })
         })
       }
@@ -6021,7 +6405,14 @@ export default {
               user_vote: proposal.user_vote,
               vote_score: proposal.vote_score,
               notes: proposal.notes,
-              has_pending_proposal: true
+              has_pending_proposal: true,
+              // Include multi-mob data
+              is_multi_mob: proposal.is_multi_mob,
+              npc_associations: proposal.npc_associations,
+              // Include donation tier info
+              proposer_donation_tier_name: proposal.proposer_donation_tier_name,
+              proposer_donation_tier_color: proposal.proposer_donation_tier_color,
+              proposer_donation_tier_icon: proposal.proposer_donation_tier_icon
             }
             pois.push(proposedPoi)
           }
@@ -6244,7 +6635,14 @@ export default {
                 proposal_id: proposal.id,
                 notes: proposal.notes,
                 npc_name: proposal.npc_name,
-                item_name: proposal.item_name
+                item_name: proposal.item_name,
+                // Include multi-mob data
+                is_multi_mob: proposal.is_multi_mob,
+                npc_associations: proposal.npc_associations,
+                // Include donation tier info
+                proposer_donation_tier_name: proposal.proposer_donation_tier_name,
+                proposer_donation_tier_color: proposal.proposer_donation_tier_color,
+                proposer_donation_tier_icon: proposal.proposer_donation_tier_icon
               })
             }
           })
@@ -6629,7 +7027,13 @@ export default {
       itemDropdownVisible,
       showNPCEditProposal,
       showItemEditProposal,
+      showAddNPCDialog,
+      showProposalNPCs,
+      closeProposalNPCsModal,
+      showProposalNPCsModal,
+      proposalNPCsList,
       handleProposalSubmitted,
+      handleNPCAdded,
       handleAdminPopupUpdate,
       handleAdminPopupActivate,
       handleAdminPopupDelete,
@@ -6688,6 +7092,7 @@ export default {
       npcEditProposalDialog,
       itemEditProposalDialog,
       itemSearchDialog,
+      addNPCDialog,
       handleItemProposalSelected,
       // New modal handlers
       itemInfoModal,
@@ -7030,16 +7435,18 @@ export default {
 .login-button {
   background: #4a7c59;
   color: white;
-  border: none;
+  border: 1px solid #4a7c59;
   padding: 0.5rem 1rem;
   border-radius: 4px;
   font-size: 0.9rem;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.2s;
+  font-weight: 500;
 }
 
 .login-button:hover {
   background: #3a6249;
+  border-color: #3a6249;
 }
 
 .user-dropdown-container {
@@ -7057,8 +7464,8 @@ export default {
   transition: box-shadow 0.2s;
   text-decoration: none;
   cursor: pointer;
-  border: none;
-  background: none;
+  border: 1px solid #ddd;
+  background: #f5f5f5;
   padding: 0;
 }
 
@@ -7374,5 +7781,175 @@ export default {
     left: 15px;
     bottom: 15px;
   }
+}
+
+/* Modal Overlay Fix */
+.modal-overlay {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.modal-content {
+  position: relative;
+  background: #2d2d2d;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* NPC List Modal */
+.npc-list-modal {
+  max-width: 700px;
+  width: 90%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+  border: 2px solid #4a7c59;
+  padding: 0;
+}
+
+.npc-list-modal .modal-header {
+  padding: 1.5rem;
+  background: rgba(74, 124, 89, 0.1);
+  border-bottom: 1px solid rgba(74, 124, 89, 0.3);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.npc-list-modal .modal-header h3 {
+  margin: 0;
+  color: #FFD700;
+  font-family: 'Cinzel', serif;
+  font-size: 1.5rem;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.npc-list-modal .close-btn {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 1.5rem;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.npc-list-modal .close-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.npc-list-modal .modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
+  scrollbar-width: thin;
+  scrollbar-color: #4a7c59 #1a1a1a;
+}
+
+.npc-list-modal .modal-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.npc-list-modal .modal-body::-webkit-scrollbar-track {
+  background: #1a1a1a;
+  border-radius: 4px;
+}
+
+.npc-list-modal .modal-body::-webkit-scrollbar-thumb {
+  background: #4a7c59;
+  border-radius: 4px;
+}
+
+.npc-list-modal .modal-body::-webkit-scrollbar-thumb:hover {
+  background: #5fa772;
+}
+
+.npc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.npc-list-header {
+  color: #FFD700;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+  padding: 1rem;
+  background: rgba(255, 215, 0, 0.05);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 215, 0, 0.1);
+}
+
+.npc-list-item {
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.6) 100%);
+  border: 1px solid #444;
+  border-radius: 6px;
+  padding: 1rem 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.npc-list-item:hover {
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0.7) 100%);
+  border-color: #666;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.npc-main-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.npc-name {
+  color: #FFD700;
+  font-weight: bold;
+  font-size: 1.2rem;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.npc-level {
+  color: #FFA500;
+  font-weight: 500;
+  font-size: 1rem;
+  background: rgba(255, 165, 0, 0.1);
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 165, 0, 0.2);
+}
+
+.npc-id {
+  color: #888;
+  font-size: 0.85rem;
+  font-family: monospace;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.no-npcs {
+  text-align: center;
+  color: #999;
+  padding: 2rem;
 }
 </style>

@@ -115,6 +115,17 @@ export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {
               )
             ELSE NULL
           END as type_icon_value,
+          -- Add multi_mob flag
+          CASE 
+            WHEN cp.change_type IN ('add_poi', 'edit_poi') AND cp.proposed_data->>'type_id' IS NOT NULL THEN 
+              (SELECT multi_mob FROM poi_types WHERE id = (cp.proposed_data->>'type_id')::int)
+            WHEN cp.change_type IN ('move_poi', 'delete_poi') THEN
+              COALESCE(
+                (SELECT multi_mob FROM poi_types WHERE id = (cp.proposed_data->>'type_id')::int),
+                (SELECT pt.multi_mob FROM pois p JOIN poi_types pt ON p.type_id = pt.id WHERE p.id = cp.target_id)
+              )
+            ELSE FALSE
+          END as is_multi_mob,
           -- Add NPC name if linked
           CASE 
             WHEN cp.change_type IN ('add_poi', 'edit_poi') AND cp.proposed_data->>'npc_id' IS NOT NULL THEN 
@@ -159,8 +170,9 @@ export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {
         ORDER BY cp.created_at DESC
       `, [req.user?.id]);
       
-      // Fetch existing loot for change_loot proposals
-      const proposalsWithLoot = await Promise.all(result.rows.map(async (proposal) => {
+      // Fetch existing loot for change_loot proposals and NPC associations for multi-mob proposals
+      const proposalsWithExtraData = await Promise.all(result.rows.map(async (proposal) => {
+        // Handle change_loot proposals
         if (proposal.change_type === 'change_loot' && proposal.current_data?.npc_id) {
           try {
             // Fetch existing loot items for this NPC
@@ -188,10 +200,36 @@ export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {
             return proposal;
           }
         }
+        
+        // Handle multi-mob POI proposals
+        if (proposal.change_type === 'add_poi' && proposal.is_multi_mob && proposal.proposed_data?.custom_poi_id) {
+          try {
+            // Fetch NPCs associated with the custom POI
+            const npcResult = await pool.query(`
+              SELECT 
+                n.npcid,
+                n.name,
+                n.level
+              FROM custom_poi_npc_associations cpna
+              JOIN npcs n ON cpna.npc_id = n.npcid
+              WHERE cpna.custom_poi_id = $1
+              ORDER BY n.name
+            `, [proposal.proposed_data.custom_poi_id]);
+            
+            return {
+              ...proposal,
+              npc_associations: npcResult.rows
+            };
+          } catch (error) {
+            console.error('Error fetching NPC associations:', error);
+            return proposal;
+          }
+        }
+        
         return proposal;
       }));
       
-      res.json(proposalsWithLoot);
+      res.json(proposalsWithExtraData);
     } catch (error) {
       console.error('Error fetching change proposals:', error);
       res.status(500).json({ error: 'Failed to fetch change proposals' });
@@ -428,16 +466,60 @@ export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {
           
           // Insert into main POIs table
           console.log(`[auto-approval add_poi] Inserting POI with npc_id: ${data.npc_id}`);
-          await client.query(
+          const poiResult = await client.query(
             `INSERT INTO pois (map_id, name, description, x, y, type_id, icon, icon_size, 
                               label_visible, label_position, created_by, created_by_user_id, npc_id, item_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+             RETURNING id`,
             [
               data.map_id, data.name, data.description, data.x, data.y, 
               data.type_id, data.icon, data.icon_size, data.label_visible, 
               data.label_position, null, proposalData.proposer_id, data.npc_id, data.item_id
             ]
           );
+          const newPoiId = poiResult.rows[0].id;
+          
+          // Migrate custom POI NPCs if this was a multi-mob custom POI
+          if (data.custom_poi_id) {
+            const typeCheck = await client.query(
+              'SELECT multi_mob FROM poi_types WHERE id = $1',
+              [data.type_id]
+            );
+            
+            if (typeCheck.rows.length > 0 && typeCheck.rows[0].multi_mob) {
+              // Migrate NPCs from custom_poi_npc_associations to poi_npc_associations
+              await client.query(`
+                INSERT INTO poi_npc_associations (poi_id, npc_id, created_by)
+                SELECT $1, npc_id, created_by 
+                FROM custom_poi_npc_associations 
+                WHERE custom_poi_id = $2
+              `, [newPoiId, data.custom_poi_id]);
+              
+              console.log(`[auto-approval add_poi] Migrated NPCs from custom POI ${data.custom_poi_id} to POI ${newPoiId}`);
+            }
+          }
+          
+          // Handle NPC associations for copied POIs (from regular POIs)
+          if (!data.custom_poi_id && data.npc_associations && data.npc_associations.length > 0) {
+            const typeCheck = await client.query(
+              'SELECT multi_mob FROM poi_types WHERE id = $1',
+              [data.type_id]
+            );
+            
+            if (typeCheck.rows.length > 0 && typeCheck.rows[0].multi_mob) {
+              // Create NPC associations for multi-mob POIs
+              for (const assoc of data.npc_associations) {
+                const npcId = assoc.npcid || assoc.npc_id;
+                if (npcId) {
+                  await client.query(`
+                    INSERT INTO poi_npc_associations (poi_id, npc_id, created_by)
+                    VALUES ($1, $2, $3)
+                  `, [newPoiId, npcId, proposalData.proposer_id]);
+                }
+              }
+              console.log(`[auto-approval add_poi] Created ${data.npc_associations.length} NPC associations for copied POI ${newPoiId}`);
+            }
+          }
 
           // Delete custom POI if exists, but invalidate shares so users know what happened
           if (data.custom_poi_id) {
@@ -732,21 +814,50 @@ export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {
     }
 
     const proposalId = req.params.id;
+    const client = await pool.connect();
 
     try {
-      const result = await pool.query(
-        'DELETE FROM change_proposals WHERE id = $1 AND proposer_id = $2 AND status = $3 RETURNING id',
+      await client.query('BEGIN');
+
+      // Get the proposal details before deleting
+      const proposalResult = await client.query(
+        'SELECT * FROM change_proposals WHERE id = $1 AND proposer_id = $2 AND status = $3',
         [proposalId, req.user.id, 'pending']
       );
 
-      if (result.rows.length === 0) {
+      if (proposalResult.rows.length === 0) {
+        await client.query('ROLLBACK');
         return res.status(404).json({ error: 'Proposal not found or cannot be deleted' });
       }
 
+      const proposal = proposalResult.rows[0];
+
+      // If this is a custom POI publish proposal (add_poi with custom_poi_id), revert the custom POI status
+      if (proposal.change_type === 'add_poi' && proposal.proposed_data) {
+        // Handle both cases: custom_poi_id as string or number
+        const customPoiId = proposal.proposed_data.custom_poi_id || proposal.proposed_data.customPoiId;
+        if (customPoiId) {
+          await client.query(
+            'UPDATE custom_pois SET status = NULL WHERE id = $1',
+            [customPoiId]
+          );
+        }
+      }
+
+      // Delete the proposal
+      await client.query(
+        'DELETE FROM change_proposals WHERE id = $1',
+        [proposalId]
+      );
+
+      await client.query('COMMIT');
       res.json({ success: true });
     } catch (error) {
+      await client.query('ROLLBACK');
       console.error('Error deleting proposal:', error);
       res.status(500).json({ error: 'Failed to delete proposal' });
+    } finally {
+      client.release();
     }
   });
 
@@ -893,10 +1004,11 @@ export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {
           
           // Insert into main POIs table
           console.log(`[add_poi admin] Inserting POI with npc_id: ${data.npc_id}`);
-          await client.query(
+          const poiResult = await client.query(
             `INSERT INTO pois (map_id, name, description, x, y, type_id, icon, icon_size, 
                               label_visible, label_position, created_by, created_by_user_id, npc_id, item_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+             RETURNING id`,
             [
               data.map_id, 
               data.name, 
@@ -914,6 +1026,49 @@ export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {
               data.item_id || null
             ]
           );
+          const newPoiId = poiResult.rows[0].id;
+          
+          // Migrate custom POI NPCs if this was a multi-mob custom POI
+          if (data.custom_poi_id) {
+            const typeCheck = await client.query(
+              'SELECT multi_mob FROM poi_types WHERE id = $1',
+              [data.type_id]
+            );
+            
+            if (typeCheck.rows.length > 0 && typeCheck.rows[0].multi_mob) {
+              // Migrate NPCs from custom_poi_npc_associations to poi_npc_associations
+              await client.query(`
+                INSERT INTO poi_npc_associations (poi_id, npc_id, created_by)
+                SELECT $1, npc_id, created_by 
+                FROM custom_poi_npc_associations 
+                WHERE custom_poi_id = $2
+              `, [newPoiId, data.custom_poi_id]);
+              
+              console.log(`[add_poi admin] Migrated NPCs from custom POI ${data.custom_poi_id} to POI ${newPoiId}`);
+            }
+          }
+          
+          // Handle NPC associations for copied POIs (from regular POIs)
+          if (!data.custom_poi_id && data.npc_associations && data.npc_associations.length > 0) {
+            const typeCheck = await client.query(
+              'SELECT multi_mob FROM poi_types WHERE id = $1',
+              [data.type_id]
+            );
+            
+            if (typeCheck.rows.length > 0 && typeCheck.rows[0].multi_mob) {
+              // Create NPC associations for multi-mob POIs
+              for (const assoc of data.npc_associations) {
+                const npcId = assoc.npcid || assoc.npc_id;
+                if (npcId) {
+                  await client.query(`
+                    INSERT INTO poi_npc_associations (poi_id, npc_id, created_by)
+                    VALUES ($1, $2, $3)
+                  `, [newPoiId, npcId, proposalData.proposer_id]);
+                }
+              }
+              console.log(`[add_poi admin] Created ${data.npc_associations.length} NPC associations for copied POI ${newPoiId}`);
+            }
+          }
 
           // Delete custom POI if exists, but invalidate shares so users know what happened
           if (data.custom_poi_id) {

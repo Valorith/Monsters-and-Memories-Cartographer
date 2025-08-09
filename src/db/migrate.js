@@ -271,6 +271,32 @@ async function migrate() {
       console.log('POI types table created and existing POIs migrated');
     }
     
+    // Add multi_mob column to POI types
+    const multiMobPath = path.join(__dirname, 'add-multi-mob-column.sql');
+    if (fs.existsSync(multiMobPath)) {
+      try {
+        const multiMobSchema = fs.readFileSync(multiMobPath, 'utf8');
+        await pool.query(multiMobSchema);
+        console.log('Added multi_mob column to POI types');
+      } catch (error) {
+        console.error('Error adding multi_mob column:', error.message);
+        // Continue - column might already exist
+      }
+    }
+    
+    // Create POI-NPC associations tables
+    const poiNpcAssociationsPath = path.join(__dirname, 'create-poi-npc-associations-table.sql');
+    if (fs.existsSync(poiNpcAssociationsPath)) {
+      try {
+        const poiNpcAssociationsSchema = fs.readFileSync(poiNpcAssociationsPath, 'utf8');
+        await pool.query(poiNpcAssociationsSchema);
+        console.log('POI-NPC associations tables created');
+      } catch (error) {
+        console.error('Error creating POI-NPC associations:', error.message);
+        // Continue - tables might already exist
+      }
+    }
+    
     // Update POI types to support Iconify
     const updatePoiTypesIconifyPath = path.join(__dirname, 'update-poi-types-iconify.sql');
     if (fs.existsSync(updatePoiTypesIconifyPath)) {

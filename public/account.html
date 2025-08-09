@@ -4699,6 +4699,7 @@
                       <th>Name</th>
                       <th width="100">Type</th>
                       <th width="80">Default</th>
+                      <th width="80">Multi-Mob</th>
                       <th width="60">Order</th>
                       <th width="120">Actions</th>
                     </tr>
@@ -5903,7 +5904,7 @@
             <label for="poi-type-emoji">Emoji *</label>
             <div style="display: flex; gap: 0.5rem;">
               <input type="text" id="poi-type-emoji" placeholder="Enter emoji or click to select" maxlength="4">
-              <button type="button" onclick="toggleEmojiPicker()" class="secondary-btn">😀</button>
+              <button type="button" onclick="togglePOITypeEmojiPicker()" class="secondary-btn">😀</button>
             </div>
             
             <div id="emoji-picker" style="display: none;">
@@ -5969,6 +5970,15 @@
             <input type="file" id="poi-type-upload" accept="image/*">
             <p class="help-text">Max size: 1MB. Supported formats: PNG, JPG, GIF, SVG</p>
             <div id="icon-preview" style="margin-top: 1rem; text-align: center;"></div>
+          </div>
+          
+          <!-- Multi-Mob Checkbox -->
+          <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+              <input type="checkbox" id="poi-type-multi-mob" style="width: auto; margin: 0;">
+              <span>Multi-Mob Spawn Point</span>
+            </label>
+            <p class="help-text" style="margin-top: 0.5rem;">When enabled, POIs of this type can have multiple NPCs associated with them (e.g., spawn points with rotating mobs)</p>
           </div>
           
           <div class="modal-actions">
@@ -6971,7 +6981,7 @@
       primaryGroup.appendChild(viewBtn);
       
       // Publish button (if applicable)
-      if (poi.status === 'private' || poi.status === 'rejected') {
+      if (poi.status === 'private' || poi.status === 'rejected' || poi.status === null || !poi.status) {
         const publishBtn = document.createElement('button');
         publishBtn.className = 'small-btn warning-btn';
         publishBtn.setAttribute('data-action', 'publishPoi');
@@ -21601,8 +21611,14 @@ Size: Medium"></textarea>
       const current = proposal.current_data;
       let desc = '';
       
-      // Debug log for edit_poi proposals
-      if (proposal.change_type === 'edit_poi') {
+      // Debug log for multi-mob proposals
+      if (proposal.change_type === 'add_poi' && proposal.is_multi_mob) {
+        console.log('Multi-mob proposal:', {
+          id: proposal.id,
+          is_multi_mob: proposal.is_multi_mob,
+          npc_associations: proposal.npc_associations,
+          type_name: proposal.type_name
+        });
       }
       
       if (proposal.notes) {
@@ -21624,6 +21640,15 @@ Size: Medium"></textarea>
             desc += `<p><strong>Type:</strong> ${typeIcon}${proposal.type_name || data.type_name}</p>`;
           }
           if (proposal.npc_name || data.npc_name) desc += `<p><strong>NPC:</strong> ${proposal.npc_name || data.npc_name}</p>`;
+          
+          // Add NPC list button for multi-mob POIs
+          if (proposal.is_multi_mob && proposal.npc_associations && proposal.npc_associations.length > 0) {
+            desc += `<div style="margin-top: 0.5rem;">`;
+            desc += `<button class="small-btn info-btn" onclick="showProposalNPCs(${proposal.id}); event.stopPropagation();">`;
+            desc += `<span style="margin-right: 0.5rem;">⚔️</span>Show NPCs (${proposal.npc_associations.length})`;
+            desc += `</button>`;
+            desc += `</div>`;
+          }
           if (proposal.item_name || data.item_name) desc += `<p><strong>Item:</strong> ${proposal.item_name || data.item_name}</p>`;
           desc += `</div>`;
           if (data.description) desc += `<p><strong>Description:</strong> ${data.description}</p>`;
@@ -22177,6 +22202,11 @@ Size: Medium"></textarea>
           
           // Mark that the main map page should refresh POI data
           sessionStorage.setItem('refresh_pois', 'true');
+          
+          // Reload the page to ensure all data is fresh
+          setTimeout(() => {
+            window.location.reload();
+          }, 500);
         } else {
           const error = await response.json();
           showMessage(error.error || 'Failed to delete proposal', 'error');
@@ -22187,6 +22217,133 @@ Size: Medium"></textarea>
       }
     }
 
+    // Function to show NPCs for multi-mob proposals
+    async function showProposalNPCs(proposalId) {
+      const proposal = currentProposals.find(p => p.id === proposalId);
+      if (!proposal || !proposal.npc_associations) return;
+      
+      const modal = document.getElementById('proposal-npcs-modal');
+      const content = document.getElementById('proposal-npcs-content');
+      
+      // Show loading state
+      content.innerHTML = '<div style="text-align: center; padding: 2rem;"><div style="color: #999;">Loading NPC details...</div></div>';
+      modal.style.display = 'flex';
+      
+      // Fetch full NPC data for each NPC
+      const npcPromises = proposal.npc_associations.map(async npc => {
+        try {
+          const response = await fetch(`/api/npcs/${npc.npcid}`);
+          if (response.ok) {
+            const fullData = await response.json();
+            return { ...npc, ...fullData };
+          }
+        } catch (error) {
+          console.error('Error fetching NPC data:', error);
+        }
+        return npc;
+      });
+      
+      const npcsWithFullData = await Promise.all(npcPromises);
+      
+      // Check if any NPCs have details to show
+      const hasAnyDetails = npcsWithFullData.some(npc => {
+        return (npc.hp && npc.hp > 0) || 
+               (npc.ac && npc.ac > 0) || 
+               (npc.min_dmg && npc.min_dmg > 0) || 
+               (npc.max_dmg && npc.max_dmg > 0) || 
+               (npc.attack_speed && npc.attack_speed > 0) ||
+               npc.description;
+      });
+      
+      // Build enhanced NPC list HTML
+      let html = `
+        <div style="margin-bottom: 1.5rem;">
+          <div style="color: #FFD700; font-weight: 600; margin-bottom: 0.5rem;">This multi-mob POI includes ${npcsWithFullData.length} NPCs:</div>
+          ${hasAnyDetails ? '<div style="color: #999; font-size: 0.9rem;">Click on an NPC for more details</div>' : ''}
+        </div>
+      `;
+      
+      html += '<div style="display: grid; gap: 1rem; max-height: 50vh; overflow-y: auto; padding-right: 0.5rem;">';
+      
+      npcsWithFullData.forEach((npc, index) => {
+        const hasFullData = npc.hp !== undefined;
+        const hasValidStats = (npc.hp && npc.hp > 0) || 
+                             (npc.ac && npc.ac > 0) || 
+                             (npc.min_dmg && npc.min_dmg > 0) || 
+                             (npc.max_dmg && npc.max_dmg > 0) || 
+                             (npc.attack_speed && npc.attack_speed > 0) ||
+                             npc.description;
+        html += `
+          <div style="background: linear-gradient(135deg, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.6) 100%); 
+                      padding: 1rem; border-radius: 6px; border: 1px solid #444; 
+                      cursor: pointer; transition: all 0.2s;"
+               onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.3)';"
+               onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none';"
+               onclick="toggleNPCDetails('npc-details-${index}')">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <span style="color: #FFD700; font-weight: bold; font-size: 1.1rem;">${npc.name}</span>
+                <span style="color: #FFA500; margin-left: 0.75rem; font-weight: 500;">Level ${npc.level}</span>
+              </div>
+              <span style="color: #666; font-size: 0.85rem;">ID: ${npc.npcid}</span>
+            </div>
+            ${hasFullData && hasValidStats ? `
+              <div id="npc-details-${index}" style="display: none; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #333;">
+                ${npc.description ? `<div style="color: #bbb; margin-bottom: 0.75rem; font-style: italic;">${formatDescription(npc.description)}</div>` : ''}
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem;">
+                  ${npc.hp && npc.hp > 0 ? `
+                    <div style="background: rgba(255, 0, 0, 0.1); padding: 0.5rem; border-radius: 4px; border: 1px solid rgba(255, 0, 0, 0.2);">
+                      <div style="color: #888; font-size: 0.85rem; margin-bottom: 0.25rem;">HP</div>
+                      <div style="color: #e74c3c; font-weight: 600; font-size: 1.1rem;">${npc.hp}</div>
+                    </div>
+                  ` : ''}
+                  ${npc.ac && npc.ac > 0 ? `
+                    <div style="background: rgba(52, 152, 219, 0.1); padding: 0.5rem; border-radius: 4px; border: 1px solid rgba(52, 152, 219, 0.2);">
+                      <div style="color: #888; font-size: 0.85rem; margin-bottom: 0.25rem;">AC</div>
+                      <div style="color: #3498db; font-weight: 600; font-size: 1.1rem;">${npc.ac}</div>
+                    </div>
+                  ` : ''}
+                  ${(npc.min_dmg && npc.min_dmg > 0) || (npc.max_dmg && npc.max_dmg > 0) ? `
+                    <div style="background: rgba(243, 156, 18, 0.1); padding: 0.5rem; border-radius: 4px; border: 1px solid rgba(243, 156, 18, 0.2);">
+                      <div style="color: #888; font-size: 0.85rem; margin-bottom: 0.25rem;">Damage</div>
+                      <div style="color: #f39c12; font-weight: 600; font-size: 1.1rem;">${npc.min_dmg || 0}-${npc.max_dmg || 0}</div>
+                    </div>
+                  ` : ''}
+                  ${npc.attack_speed && npc.attack_speed > 0 ? `
+                    <div style="background: rgba(39, 174, 96, 0.1); padding: 0.5rem; border-radius: 4px; border: 1px solid rgba(39, 174, 96, 0.2);">
+                      <div style="color: #888; font-size: 0.85rem; margin-bottom: 0.25rem;">Attack Speed</div>
+                      <div style="color: #27ae60; font-weight: 600; font-size: 1.1rem;">${npc.attack_speed}</div>
+                    </div>
+                  ` : ''}
+                </div>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      });
+      
+      html += '</div>';
+      content.innerHTML = html;
+    }
+    
+    function toggleNPCDetails(detailsId) {
+      const details = document.getElementById(detailsId);
+      if (details) {
+        details.style.display = details.style.display === 'none' ? 'block' : 'none';
+      }
+    }
+    
+    function closeProposalNPCsModal() {
+      document.getElementById('proposal-npcs-modal').style.display = 'none';
+    }
+    
+    // Add escape key handler for modal
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && document.getElementById('proposal-npcs-modal').style.display === 'flex') {
+        closeProposalNPCsModal();
+      }
+    });
+    
     // Function to view a POI proposal on the map temporarily
     function viewProposalPOI(proposalId) {
       const proposal = currentProposals.find(p => p.id === proposalId);
@@ -22224,7 +22381,18 @@ Size: Medium"></textarea>
         proposerName: proposal.proposer_name,
         // Pass the type icon data for proper display
         type_icon_type: proposal.type_icon_type,
-        type_icon_value: proposal.type_icon_value
+        type_icon_value: proposal.type_icon_value,
+        // Include multi-mob and NPC associations data
+        is_multi_mob: proposal.is_multi_mob,
+        npc_associations: proposal.npc_associations,
+        // Include voting data
+        upvotes: proposal.upvotes || 0,
+        downvotes: proposal.downvotes || 0,
+        user_vote: proposal.user_vote || 0,
+        proposer_id: proposal.proposer_id,
+        proposer_donation_tier_name: proposal.proposer_donation_tier_name,
+        proposer_donation_tier_color: proposal.proposer_donation_tier_color,
+        proposer_donation_tier_icon: proposal.proposer_donation_tier_icon
       };
       
       
@@ -22559,6 +22727,7 @@ Size: Medium"></textarea>
           closeAdminProposalModal();
           loadProposals();
           loadInitialProposalCount();
+          loadVotingStats(); // Update the voting statistics including "My Proposals" count
         } else {
           const error = await response.json();
           showMessage(error.error || 'Failed to approve proposal', 'error');
@@ -22591,6 +22760,7 @@ Size: Medium"></textarea>
           closeAdminProposalModal();
           loadProposals();
           loadInitialProposalCount();
+          loadVotingStats(); // Update the voting statistics including "My Proposals" count
         } else {
           const error = await response.json();
           showMessage(error.error || 'Failed to reject proposal', 'error');
@@ -22654,7 +22824,7 @@ Size: Medium"></textarea>
       if (poiTypes.length === 0) {
         const row = document.createElement('tr');
         row.innerHTML = `
-          <td colspan="6" style="text-align: center; color: #666; padding: 2rem;">
+          <td colspan="8" style="text-align: center; color: #666; padding: 2rem;">
             No POI types defined. Click "Add POI Type" to create one.
           </td>
         `;
@@ -22714,6 +22884,22 @@ Size: Medium"></textarea>
           defaultCell.appendChild(badge);
         }
         row.appendChild(defaultCell);
+        
+        // Multi-Mob cell
+        const multiMobCell = document.createElement('td');
+        multiMobCell.style.textAlign = 'center';
+        if (type.multi_mob) {
+          const badge = document.createElement('span');
+          badge.style.background = '#6f42c1';
+          badge.style.color = 'white';
+          badge.style.padding = '0.2rem 0.5rem';
+          badge.style.borderRadius = '4px';
+          badge.style.fontSize = '0.8rem';
+          badge.title = 'POIs of this type can have multiple NPCs';
+          badge.textContent = 'Multi';
+          multiMobCell.appendChild(badge);
+        }
+        row.appendChild(multiMobCell);
         
         // Order cell
         const orderCell = document.createElement('td');
@@ -22933,6 +23119,9 @@ Size: Medium"></textarea>
         preview.innerHTML = `<img src="${type.icon_value}" style="width: 64px; height: 64px; object-fit: contain;">`;
       }
       
+      // Set multi-mob checkbox
+      document.getElementById('poi-type-multi-mob').checked = type.multi_mob || false;
+      
       document.getElementById('poi-type-modal').style.display = 'flex';
     }
     
@@ -22989,7 +23178,8 @@ Size: Medium"></textarea>
         const body = {
           name,
           icon_type: iconType,
-          icon_value: iconValue
+          icon_value: iconValue,
+          multi_mob: document.getElementById('poi-type-multi-mob').checked
         };
         
         const url = editingPOIType 
@@ -23111,8 +23301,13 @@ Size: Medium"></textarea>
       }
     }
     
-    function toggleEmojiPicker() {
+    function togglePOITypeEmojiPicker() {
       const picker = document.getElementById('emoji-picker');
+      if (!picker) {
+        console.error('Emoji picker element not found');
+        return;
+      }
+      
       picker.style.display = picker.style.display === 'none' ? 'block' : 'none';
       
       if (picker.style.display === 'block') {
@@ -23134,6 +23329,10 @@ Size: Medium"></textarea>
     
     function populateEmojiPicker(category) {
       const grid = document.getElementById('emoji-grid');
+      if (!grid) {
+        console.error('Emoji grid element not found');
+        return;
+      }
       grid.innerHTML = '';
       
       const emojis = emojiCategories[category] || [];
@@ -26419,6 +26618,35 @@ Size: Medium"></textarea>
     };
     
     // Helper function to escape HTML
+    function formatDescription(text) {
+      if (!text) return '';
+      
+      // First escape HTML to prevent XSS
+      let escaped = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+      
+      // Then convert URLs to clickable links
+      // Match URLs starting with http://, https://, or www.
+      const urlPattern = /(\b(https?:\/\/|www\.)[^\s<]+)/gi;
+      escaped = escaped.replace(urlPattern, (match) => {
+        let url = match;
+        // Add protocol if missing
+        if (url.startsWith('www.')) {
+          url = 'https://' + url;
+        }
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color: #60a5fa; text-decoration: underline;">${match}</a>`;
+      });
+      
+      // Convert line breaks to <br>
+      escaped = escaped.replace(/\n/g, '<br>');
+      
+      return escaped;
+    }
+    
     function escapeHtml(text) {
       if (!text) return '';
       const div = document.createElement('div');
@@ -27621,6 +27849,19 @@ Size: Medium"></textarea>
     <div class="inspector-context-menu-item" onclick="reverifyNode()">
       <span class="inspector-context-menu-icon">🔄</span>
       <span>Re-verify URL</span>
+    </div>
+  </div>
+
+  <!-- Proposal NPCs Modal -->
+  <div id="proposal-npcs-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.8); z-index: 10000; align-items: center; justify-content: center;" onclick="if(event.target === this) closeProposalNPCsModal()">
+    <div style="width: 90%; max-width: 700px; max-height: 80vh; background: #2d2d2d; border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); display: flex; flex-direction: column; position: relative;">
+      <div style="padding: 1.5rem; border-bottom: 1px solid #444; background: #1a1a1a; border-radius: 8px 8px 0 0;">
+        <h3 style="margin: 0; color: #FFD700; font-family: 'Cinzel', serif; font-size: 1.5rem;">Multi-Mob POI NPCs</h3>
+        <button onclick="closeProposalNPCsModal()" style="position: absolute; top: 1.5rem; right: 1.5rem; background: #444; border: none; color: #fff; font-size: 1.25rem; cursor: pointer; width: 32px; height: 32px; border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: all 0.2s;" onmouseover="this.style.background='#666'" onmouseout="this.style.background='#444'">&times;</button>
+      </div>
+      <div id="proposal-npcs-content" style="padding: 1.5rem; overflow-y: auto; flex: 1;">
+        <!-- NPC list will be populated here -->
+      </div>
     </div>
   </div>
 

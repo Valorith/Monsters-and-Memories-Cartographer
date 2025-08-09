@@ -63,12 +63,17 @@
       </div>
       
       <!-- NPC Information -->
-      <div v-if="localPoi.npc_id && npcData" class="poi-npc-info">
+      <div v-if="(localPoi.npc_id && npcData) || isMultiMob" class="poi-npc-info">
         <div class="info-section-header">
           <span class="section-icon">⚔️</span>
           <span class="section-title">NPC Information</span>
+          <button v-if="isMultiMob && canAddNPC" class="add-npc-btn" @click="$emit('add-npc')" title="Add NPC">
+            <span class="btn-icon">➕</span>
+          </button>
         </div>
-        <div class="npc-details">
+        
+        <!-- Single NPC display (non-multi-mob) -->
+        <div v-if="!isMultiMob && npcData" class="npc-details">
           <div class="npc-header">
             <span class="npc-name">{{ npcData.name }}</span>
             <span class="npc-level">Level {{ npcData.level }}</span>
@@ -99,6 +104,101 @@
                 >{{ item.name }}</span>
               </div>
             </div>
+          </div>
+        </div>
+        
+        <!-- Multiple NPCs display (multi-mob) -->
+        <div v-else-if="isMultiMob" class="npc-container">
+          <div v-if="npcList.length > 0" class="npc-list-container">
+            <div v-for="npcAssoc in npcList" :key="npcAssoc.association_id" class="npc-list-item">
+              <div class="npc-header">
+                <div class="npc-info-section">
+                  <div class="npc-main-info">
+                    <div class="npc-name">{{ npcAssoc.name }}</div>
+                    <div class="npc-sub-info">
+                      <span class="npc-level">Level {{ npcAssoc.level }}</span>
+                      <button 
+                        v-if="npcAssoc.loot_items && npcAssoc.loot_items.length > 0"
+                        class="loot-bag-btn"
+                        @click="toggleNPCLoot(npcAssoc, $event)"
+                        :title="`${npcAssoc.loot_items.length} item${npcAssoc.loot_items.length > 1 ? 's' : ''}`"
+                      >
+                        💰
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="npc-votes">
+                  <button 
+                    v-if="(!isCustomPOI || localPoi.status === 'pending') && npcAssoc.association_id && !isAdminCreatedAssociation(npcAssoc)"
+                    class="vote-btn" 
+                    :class="{ active: npcAssoc.user_vote === 1 }"
+                    @click="voteOnNPC(npcAssoc.association_id, npcAssoc.user_vote === 1 ? 0 : 1)"
+                    :disabled="!isAuthenticated"
+                    title="Upvote"
+                  >
+                    👍 {{ npcAssoc.upvotes || 0 }}
+                  </button>
+                  <button 
+                    v-if="(!isCustomPOI || localPoi.status === 'pending') && npcAssoc.association_id && !isAdminCreatedAssociation(npcAssoc)"
+                    class="vote-btn" 
+                    :class="{ active: npcAssoc.user_vote === -1 }"
+                    @click="voteOnNPC(npcAssoc.association_id, npcAssoc.user_vote === -1 ? 0 : -1)"
+                    :disabled="!isAuthenticated"
+                    title="Downvote"
+                  >
+                    👎 {{ npcAssoc.downvotes || 0 }}
+                  </button>
+                  <button 
+                    v-if="isAdmin || isAuthenticated"
+                    class="remove-btn"
+                    @click="removeNPC(npcAssoc.association_id)"
+                    :title="isAdmin || isCustomPOI ? 'Remove NPC' : 'Propose removal'"
+                  >
+                    ❌
+                  </button>
+                </div>
+              </div>
+              <div v-if="npcAssoc.description" class="npc-description" v-html="formatDescription(npcAssoc.description)"></div>
+              <div class="npc-stats">
+                <div class="stat-row">
+                  <span class="stat-label">HP:</span>
+                  <span class="stat-value">{{ npcAssoc.hp }}</span>
+                  <span class="stat-label">AC:</span>
+                  <span class="stat-value">{{ npcAssoc.ac }}</span>
+                </div>
+                <div class="stat-row">
+                  <span class="stat-label">Damage:</span>
+                  <span class="stat-value">{{ npcAssoc.min_dmg }}-{{ npcAssoc.max_dmg }}</span>
+                </div>
+              </div>
+              <div v-if="!isAdmin && isAuthenticated && (!isCustomPOI || localPoi.status === 'pending')" class="npc-actions">
+                <button 
+                  class="npc-action-btn edit-stats"
+                  @click="proposeNPCEdit(npcAssoc)"
+                  title="Propose changes to NPC stats"
+                >
+                  <span class="btn-icon">✏️</span>
+                  <span class="btn-text">Edit Stats</span>
+                </button>
+                <button 
+                  class="npc-action-btn edit-loot"
+                  @click="proposeNPCLoot(npcAssoc)"
+                  title="Propose loot items for this NPC"
+                >
+                  <span class="btn-icon">💎</span>
+                  <span class="btn-text">Edit Loot</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Show message if no NPCs -->
+          <div v-else class="no-npcs-message">
+            No NPCs associated with this spawn point yet.
+            <button v-if="canAddNPC" class="add-first-npc-btn" @click="$emit('add-npc')">
+              Add the first NPC
+            </button>
           </div>
         </div>
       </div>
@@ -287,179 +387,205 @@
       </div>
     </div>
     
-    <!-- Item Tooltip -->
-    <div 
-      v-if="tooltipItem && tooltipVisible" 
-      class="item-tooltip"
-      :style="tooltipStyle"
-      @mouseenter="cancelTooltipHide"
-      @mouseleave="hideItemTooltip"
-    >
-      <!-- Header with icon and name -->
-      <div class="tooltip-header">
-        <div class="header-content">
-          <span v-if="tooltipItem.icon_type === 'emoji'" class="tooltip-icon">{{ tooltipItem.icon_value || '📦' }}</span>
-          <iconify-icon v-else-if="tooltipItem.icon_type === 'iconify'" :icon="tooltipItem.icon_value" class="tooltip-icon" width="28"></iconify-icon>
-          <div class="header-text">
-            <div class="tooltip-name">{{ tooltipItem.name }}</div>
-            <div v-if="tooltipItem.item_type" class="tooltip-type">{{ formatItemType(tooltipItem.item_type) }}</div>
-          </div>
+  </div>
+  
+  <!-- Floating Loot Window -->
+  <div v-if="activeLootNPC" class="floating-loot-window" :style="lootWindowStyle">
+    <div class="loot-window-header">
+      <span class="loot-window-title">{{ activeLootNPC.name }} - Drops</span>
+      <button @click="closeLootWindow" class="loot-close-btn">×</button>
+    </div>
+    <div class="loot-window-content">
+      <div v-if="activeLootNPC.loot_items && activeLootNPC.loot_items.length > 0" class="loot-dropdown-list">
+        <div v-for="item in activeLootNPC.loot_items" :key="item.id" class="loot-dropdown-item">
+          <span v-if="item.icon_type === 'emoji'" class="item-icon">{{ item.icon_value }}</span>
+          <iconify-icon v-else :icon="item.icon_value" class="item-icon"></iconify-icon>
+          <span 
+            class="item-name" 
+            @mouseenter="showItemTooltip($event, item.id)"
+            @mouseleave="startTooltipHideTimer"
+          >{{ item.name }}</span>
         </div>
       </div>
-      
-      <!-- Slot and basic info -->
-      <div v-if="tooltipItem.slot || (tooltipItem.slots && tooltipItem.slots.length > 0) || tooltipItem.skill" class="tooltip-basic-info">
-        <div v-if="tooltipItem.slot || (tooltipItem.slots && tooltipItem.slots.length > 0)" class="info-line">
-          <span class="info-label">Slot:</span>
-          <span class="info-value">{{ tooltipItem.slots && tooltipItem.slots.length > 0 ? tooltipItem.slots.join(', ') : tooltipItem.slot }}</span>
-        </div>
-        <div v-if="tooltipItem.skill" class="info-line">
-          <span class="info-label">Skill:</span>
-          <span class="info-value">{{ tooltipItem.skill }}</span>
+      <div v-else class="no-loot-message">
+        No loot items found.
+      </div>
+    </div>
+  </div>
+  
+  <!-- Item Tooltip -->
+  <div 
+    v-if="tooltipItem && tooltipVisible" 
+    class="item-tooltip"
+    :style="tooltipStyle"
+    @mouseenter="cancelTooltipHide"
+    @mouseleave="hideItemTooltip"
+  >
+    <!-- Header with icon and name -->
+    <div class="tooltip-header">
+      <div class="header-content">
+        <span v-if="tooltipItem.icon_type === 'emoji'" class="tooltip-icon">{{ tooltipItem.icon_value || '📦' }}</span>
+        <iconify-icon v-else-if="tooltipItem.icon_type === 'iconify'" :icon="tooltipItem.icon_value" class="tooltip-icon" width="28"></iconify-icon>
+        <div class="header-text">
+          <div class="tooltip-name">{{ tooltipItem.name }}</div>
+          <div v-if="tooltipItem.item_type" class="tooltip-type">{{ formatItemType(tooltipItem.item_type) }}</div>
         </div>
       </div>
-      
-      <!-- Combat Stats for weapons -->
-      <div v-if="hasTooltipCombatStats" class="tooltip-section combat-section">
-        <div v-if="tooltipItem.damage" class="combat-line">
-          <span class="combat-label">Damage:</span>
-          <span class="combat-value">{{ tooltipItem.damage }}</span>
+    </div>
+    
+    <!-- Slot and basic info -->
+    <div v-if="tooltipItem.slot || (tooltipItem.slots && tooltipItem.slots.length > 0) || tooltipItem.skill" class="tooltip-basic-info">
+      <div v-if="tooltipItem.slot || (tooltipItem.slots && tooltipItem.slots.length > 0)" class="info-line">
+        <span class="info-label">Slot:</span>
+        <span class="info-value">{{ tooltipItem.slots && tooltipItem.slots.length > 0 ? tooltipItem.slots.join(', ') : tooltipItem.slot }}</span>
+      </div>
+      <div v-if="tooltipItem.skill" class="info-line">
+        <span class="info-label">Skill:</span>
+        <span class="info-value">{{ tooltipItem.skill }}</span>
+      </div>
+    </div>
+    
+    <!-- Combat Stats for weapons -->
+    <div v-if="hasTooltipCombatStats" class="tooltip-section combat-section">
+      <div v-if="tooltipItem.damage" class="combat-line">
+        <span class="combat-label">Damage:</span>
+        <span class="combat-value">{{ tooltipItem.damage }}</span>
+      </div>
+      <div v-if="tooltipItem.delay" class="combat-line">
+        <span class="combat-label">Delay:</span>
+        <span class="combat-value">{{ tooltipItem.delay }}</span>
+      </div>
+      <div v-if="tooltipItem.attack_speed && tooltipItem.attack_speed !== 0 && tooltipItem.attack_speed !== '0' && tooltipItem.attack_speed !== '0.0'" class="combat-line">
+        <span class="combat-label">Attack Speed:</span>
+        <span class="combat-value">{{ tooltipItem.attack_speed }}</span>
+      </div>
+    </div>
+    
+    <!-- Defensive Stats -->
+    <div v-if="tooltipItem.ac || tooltipItem.block" class="tooltip-section defensive-section">
+      <div v-if="tooltipItem.ac" class="stat-line">
+        <span class="stat-value" :class="{ negative: tooltipItem.ac < 0 }">{{ formatStatValue(tooltipItem.ac) }} AC</span>
+      </div>
+      <div v-if="tooltipItem.block" class="stat-line">
+        <span class="stat-value" :class="{ negative: tooltipItem.block < 0 }">{{ formatStatValue(tooltipItem.block) }} Block</span>
+      </div>
+    </div>
+    
+    <!-- Primary Stats -->
+    <div v-if="hasTooltipStats" class="tooltip-section stats-section">
+      <div class="stats-grid">
+        <div v-if="tooltipItem.str" class="stat-item" :class="{ negative: tooltipItem.str < 0 }">
+          <span class="stat-label">STR</span>
+          <span class="stat-value">{{ formatStatValue(tooltipItem.str) }}</span>
         </div>
-        <div v-if="tooltipItem.delay" class="combat-line">
-          <span class="combat-label">Delay:</span>
-          <span class="combat-value">{{ tooltipItem.delay }}</span>
+        <div v-if="tooltipItem.sta" class="stat-item" :class="{ negative: tooltipItem.sta < 0 }">
+          <span class="stat-label">STA</span>
+          <span class="stat-value">{{ formatStatValue(tooltipItem.sta) }}</span>
         </div>
-        <div v-if="tooltipItem.attack_speed && tooltipItem.attack_speed !== 0 && tooltipItem.attack_speed !== '0' && tooltipItem.attack_speed !== '0.0'" class="combat-line">
-          <span class="combat-label">Attack Speed:</span>
-          <span class="combat-value">{{ tooltipItem.attack_speed }}</span>
+        <div v-if="tooltipItem.agi" class="stat-item" :class="{ negative: tooltipItem.agi < 0 }">
+          <span class="stat-label">AGI</span>
+          <span class="stat-value">{{ formatStatValue(tooltipItem.agi) }}</span>
+        </div>
+        <div v-if="tooltipItem.dex" class="stat-item" :class="{ negative: tooltipItem.dex < 0 }">
+          <span class="stat-label">DEX</span>
+          <span class="stat-value">{{ formatStatValue(tooltipItem.dex) }}</span>
+        </div>
+        <div v-if="tooltipItem.wis" class="stat-item" :class="{ negative: tooltipItem.wis < 0 }">
+          <span class="stat-label">WIS</span>
+          <span class="stat-value">{{ formatStatValue(tooltipItem.wis) }}</span>
+        </div>
+        <div v-if="tooltipItem.int" class="stat-item" :class="{ negative: tooltipItem.int < 0 }">
+          <span class="stat-label">INT</span>
+          <span class="stat-value">{{ formatStatValue(tooltipItem.int) }}</span>
+        </div>
+        <div v-if="tooltipItem.cha" class="stat-item" :class="{ negative: tooltipItem.cha < 0 }">
+          <span class="stat-label">CHA</span>
+          <span class="stat-value">{{ formatStatValue(tooltipItem.cha) }}</span>
         </div>
       </div>
-      
-      <!-- Defensive Stats -->
-      <div v-if="tooltipItem.ac || tooltipItem.block" class="tooltip-section defensive-section">
-        <div v-if="tooltipItem.ac" class="stat-line">
-          <span class="stat-value" :class="{ negative: tooltipItem.ac < 0 }">{{ formatStatValue(tooltipItem.ac) }} AC</span>
+    </div>
+    
+    <!-- HP/Mana bonuses -->
+    <div v-if="tooltipItem.health || tooltipItem.mana" class="tooltip-section bonus-section">
+      <div v-if="tooltipItem.health" class="bonus-line">
+        <span class="bonus-value" :class="{ negative: tooltipItem.health < 0 }">{{ formatStatValue(tooltipItem.health) }} Hit Points</span>
+      </div>
+      <div v-if="tooltipItem.mana" class="bonus-line">
+        <span class="bonus-value" :class="{ negative: tooltipItem.mana < 0 }">{{ formatStatValue(tooltipItem.mana) }} Mana</span>
+      </div>
+    </div>
+    
+    <!-- Resistances -->
+    <div v-if="hasTooltipResistances" class="tooltip-section resistance-section">
+      <div class="section-header">Resistances</div>
+      <div class="resistance-grid">
+        <div v-if="tooltipItem.resist_fire" class="resistance-item" :class="{ negative: tooltipItem.resist_fire < 0 }">
+          <span class="resistance-icon">🔥</span>
+          <span class="resistance-value">{{ formatStatValue(tooltipItem.resist_fire) }}</span>
         </div>
-        <div v-if="tooltipItem.block" class="stat-line">
-          <span class="stat-value" :class="{ negative: tooltipItem.block < 0 }">{{ formatStatValue(tooltipItem.block) }} Block</span>
+        <div v-if="tooltipItem.resist_cold || tooltipItem.resist_ice" class="resistance-item" :class="{ negative: (tooltipItem.resist_cold || tooltipItem.resist_ice) < 0 }">
+          <span class="resistance-icon">❄️</span>
+          <span class="resistance-value">{{ formatStatValue(tooltipItem.resist_cold || tooltipItem.resist_ice) }}</span>
+        </div>
+        <div v-if="tooltipItem.resist_magic" class="resistance-item" :class="{ negative: tooltipItem.resist_magic < 0 }">
+          <span class="resistance-icon">✨</span>
+          <span class="resistance-value">{{ formatStatValue(tooltipItem.resist_magic) }}</span>
+        </div>
+        <div v-if="tooltipItem.resist_poison" class="resistance-item" :class="{ negative: tooltipItem.resist_poison < 0 }">
+          <span class="resistance-icon">☠️</span>
+          <span class="resistance-value">{{ formatStatValue(tooltipItem.resist_poison) }}</span>
+        </div>
+        <div v-if="tooltipItem.resist_disease" class="resistance-item" :class="{ negative: tooltipItem.resist_disease < 0 }">
+          <span class="resistance-icon">🦠</span>
+          <span class="resistance-value">{{ formatStatValue(tooltipItem.resist_disease) }}</span>
+        </div>
+        <div v-if="tooltipItem.resist_electricity" class="resistance-item" :class="{ negative: tooltipItem.resist_electricity < 0 }">
+          <span class="resistance-icon">⚡</span>
+          <span class="resistance-value">{{ formatStatValue(tooltipItem.resist_electricity) }}</span>
+        </div>
+        <div v-if="tooltipItem.resist_corruption" class="resistance-item" :class="{ negative: tooltipItem.resist_corruption < 0 }">
+          <span class="resistance-icon">💀</span>
+          <span class="resistance-value">{{ formatStatValue(tooltipItem.resist_corruption) }}</span>
         </div>
       </div>
-      
-      <!-- Primary Stats -->
-      <div v-if="hasTooltipStats" class="tooltip-section stats-section">
-        <div class="stats-grid">
-          <div v-if="tooltipItem.str" class="stat-item" :class="{ negative: tooltipItem.str < 0 }">
-            <span class="stat-label">STR</span>
-            <span class="stat-value">{{ formatStatValue(tooltipItem.str) }}</span>
-          </div>
-          <div v-if="tooltipItem.sta" class="stat-item" :class="{ negative: tooltipItem.sta < 0 }">
-            <span class="stat-label">STA</span>
-            <span class="stat-value">{{ formatStatValue(tooltipItem.sta) }}</span>
-          </div>
-          <div v-if="tooltipItem.agi" class="stat-item" :class="{ negative: tooltipItem.agi < 0 }">
-            <span class="stat-label">AGI</span>
-            <span class="stat-value">{{ formatStatValue(tooltipItem.agi) }}</span>
-          </div>
-          <div v-if="tooltipItem.dex" class="stat-item" :class="{ negative: tooltipItem.dex < 0 }">
-            <span class="stat-label">DEX</span>
-            <span class="stat-value">{{ formatStatValue(tooltipItem.dex) }}</span>
-          </div>
-          <div v-if="tooltipItem.wis" class="stat-item" :class="{ negative: tooltipItem.wis < 0 }">
-            <span class="stat-label">WIS</span>
-            <span class="stat-value">{{ formatStatValue(tooltipItem.wis) }}</span>
-          </div>
-          <div v-if="tooltipItem.int" class="stat-item" :class="{ negative: tooltipItem.int < 0 }">
-            <span class="stat-label">INT</span>
-            <span class="stat-value">{{ formatStatValue(tooltipItem.int) }}</span>
-          </div>
-          <div v-if="tooltipItem.cha" class="stat-item" :class="{ negative: tooltipItem.cha < 0 }">
-            <span class="stat-label">CHA</span>
-            <span class="stat-value">{{ formatStatValue(tooltipItem.cha) }}</span>
-          </div>
-        </div>
+    </div>
+    
+    <!-- Race/Class requirements -->
+    <div v-if="(tooltipItem.race && tooltipItem.race !== 'ALL') || (tooltipItem.class && tooltipItem.class !== 'ALL')" class="tooltip-section requirements-section">
+      <div v-if="tooltipItem.race && tooltipItem.race !== 'ALL'" class="requirement-line">
+        <span class="requirement-label">Race:</span>
+        <span class="requirement-value">{{ tooltipItem.race }}</span>
       </div>
-      
-      <!-- HP/Mana bonuses -->
-      <div v-if="tooltipItem.health || tooltipItem.mana" class="tooltip-section bonus-section">
-        <div v-if="tooltipItem.health" class="bonus-line">
-          <span class="bonus-value" :class="{ negative: tooltipItem.health < 0 }">{{ formatStatValue(tooltipItem.health) }} Hit Points</span>
-        </div>
-        <div v-if="tooltipItem.mana" class="bonus-line">
-          <span class="bonus-value" :class="{ negative: tooltipItem.mana < 0 }">{{ formatStatValue(tooltipItem.mana) }} Mana</span>
-        </div>
+      <div v-if="tooltipItem.class && tooltipItem.class !== 'ALL'" class="requirement-line">
+        <span class="requirement-label">Class:</span>
+        <span class="requirement-value">{{ tooltipItem.class }}</span>
       </div>
-      
-      <!-- Resistances -->
-      <div v-if="hasTooltipResistances" class="tooltip-section resistance-section">
-        <div class="section-header">Resistances</div>
-        <div class="resistance-grid">
-          <div v-if="tooltipItem.resist_fire" class="resistance-item" :class="{ negative: tooltipItem.resist_fire < 0 }">
-            <span class="resistance-icon">🔥</span>
-            <span class="resistance-value">{{ formatStatValue(tooltipItem.resist_fire) }}</span>
-          </div>
-          <div v-if="tooltipItem.resist_cold || tooltipItem.resist_ice" class="resistance-item" :class="{ negative: (tooltipItem.resist_cold || tooltipItem.resist_ice) < 0 }">
-            <span class="resistance-icon">❄️</span>
-            <span class="resistance-value">{{ formatStatValue(tooltipItem.resist_cold || tooltipItem.resist_ice) }}</span>
-          </div>
-          <div v-if="tooltipItem.resist_magic" class="resistance-item" :class="{ negative: tooltipItem.resist_magic < 0 }">
-            <span class="resistance-icon">✨</span>
-            <span class="resistance-value">{{ formatStatValue(tooltipItem.resist_magic) }}</span>
-          </div>
-          <div v-if="tooltipItem.resist_poison" class="resistance-item" :class="{ negative: tooltipItem.resist_poison < 0 }">
-            <span class="resistance-icon">☠️</span>
-            <span class="resistance-value">{{ formatStatValue(tooltipItem.resist_poison) }}</span>
-          </div>
-          <div v-if="tooltipItem.resist_disease" class="resistance-item" :class="{ negative: tooltipItem.resist_disease < 0 }">
-            <span class="resistance-icon">🦠</span>
-            <span class="resistance-value">{{ formatStatValue(tooltipItem.resist_disease) }}</span>
-          </div>
-          <div v-if="tooltipItem.resist_electricity" class="resistance-item" :class="{ negative: tooltipItem.resist_electricity < 0 }">
-            <span class="resistance-icon">⚡</span>
-            <span class="resistance-value">{{ formatStatValue(tooltipItem.resist_electricity) }}</span>
-          </div>
-          <div v-if="tooltipItem.resist_corruption" class="resistance-item" :class="{ negative: tooltipItem.resist_corruption < 0 }">
-            <span class="resistance-icon">💀</span>
-            <span class="resistance-value">{{ formatStatValue(tooltipItem.resist_corruption) }}</span>
-          </div>
-        </div>
+    </div>
+    
+    <!-- Weight/Size at bottom -->
+    <div v-if="(tooltipItem.weight && tooltipItem.weight > 0) || (tooltipItem.size && tooltipItem.size !== 'Medium')" class="tooltip-section property-section">
+      <div class="property-line">
+        <span v-if="tooltipItem.weight && tooltipItem.weight > 0" class="property-item">Weight: {{ tooltipItem.weight }}</span>
+        <span v-if="tooltipItem.size && tooltipItem.size !== 'Medium'" class="property-item">Size: {{ tooltipItem.size }}</span>
       </div>
-      
-      <!-- Race/Class requirements -->
-      <div v-if="(tooltipItem.race && tooltipItem.race !== 'ALL') || (tooltipItem.class && tooltipItem.class !== 'ALL')" class="tooltip-section requirements-section">
-        <div v-if="tooltipItem.race && tooltipItem.race !== 'ALL'" class="requirement-line">
-          <span class="requirement-label">Race:</span>
-          <span class="requirement-value">{{ tooltipItem.race }}</span>
-        </div>
-        <div v-if="tooltipItem.class && tooltipItem.class !== 'ALL'" class="requirement-line">
-          <span class="requirement-label">Class:</span>
-          <span class="requirement-value">{{ tooltipItem.class }}</span>
-        </div>
-      </div>
-      
-      <!-- Weight/Size at bottom -->
-      <div v-if="(tooltipItem.weight && tooltipItem.weight > 0) || (tooltipItem.size && tooltipItem.size !== 'Medium')" class="tooltip-section property-section">
-        <div class="property-line">
-          <span v-if="tooltipItem.weight && tooltipItem.weight > 0" class="property-item">Weight: {{ tooltipItem.weight }}</span>
-          <span v-if="tooltipItem.size && tooltipItem.size !== 'Medium'" class="property-item">Size: {{ tooltipItem.size }}</span>
-        </div>
-      </div>
-      
-      <!-- Description -->
-      <div v-if="tooltipItem.description" class="tooltip-description" v-html="formatDescription(tooltipItem.description)"></div>
-      
-      <!-- Actions -->
-      <div v-if="isAuthenticated && !isAdmin" class="tooltip-actions">
-        <button class="tooltip-edit-btn" @click="proposeItemEdit" title="Propose changes to this item">
-          <span class="btn-icon">✏️</span>
-          <span class="btn-text">Propose Edit</span>
-        </button>
-      </div>
+    </div>
+    
+    <!-- Description -->
+    <div v-if="tooltipItem.description" class="tooltip-description" v-html="formatDescription(tooltipItem.description)"></div>
+    
+    <!-- Actions -->
+    <div v-if="isAuthenticated && !isAdmin" class="tooltip-actions">
+      <button class="tooltip-edit-btn" @click="proposeItemEdit" title="Propose changes to this item">
+        <span class="btn-icon">✏️</span>
+        <span class="btn-text">Propose Edit</span>
+      </button>
     </div>
   </div>
 </template>
 
 <script>
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { useCSRF } from '../composables/useCSRF'
 
 export default {
   name: 'POIPopup',
@@ -493,8 +619,9 @@ export default {
       default: false
     }
   },
-  emits: ['close', 'delete', 'update', 'confirmUpdate', 'publish', 'propose-edit', 'propose-delete', 'propose-loot', 'propose-npc-edit', 'propose-item-edit'],
+  emits: ['close', 'delete', 'update', 'confirmUpdate', 'publish', 'propose-edit', 'propose-delete', 'propose-loot', 'propose-npc-edit', 'propose-item-edit', 'add-npc'],
   setup(props, { emit }) {
+    const { fetchWithCSRF } = useCSRF()
     const localPoi = ref({ ...props.poi })
     const originalValues = ref({})
     const isEditing = ref({
@@ -511,8 +638,16 @@ export default {
     
     // Data for NPC and Item
     const npcData = ref(null)
+    const npcList = ref([]) // For multi-mob POIs
+    const poiType = ref(null)
     const itemData = ref(null)
     const activeProposals = ref([])
+    const activeLootNPC = ref(null) // Currently displayed NPC for loot window
+    const lootWindowPosition = ref({ x: 0, y: 0 })
+    
+    // Simple cache for NPC data to avoid repeated fetches
+    const npcCache = new Map()
+    const npcListCache = new Map()
     
     // Tooltip data
     const tooltipItem = ref(null)
@@ -528,40 +663,112 @@ export default {
       delete localPoi.value._npcErrorLogged
       delete localPoi.value._itemErrorLogged
       // Fetch new NPC/Item data when POI changes
+      fetchPOIType()
       fetchNPCData()
       fetchItemData()
       fetchActiveProposals()
     }, { deep: true })
     
-    // Fetch NPC data when npc_id changes
-    const fetchNPCData = async () => {
-      if (!localPoi.value.npc_id) {
-        npcData.value = null
+    // Fetch POI type information
+    const fetchPOIType = async () => {
+      if (!localPoi.value.type_id) {
+        poiType.value = null
         return
       }
       
       try {
-        const response = await fetch(`/api/npcs/${localPoi.value.npc_id}`)
+        const response = await fetch('/api/poi-types')
         if (response.ok) {
-          npcData.value = await response.json()
-        } else if (response.status === 404) {
-          // NPC not found is not an error worth logging
-          npcData.value = null
-        } else {
-          // Only log actual errors once
+          const types = await response.json()
+          poiType.value = types.find(t => t.id === localPoi.value.type_id) || null
+        }
+      } catch (error) {
+        console.error('Error fetching POI type:', error)
+        poiType.value = null
+      }
+    }
+    
+    // Fetch NPC data when npc_id changes
+    const fetchNPCData = async () => {
+      // Check if this is a multi-mob POI (check both POI and POI type)
+      if ((localPoi.value?.multi_mob || poiType.value?.multi_mob) && localPoi.value.id) {
+        // Check if NPCs are already pre-loaded in the POI data
+        if (localPoi.value.npc_associations && localPoi.value.npc_associations.length > 0) {
+          // Use pre-loaded data
+          npcList.value = localPoi.value.npc_associations.map(npc => ({
+            ...npc,
+            loot_items: typeof npc.loot_items === 'string' ? JSON.parse(npc.loot_items) : npc.loot_items
+          }))
+          // Cache it
+          npcListCache.set(`${localPoi.value.id}`, npcList.value)
+          return
+        }
+        
+        // Check cache
+        const cacheKey = `${localPoi.value.id}`
+        if (npcListCache.has(cacheKey)) {
+          npcList.value = npcListCache.get(cacheKey)
+          return
+        }
+        
+        // Fetch multiple NPCs if not pre-loaded
+        try {
+          const response = await fetch(`/api/pois/${localPoi.value.id}/npcs`)
+          if (response.ok) {
+            const data = await response.json()
+            // Parse loot_items if they come as JSON strings
+            const processedData = data.map(npc => ({
+              ...npc,
+              loot_items: typeof npc.loot_items === 'string' ? JSON.parse(npc.loot_items) : npc.loot_items
+            }))
+            npcList.value = processedData
+            // Cache the result
+            npcListCache.set(cacheKey, processedData)
+          } else {
+            npcList.value = []
+          }
+        } catch (error) {
+          console.error('Error fetching POI NPCs:', error)
+          npcList.value = []
+        }
+      } else if (!localPoi.value.npc_id) {
+        npcData.value = null
+        npcList.value = []
+        return
+      } else {
+        // Check cache first for single NPC
+        if (npcCache.has(localPoi.value.npc_id)) {
+          npcData.value = npcCache.get(localPoi.value.npc_id)
+          return
+        }
+        
+        // Single NPC fetch
+        try {
+          const response = await fetch(`/api/npcs/${localPoi.value.npc_id}`)
+          if (response.ok) {
+            const data = await response.json()
+            npcData.value = data
+            // Cache the result
+            npcCache.set(localPoi.value.npc_id, data)
+          } else if (response.status === 404) {
+            // NPC not found is not an error worth logging
+            npcData.value = null
+          } else {
+            // Only log actual errors once
+            if (!localPoi.value._npcErrorLogged) {
+              console.error(`Error fetching NPC data: ${response.status} ${response.statusText}`)
+              localPoi.value._npcErrorLogged = true
+            }
+            npcData.value = null
+          }
+        } catch (error) {
+          // Only log error once, not repeatedly
           if (!localPoi.value._npcErrorLogged) {
-            console.error(`Error fetching NPC data: ${response.status} ${response.statusText}`)
+            console.error('Error fetching NPC data:', error)
             localPoi.value._npcErrorLogged = true
           }
           npcData.value = null
         }
-      } catch (error) {
-        // Only log error once, not repeatedly
-        if (!localPoi.value._npcErrorLogged) {
-          console.error('Error fetching NPC data:', error)
-          localPoi.value._npcErrorLogged = true
-        }
-        npcData.value = null
       }
     }
     
@@ -636,10 +843,18 @@ export default {
     })
     
     // Initial fetch
-    onMounted(() => {
-      fetchNPCData()
-      fetchItemData()
-      fetchActiveProposals()
+    onMounted(async () => {
+      // First fetch POI type as NPC fetching might depend on it
+      await fetchPOIType()
+      
+      // Then fetch other data in parallel
+      const fetchPromises = [
+        fetchNPCData(),
+        fetchItemData(),
+        fetchActiveProposals()
+      ]
+      
+      await Promise.all(fetchPromises)
     })
     
     // Cleanup on unmount
@@ -669,6 +884,24 @@ export default {
       }
     })
     
+    // Watch for POI changes to refetch data
+    watch(() => props.poi, async (newPoi) => {
+      if (newPoi) {
+        localPoi.value = { ...newPoi }
+        // First fetch POI type as NPC fetching might depend on it
+        await fetchPOIType()
+        
+        // Then fetch other data in parallel
+        const fetchPromises = [
+          fetchNPCData(),
+          fetchItemData(),
+          fetchActiveProposals()
+        ]
+        
+        await Promise.all(fetchPromises)
+      }
+    }, { deep: true })
+    
     const popupStyle = computed(() => ({
       left: `${props.position.x}px`,
       top: `${props.position.y}px`
@@ -696,7 +929,7 @@ export default {
     })
     
     const canPublish = computed(() => {
-      return isOwnCustomPOI.value && (props.poi.status === 'private' || props.poi.status === 'rejected')
+      return isOwnCustomPOI.value && (props.poi.status === 'private' || props.poi.status === 'rejected' || props.poi.status === null || !props.poi.status)
     })
     
     const hasStats = computed(() => {
@@ -719,6 +952,30 @@ export default {
     const canProposeNPCEdit = computed(() => {
       // Can propose NPC edit if POI has an NPC
       return !!localPoi.value.npc_id && !!npcData.value
+    })
+    
+    const isMultiMob = computed(() => {
+      // Check if multi_mob is directly on the POI or on the POI type
+      return localPoi.value?.multi_mob === true || poiType.value?.multi_mob === true
+    })
+    
+    const canAddNPC = computed(() => {
+      // Allow adding NPCs if:
+      // 1. It's a multi-mob POI type
+      // 2. User is authenticated
+      // 3. Either: admin, owner of custom POI, or it's a regular POI
+      if (!isMultiMob.value || !props.isAuthenticated) return false
+      
+      // Admins can always add NPCs
+      if (props.isAdmin) return true
+      
+      // Regular POIs - authenticated users can propose additions
+      if (!isCustomPOI.value) return true
+      
+      // Custom POIs - owner can add NPCs
+      if (isOwnCustomPOI.value) return true
+      
+      return false
     })
     
     const hasTooltipStats = computed(() => {
@@ -915,6 +1172,7 @@ export default {
     }
     
     const formatStatus = (status) => {
+      if (!status || status === null) return 'Private'
       const statusMap = {
         'private': 'Private',
         'pending': 'Pending Approval',
@@ -1068,12 +1326,137 @@ export default {
       } else {
         document.removeEventListener('click', handleClickOutside)
         showEditDropdown.value = false
+        // Close loot window when POI popup closes
+        activeLootNPC.value = null
       }
     })
     
     onUnmounted(() => {
       document.removeEventListener('click', handleClickOutside)
     })
+    
+    // Vote on NPC association
+    const voteOnNPC = async (associationId, vote) => {
+      try {
+        const response = await fetchWithCSRF(`/api/poi-npc-associations/${associationId}/vote`, {
+          method: 'POST',
+          body: { vote }
+        })
+        
+        if (response.ok) {
+          const result = await response.json()
+          // Update the NPC in the list
+          const npc = npcList.value.find(n => n.association_id === associationId)
+          if (npc) {
+            npc.upvotes = result.upvotes
+            npc.downvotes = result.downvotes
+            npc.vote_score = result.score
+            npc.user_vote = vote
+          }
+          // Re-sort by score
+          npcList.value.sort((a, b) => b.vote_score - a.vote_score)
+        }
+      } catch (error) {
+        console.error('Error voting on NPC association:', error)
+      }
+    }
+    
+    // Remove NPC from POI
+    const removeNPC = async (associationId) => {
+      const isCustom = localPoi.value.is_custom_poi
+      let confirmMsg
+      
+      if (props.isAdmin) {
+        confirmMsg = 'Remove this NPC from the POI?'
+      } else if (isCustom) {
+        confirmMsg = 'Remove this NPC from your custom POI?'
+      } else {
+        confirmMsg = 'Propose removing this NPC from the POI?'
+      }
+      
+      if (!confirm(confirmMsg)) return
+      
+      try {
+        const response = await fetchWithCSRF(`/api/poi-npc-associations/${associationId}`, {
+          method: 'DELETE'
+        })
+        
+        if (response.ok) {
+          const data = await response.json()
+          
+          // Check if it was a proposal or direct removal
+          if (data.proposal_id) {
+            // Show success message for proposal
+            alert('Removal proposal created successfully')
+          } else {
+            // Remove from list immediately (admin or custom POI)
+            npcList.value = npcList.value.filter(n => n.association_id !== associationId)
+          }
+        }
+      } catch (error) {
+        console.error('Error removing NPC:', error)
+      }
+    }
+    
+    // Propose editing a specific NPC in a multi-mob POI
+    const proposeNPCEdit = (npcAssoc) => {
+      // Create a temporary POI object with this specific NPC's data
+      const tempPoi = {
+        ...localPoi.value,
+        npc_id: npcAssoc.npcid,
+        _selected_npc: npcAssoc  // Store the selected NPC data
+      }
+      emit('propose-npc-edit', tempPoi)
+    }
+    
+    // Propose loot for a specific NPC in a multi-mob POI
+    const proposeNPCLoot = (npcAssoc) => {
+      // Create a temporary POI object with this specific NPC's data
+      const tempPoi = {
+        ...localPoi.value,
+        npc_id: npcAssoc.npcid,
+        _selected_npc: npcAssoc  // Store the selected NPC data
+      }
+      emit('propose-loot', tempPoi)
+    }
+    
+    // Toggle NPC loot dropdown
+    const toggleNPCLoot = (npcAssoc, event) => {
+      // If clicking the same NPC, close the window
+      if (activeLootNPC.value && activeLootNPC.value.association_id === npcAssoc.association_id) {
+        activeLootNPC.value = null
+        return
+      }
+      
+      // Set the new active NPC
+      activeLootNPC.value = npcAssoc
+      
+      // Position the window near the button
+      if (event && event.target) {
+        const rect = event.target.getBoundingClientRect()
+        lootWindowPosition.value = {
+          x: rect.left + window.scrollX,
+          y: rect.bottom + window.scrollY + 5
+        }
+      }
+    }
+    
+    // Close loot window
+    const closeLootWindow = () => {
+      activeLootNPC.value = null
+    }
+    
+    // Computed style for loot window position
+    const lootWindowStyle = computed(() => ({
+      left: `${lootWindowPosition.value.x}px`,
+      top: `${lootWindowPosition.value.y}px`
+    }))
+    
+    // Check if an NPC association was created by admin (no votes)
+    const isAdminCreatedAssociation = (npcAssoc) => {
+      // Admin-created associations have no votes at all
+      return npcAssoc.upvotes === 0 && npcAssoc.downvotes === 0 && !npcAssoc.vote_score
+    }
     
     return {
       localPoi,
@@ -1100,12 +1483,15 @@ export default {
       handlePublish,
       handleEdit,
       npcData,
+      npcList,
       itemData,
       hasStats,
       formatDescription,
       formatStatValue,
       formatItemType,
       formattedDescription,
+      isMultiMob,
+      canAddNPC,
       tooltipItem,
       tooltipVisible,
       tooltipStyle,
@@ -1124,7 +1510,16 @@ export default {
       toggleEditDropdown,
       handleProposalAction,
       activeProposals,
-      proposalVoteStats
+      proposalVoteStats,
+      voteOnNPC,
+      removeNPC,
+      proposeNPCEdit,
+      proposeNPCLoot,
+      activeLootNPC,
+      toggleNPCLoot,
+      closeLootWindow,
+      lootWindowStyle,
+      isAdminCreatedAssociation
     }
   }
 }
@@ -1790,6 +2185,256 @@ export default {
   padding-right: 4px;
 }
 
+/* Multi-mob styles */
+.npc-info-section {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.npc-main-info {
+  flex: 1;
+}
+
+.npc-list-item .npc-name {
+  font-weight: 600;
+  color: #fff;
+  font-size: 1rem;
+  line-height: 1.3;
+  margin-bottom: 0.25rem;
+  display: block;
+}
+
+.npc-sub-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.npc-list-item .npc-level {
+  font-size: 0.85rem;
+  color: #FFD700;
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
+
+.loot-bag-btn {
+  background: none;
+  border: 1px solid rgba(255, 215, 0, 0.3);
+  border-radius: 4px;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.2s;
+}
+
+.loot-bag-btn:hover {
+  background: rgba(255, 215, 0, 0.1);
+  border-color: rgba(255, 215, 0, 0.5);
+  transform: translateY(-1px);
+}
+
+/* Floating Loot Window */
+.floating-loot-window {
+  position: fixed;
+  background: #2a2a2a;
+  border: 2px solid #FFD700;
+  border-radius: 8px;
+  padding: 0;
+  z-index: 10001;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  min-width: 250px;
+  max-width: 350px;
+}
+
+.loot-window-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 215, 0, 0.1);
+  border-bottom: 1px solid #444;
+  border-radius: 6px 6px 0 0;
+}
+
+.loot-window-title {
+  font-weight: 600;
+  color: #FFD700;
+  font-size: 0.95rem;
+}
+
+.loot-close-btn {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.loot-close-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.loot-window-content {
+  padding: 1rem;
+}
+
+.loot-dropdown-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.loot-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.loot-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateX(2px);
+}
+
+.no-loot-message {
+  text-align: center;
+  color: #999;
+  font-style: italic;
+  padding: 1rem;
+}
+
+.add-npc-btn {
+  background: #4a7c59;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.2s;
+  margin-left: auto;
+}
+
+.add-npc-btn:hover {
+  background: #5a8c69;
+}
+
+.npc-list-container {
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.npc-list-item {
+  background: rgba(0, 0, 0, 0.2);
+  padding: 0.75rem;
+  border-radius: 6px;
+  margin-bottom: 0.5rem;
+  position: relative;
+}
+
+.npc-list-item:last-child {
+  margin-bottom: 0;
+}
+
+.npc-list-item .npc-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.npc-votes {
+  display: flex;
+  gap: 0.25rem;
+  margin-left: auto;
+  align-items: center;
+}
+
+.vote-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.vote-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.vote-btn.active {
+  background: #4a7c59;
+  border-color: #5a8c69;
+}
+
+.vote-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.remove-btn {
+  background: rgba(220, 53, 69, 0.2);
+  border: 1px solid rgba(220, 53, 69, 0.3);
+  color: #ff6b6b;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.remove-btn:hover {
+  background: rgba(220, 53, 69, 0.3);
+}
+
+.no-npcs-message {
+  text-align: center;
+  padding: 1.5rem;
+  color: #999;
+}
+
+.add-first-npc-btn {
+  background: #4a7c59;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.2s;
+  margin-top: 1rem;
+}
+
+.add-first-npc-btn:hover {
+  background: #5a8c69;
+}
+
 /* Custom scrollbar for loot list */
 .loot-list::-webkit-scrollbar {
   width: 6px;
@@ -1911,14 +2556,14 @@ export default {
   border: 1px solid #2a2a3a;
   border-radius: 6px;
   padding: 0;
-  min-width: 280px;
-  max-width: 360px;
+  min-width: 320px;
+  max-width: 380px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   pointer-events: auto;
   font-size: 14px;
   color: #e0e0e0;
   backdrop-filter: blur(8px);
-  z-index: 9999;
+  z-index: 10002; /* Above loot window */
 }
 
 /* Header section */
@@ -2035,12 +2680,15 @@ export default {
 /* Stats grid */
 .stats-section {
   background: rgba(50, 255, 50, 0.02);
+  overflow: visible;
 }
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
   gap: 8px;
+  margin-top: 4px;
+  width: 100%;
 }
 
 .stat-item {
@@ -2050,8 +2698,13 @@ export default {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 4px;
-  padding: 4px 8px;
+  padding: 6px 10px;
   transition: all 0.2s;
+  min-height: 32px;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  gap: 4px;
 }
 
 .stat-item:hover {
@@ -2066,15 +2719,20 @@ export default {
 
 .stat-label {
   color: #999;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+  min-width: 24px;
 }
 
 .stat-value {
   color: #4dff4d;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13px;
+  white-space: nowrap;
+  margin-left: auto;
 }
 
 .stat-item.negative .stat-value {
@@ -2570,5 +3228,240 @@ export default {
 
 .tooltip-edit-btn .btn-text {
   white-space: nowrap;
+}
+
+/* Multi-mob NPC list styles */
+.npc-list-container {
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 0.5rem 0;
+  scrollbar-width: thin;
+  scrollbar-color: #666 #333;
+}
+
+.npc-list-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.npc-list-container::-webkit-scrollbar-track {
+  background: #333;
+  border-radius: 3px;
+}
+
+.npc-list-container::-webkit-scrollbar-thumb {
+  background: #666;
+  border-radius: 3px;
+}
+
+.npc-list-container::-webkit-scrollbar-thumb:hover {
+  background: #888;
+}
+
+.npc-list-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  transition: all 0.2s;
+}
+
+.npc-list-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.npc-list-item:last-child {
+  margin-bottom: 0;
+}
+
+.npc-list-item .npc-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.npc-list-item .npc-votes {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.vote-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #ccc;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.vote-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.vote-btn.active {
+  background: rgba(76, 175, 80, 0.2);
+  border-color: rgba(76, 175, 80, 0.4);
+  color: #4CAF50;
+}
+
+.vote-btn.active:last-of-type {
+  background: rgba(244, 67, 54, 0.2);
+  border-color: rgba(244, 67, 54, 0.4);
+  color: #f44336;
+}
+
+.vote-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.remove-btn {
+  background: rgba(244, 67, 54, 0.1);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #f44336;
+  margin-left: 0.5rem;
+}
+
+.remove-btn:hover {
+  background: rgba(244, 67, 54, 0.2);
+  border-color: rgba(244, 67, 54, 0.5);
+}
+
+.add-npc-btn {
+  background: rgba(76, 175, 80, 0.1);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #4CAF50;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.add-npc-btn:hover {
+  background: rgba(76, 175, 80, 0.2);
+  border-color: rgba(76, 175, 80, 0.5);
+  transform: translateY(-1px);
+}
+
+.no-npcs-message {
+  text-align: center;
+  color: #999;
+  padding: 1.5rem;
+  font-style: italic;
+}
+
+.no-npcs-message p {
+  margin: 0.5rem 0;
+}
+
+.hint-text {
+  font-size: 0.85rem;
+  color: #666;
+  margin-top: 0.5rem;
+}
+
+.add-first-npc-btn {
+  display: block;
+  margin: 1rem auto 0;
+  background: rgba(76, 175, 80, 0.1);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  border-radius: 4px;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #4CAF50;
+}
+
+.add-first-npc-btn:hover {
+  background: rgba(76, 175, 80, 0.2);
+  border-color: rgba(76, 175, 80, 0.5);
+  transform: translateY(-1px);
+}
+
+/* NPC action buttons for multi-mob */
+.npc-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.npc-action-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #ccc;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.npc-action-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+.npc-action-btn.edit-stats {
+  border-color: rgba(255, 215, 0, 0.3);
+  color: #FFD700;
+}
+
+.npc-action-btn.edit-stats:hover {
+  background: rgba(255, 215, 0, 0.1);
+  border-color: rgba(255, 215, 0, 0.5);
+}
+
+.npc-action-btn.edit-loot {
+  border-color: rgba(138, 43, 226, 0.3);
+  color: #8A2BE2;
+}
+
+.npc-action-btn.edit-loot:hover {
+  background: rgba(138, 43, 226, 0.1);
+  border-color: rgba(138, 43, 226, 0.5);
+}
+
+.npc-action-btn .btn-icon {
+  font-size: 0.85rem;
+}
+
+.npc-action-btn .btn-text {
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+</style>
+
+<style>
+/* Global styles for item tooltips to ensure they appear above loot windows */
+.item-tooltip {
+  z-index: 10002 !important;
 }
 </style>

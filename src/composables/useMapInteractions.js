@@ -46,10 +46,11 @@ export function useMapInteractions(scale, offsetX, offsetY) {
   
   // Check if a point is within a connection
   const isConnectionHit = (connection, imageX, imageY) => {
-    // Make hit radius much more forgiving, especially when zoomed out
-    const baseRadius = 21
-    const minRadius = 28
-    const scaleFactor = Math.max(1, 2 / scale.value) // More aggressive scaling for connections
+    // Use the connection's icon size if available, otherwise use default
+    const iconSize = connection.iconSize || 21
+    const baseRadius = iconSize * 1.5 // Increase base hit area
+    const minRadius = Math.max(35, iconSize * 1.5) // Larger minimum clickable area
+    const scaleFactor = Math.max(1, 2.5 / scale.value) // More aggressive scaling for connections
     const radius = Math.max(minRadius, baseRadius * scaleFactor)
     
     const dx = imageX - connection.x

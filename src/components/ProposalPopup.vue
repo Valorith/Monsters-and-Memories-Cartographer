@@ -47,6 +47,13 @@
             <span class="detail-label">Linked Item:</span>
             <span class="detail-value">{{ proposal.item_name }}</span>
           </div>
+          <!-- Show NPCs button for multi-mob proposals -->
+          <div v-if="shouldShowNPCsButton" class="detail-row">
+            <button class="show-npcs-btn" @click="$emit('show-npcs', proposal || proposalData)">
+              <span class="btn-icon">⚔️</span>
+              Show NPCs ({{ npcAssociations.length }})
+            </button>
+          </div>
         </template>
 
         <!-- Move POI Proposal -->
@@ -87,6 +94,14 @@
             <span class="detail-value">{{ proposalData.name }}</span>
           </div>
         </template>
+        
+        <!-- Show NPCs button for multi-mob proposals when using proposalData -->
+        <div v-if="shouldShowNPCsButton && !proposal" class="detail-row">
+          <button class="show-npcs-btn" @click="$emit('show-npcs', proposalData)">
+            <span class="btn-icon">⚔️</span>
+            Show NPCs ({{ npcAssociations.length }})
+          </button>
+        </div>
 
         <!-- Loot Change Proposal -->
         <template v-else-if="proposalData?.has_loot_proposal">
@@ -216,13 +231,26 @@ export default {
       default: null
     }
   },
-  emits: ['close', 'vote-success', 'toggle-proposed-location', 'proposal-withdrawn'],
+  emits: ['close', 'vote-success', 'toggle-proposed-location', 'proposal-withdrawn', 'show-npcs'],
   setup(props, { emit }) {
     const { success, error } = useToast()
     const { fetchWithCSRF } = useCSRF()
     
     const isVoting = ref(false)
     const showingProposedLocation = ref(false)
+    
+    // Computed to check if we should show the NPCs button
+    const shouldShowNPCsButton = computed(() => {
+      const data = props.proposal || props.proposalData
+      // Check both 'multi_mob' and 'is_multi_mob' field names
+      const isMultiMob = data?.is_multi_mob || data?.multi_mob
+      return isMultiMob && data?.npc_associations && data.npc_associations.length > 0
+    })
+    
+    const npcAssociations = computed(() => {
+      const data = props.proposal || props.proposalData
+      return data?.npc_associations || []
+    })
     
     const popupStyle = computed(() => {
       const offset = 20
@@ -616,7 +644,9 @@ export default {
       npcsCache,
       itemsCache,
       toggleProposedLocation,
-      vote
+      vote,
+      shouldShowNPCsButton,
+      npcAssociations
     }
   }
 }
@@ -947,5 +977,32 @@ export default {
 .close-btn:hover {
   background: rgba(255, 255, 255, 0.1);
   color: #fff;
+}
+
+/* Show NPCs Button */
+.show-npcs-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(96, 165, 250, 0.1);
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  border-radius: 4px;
+  color: #60a5fa;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  margin-top: 0.5rem;
+}
+
+.show-npcs-btn:hover {
+  background: rgba(96, 165, 250, 0.2);
+  border-color: rgba(96, 165, 250, 0.5);
+  transform: translateY(-1px);
+}
+
+.show-npcs-btn .btn-icon {
+  font-size: 1.1rem;
 }
 </style>

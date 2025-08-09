@@ -27,6 +27,7 @@ import searchRouter from './src/api/search.js';
 import kofiWebhookRouter from './src/api/kofi-webhook.js';
 import donationTiersRouter from './src/api/donation-tiers.js';
 import urlMappingsRouter from './src/api/url-mappings.js';
+import poiNpcAssociationsRouter from './src/api/poi-npc-associations.js';
 
 // Try to load sharp, but make it optional
 let sharp;
@@ -579,6 +580,9 @@ itemsRouter(app, validateCSRF);
 // NPCs routes
 npcsRouter(app, validateCSRF);
 
+// POI-NPC Associations routes
+poiNpcAssociationsRouter(app, validateCSRF);
+
 // Change Proposals routes
 changeProposalsRouter(app, validateCSRF, { updateUserXP, getXPConfig });
 
@@ -634,6 +638,7 @@ app.get('/api/maps/:id',
           pt.name as type_name,
           pt.icon_type as type_icon_type,
           pt.icon_value as type_icon_value,
+          pt.multi_mob,
           p.npc_id,
           p.item_id,
           -- Check if POI has pending proposals (direct or via NPC)
@@ -653,6 +658,63 @@ app.get('/api/maps/:id',
         LEFT JOIN poi_types pt ON p.type_id = pt.id
         WHERE p.map_id = $1
       `, [mapId]);
+      
+      // Get NPC associations for multi-mob POIs
+      const multiMobPois = poisResult.rows.filter(poi => poi.multi_mob);
+      if (multiMobPois.length > 0) {
+        const poiIds = multiMobPois.map(poi => poi.id);
+        const npcAssociationsResult = await pool.query(`
+          SELECT 
+            pna.poi_id,
+            n.npcid,
+            n.name,
+            n.level,
+            n.hp,
+            n.ac,
+            n.min_dmg,
+            n.max_dmg,
+            n.description,
+            n.attack_speed,
+            COALESCE(
+              json_agg(
+                CASE 
+                  WHEN i.id IS NOT NULL THEN 
+                    json_build_object(
+                      'id', i.id,
+                      'name', i.name,
+                      'icon_type', i.icon_type,
+                      'icon_value', i.icon_value
+                    )
+                  ELSE NULL
+                END
+              ) FILTER (WHERE i.id IS NOT NULL), 
+              '[]'::json
+            ) as loot_items
+          FROM poi_npc_associations pna
+          JOIN npcs n ON pna.npc_id = n.npcid
+          LEFT JOIN npc_loot nl ON n.id = nl.npc_id
+          LEFT JOIN items i ON nl.item_id = i.id
+          WHERE pna.poi_id = ANY($1)
+          GROUP BY pna.poi_id, n.npcid, n.name, n.level, n.hp, n.ac, n.min_dmg, n.max_dmg, n.description, n.attack_speed
+          ORDER BY pna.poi_id, n.name
+        `, [poiIds]);
+        
+        // Group associations by POI ID
+        const associationsByPoi = {};
+        npcAssociationsResult.rows.forEach(assoc => {
+          if (!associationsByPoi[assoc.poi_id]) {
+            associationsByPoi[assoc.poi_id] = [];
+          }
+          associationsByPoi[assoc.poi_id].push(assoc);
+        });
+        
+        // Add associations to POIs
+        poisResult.rows.forEach(poi => {
+          if (poi.multi_mob && associationsByPoi[poi.id]) {
+            poi.npc_associations = associationsByPoi[poi.id];
+          }
+        });
+      }
       
       // Get connections
       const connectionsResult = await pool.query(`
@@ -3507,6 +3569,7 @@ app.get('/api/maps/:mapId/custom-pois', async (req, res) => {
         pt.name as type_name,
         pt.icon_type as type_icon_type,
         pt.icon_value as type_icon_value,
+        pt.multi_mob,
         cp.npc_id,
         cp.item_id
       FROM custom_pois cp
@@ -3518,6 +3581,44 @@ app.get('/api/maps/:mapId/custom-pois', async (req, res) => {
       WHERE cp.map_id = $1 
         AND (cp.user_id = $2 OR (sp.user_id = $2))
     `, [req.params.mapId, req.user.id]);
+    
+    // Get NPC associations for multi-mob custom POIs
+    const multiMobPois = result.rows.filter(poi => poi.multi_mob);
+    if (multiMobPois.length > 0) {
+      const poiIds = multiMobPois.map(poi => poi.id);
+      const npcAssociationsResult = await pool.query(`
+        SELECT 
+          cpna.custom_poi_id as poi_id,
+          n.npcid,
+          n.name,
+          n.level,
+          n.hp,
+          n.ac,
+          n.min_dmg,
+          n.max_dmg,
+          n.description
+        FROM custom_poi_npc_associations cpna
+        JOIN npcs n ON cpna.npc_id = n.npcid
+        WHERE cpna.custom_poi_id = ANY($1)
+        ORDER BY cpna.custom_poi_id, n.name
+      `, [poiIds]);
+      
+      // Group associations by POI ID
+      const associationsByPoi = {};
+      npcAssociationsResult.rows.forEach(assoc => {
+        if (!associationsByPoi[assoc.poi_id]) {
+          associationsByPoi[assoc.poi_id] = [];
+        }
+        associationsByPoi[assoc.poi_id].push(assoc);
+      });
+      
+      // Add associations to POIs
+      result.rows.forEach(poi => {
+        if (poi.multi_mob && associationsByPoi[poi.id]) {
+          poi.npc_associations = associationsByPoi[poi.id];
+        }
+      });
+    }
     
     res.json(result.rows);
   } catch (error) {
@@ -3535,14 +3636,27 @@ app.post('/api/custom-pois', validateCSRF, async (req, res) => {
   const { map_id, name, description, x, y, icon, label_visible, label_position, type_id, npc_id, item_id } = req.body;
 
   try {
-    const result = await pool.query(
+    const insertResult = await pool.query(
       `INSERT INTO custom_pois 
        (user_id, map_id, name, description, x, y, icon, label_visible, label_position, type_id, npc_id, item_id) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) 
-       RETURNING *`,
+       RETURNING id`,
       [req.user.id, map_id, name, description, Math.round(x), Math.round(y), icon || '📍', 
        label_visible !== false, label_position || 'bottom', type_id, npc_id || null, item_id || null]
     );
+    
+    // Fetch the complete custom POI with type information
+    const result = await pool.query(`
+      SELECT cp.*, 
+        pt.name as type_name,
+        pt.icon_type as type_icon_type,
+        pt.icon_value as type_icon_value,
+        pt.multi_mob
+      FROM custom_pois cp
+      LEFT JOIN poi_types pt ON cp.type_id = pt.id
+      WHERE cp.id = $1
+    `, [insertResult.rows[0].id]);
+    
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error creating custom POI:', error);
@@ -3573,16 +3687,28 @@ app.put('/api/custom-pois/:id', validateCSRF, async (req, res) => {
       return res.status(403).json({ error: 'You can only edit your own custom POIs' });
     }
 
-    const result = await pool.query(
+    const updateResult = await pool.query(
       `UPDATE custom_pois 
        SET name = $2, description = $3, icon = $4, 
            label_visible = $5, label_position = $6, 
            x = $7, y = $8, type_id = $9, npc_id = $10, item_id = $11, 
            updated_at = CURRENT_TIMESTAMP
        WHERE id = $1 
-       RETURNING *`,
+       RETURNING id`,
       [req.params.id, name, description, icon, label_visible, label_position, x, y, type_id, npc_id || null, item_id || null]
     );
+    
+    // Fetch the complete custom POI with type information
+    const result = await pool.query(`
+      SELECT cp.*, 
+        pt.name as type_name,
+        pt.icon_type as type_icon_type,
+        pt.icon_value as type_icon_value,
+        pt.multi_mob
+      FROM custom_pois cp
+      LEFT JOIN poi_types pt ON cp.type_id = pt.id
+      WHERE cp.id = $1
+    `, [req.params.id]);
     
     res.json(result.rows[0]);
   } catch (error) {

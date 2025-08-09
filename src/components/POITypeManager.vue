@@ -192,14 +192,18 @@
                 type="text" 
                 required
                 placeholder="Enter emoji or click to select"
-                @click="showEmojiPicker = true"
+                @click="showEmojiPicker = !showEmojiPicker; console.log('Input clicked, showEmojiPicker:', showEmojiPicker)"
               />
-              <button type="button" @click="showEmojiPicker = true" class="emoji-picker-btn">
+              <button type="button" @click="showEmojiPicker = !showEmojiPicker; console.log('Button clicked, showEmojiPicker:', showEmojiPicker)" class="emoji-picker-btn">
                 😀
               </button>
             </div>
             
-            <div v-if="showEmojiPicker" class="emoji-picker">
+            <div v-if="showEmojiPicker" class="emoji-picker" @click.stop>
+              <div class="emoji-picker-header">
+                <span>Select Emoji</span>
+                <button type="button" @click="showEmojiPicker = false" class="close-picker-btn">×</button>
+              </div>
               <div class="emoji-categories">
                 <button 
                   v-for="category in emojiCategories" 
@@ -218,6 +222,7 @@
                   @click="selectEmoji(emoji)"
                   class="emoji-option"
                   type="button"
+                  :title="emoji"
                 >
                   {{ emoji }}
                 </button>
@@ -276,7 +281,7 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useToast } from '../composables/useToast';
 
 export default {
@@ -593,9 +598,28 @@ export default {
       currentPage.value = 0; // Reset to first page when page size changes
     });
 
+    // Handle click outside emoji picker
+    const handleClickOutside = (event) => {
+      const emojiPicker = document.querySelector('.emoji-picker');
+      const emojiInput = document.querySelector('#emoji-value');
+      const emojiBtn = document.querySelector('.emoji-picker-btn');
+      
+      if (showEmojiPicker.value && emojiPicker && 
+          !emojiPicker.contains(event.target) &&
+          !emojiInput?.contains(event.target) &&
+          !emojiBtn?.contains(event.target)) {
+        showEmojiPicker.value = false;
+      }
+    };
+
     onMounted(() => {
       // console.log('POITypeManager mounted');
       loadPoiTypes();
+      document.addEventListener('click', handleClickOutside);
+    });
+
+    onUnmounted(() => {
+      document.removeEventListener('click', handleClickOutside);
     });
 
     return {
@@ -892,6 +916,36 @@ export default {
   border-radius: 4px;
   margin-top: 0.5rem;
   background: white;
+  position: relative;
+  z-index: 100;
+}
+
+.emoji-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #eee;
+  font-weight: 500;
+}
+
+.close-picker-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #666;
+  line-height: 1;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-picker-btn:hover {
+  color: #000;
 }
 
 .emoji-categories {

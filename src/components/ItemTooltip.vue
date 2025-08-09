@@ -48,7 +48,7 @@
     </div>
     
     <!-- Defensive Stats -->
-    <div v-if="hasDefensiveStats" class="tooltip-section defensive-section">
+    <div v-if="hasDefensiveStats" class="defensive-section">
       <div v-if="item.ac" class="stat-line">
         <span class="stat-value" :class="{ negative: item.ac < 0 }">{{ formatStatValue(item.ac) }} AC</span>
       </div>
@@ -92,7 +92,7 @@
     </div>
     
     <!-- HP/Mana bonuses -->
-    <div v-if="item.health || item.mana" class="tooltip-section bonus-section">
+    <div v-if="item.health || item.mana" class="bonus-section">
       <div v-if="item.health" class="bonus-line">
         <span class="bonus-value" :class="{ negative: item.health < 0 }">{{ formatStatValue(item.health) }} Hit Points</span>
       </div>
@@ -243,7 +243,7 @@ export default {
       position: 'fixed',
       left: `${props.position.x}px`,
       top: `${props.position.y}px`,
-      zIndex: 9999
+      zIndex: 10002
     }));
     
     // Format description with clickable URLs and preserved newlines
@@ -327,8 +327,8 @@ export default {
   border: 1px solid #2a2a3a;
   border-radius: 6px;
   padding: 0;
-  min-width: 280px;
-  max-width: 360px;
+  min-width: 300px;
+  max-width: 380px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   pointer-events: auto;
   font-size: 14px;
@@ -377,7 +377,7 @@ export default {
 
 /* Basic info section */
 .tooltip-basic-info {
-  padding: 8px 16px;
+  padding: 10px 16px;
   background: rgba(255, 255, 255, 0.02);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
@@ -386,7 +386,11 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 2px 0;
+  padding: 3px 0;
+}
+
+.info-line + .info-line {
+  margin-top: 2px;
 }
 
 .info-label {
@@ -401,12 +405,18 @@ export default {
 
 /* Section styling */
 .tooltip-section {
-  padding: 10px 16px;
+  padding: 10px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .tooltip-section:last-of-type {
   border-bottom: none;
+}
+
+.tooltip-section + .tooltip-section {
+  padding-top: 10px;
 }
 
 /* Combat section */
@@ -417,7 +427,11 @@ export default {
 .combat-line {
   display: flex;
   justify-content: space-between;
-  padding: 2px 0;
+  padding: 4px 0;
+}
+
+.combat-line + .combat-line {
+  margin-top: 2px;
 }
 
 .combat-label {
@@ -434,11 +448,13 @@ export default {
 .defensive-section {
   background: rgba(50, 150, 255, 0.03);
   text-align: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .stat-line {
   display: inline-block;
-  margin: 0 8px;
+  margin: 0 10px;
 }
 
 .stat-line .stat-value {
@@ -450,12 +466,15 @@ export default {
 /* Stats grid */
 .stats-section {
   background: rgba(50, 255, 50, 0.02);
+  overflow: visible;
 }
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(65px, 1fr));
+  gap: 6px;
+  margin-top: 4px;
+  width: 100%;
 }
 
 .stat-item {
@@ -465,8 +484,12 @@ export default {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 4px;
-  padding: 4px 8px;
+  padding: 5px 8px;
   transition: all 0.2s;
+  min-height: 28px;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .stat-item:hover {
@@ -481,15 +504,18 @@ export default {
 
 .stat-label {
   color: #999;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
 }
 
 .stat-value {
   color: #4dff4d;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 .stat-item.negative .stat-value {
@@ -500,10 +526,16 @@ export default {
 .bonus-section {
   background: rgba(255, 215, 0, 0.02);
   text-align: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .bonus-line {
-  padding: 2px 0;
+  padding: 3px 0;
+}
+
+.bonus-line + .bonus-line {
+  margin-top: 4px;
 }
 
 .bonus-value {
@@ -525,25 +557,30 @@ export default {
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   text-align: center;
+  letter-spacing: 0.5px;
 }
 
 .resistance-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
-  gap: 6px;
+  gap: 8px;
+  margin-top: 4px;
 }
 
 .resistance-item {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 4px;
-  padding: 4px;
+  padding: 6px 4px;
   transition: all 0.2s;
+  min-height: 45px;
+  gap: 2px;
 }
 
 .resistance-item:hover {
@@ -558,7 +595,8 @@ export default {
 
 .resistance-icon {
   font-size: 16px;
-  margin-bottom: 2px;
+  line-height: 1;
+  display: block;
 }
 
 .resistance-value {
@@ -574,12 +612,17 @@ export default {
 /* Requirements */
 .requirements-section {
   background: rgba(255, 100, 100, 0.02);
+  padding: 10px 16px;
 }
 
 .requirement-line {
   display: flex;
   justify-content: space-between;
-  padding: 2px 0;
+  padding: 4px 0;
+}
+
+.requirement-line + .requirement-line {
+  margin-top: 2px;
 }
 
 .requirement-label {
@@ -596,13 +639,13 @@ export default {
 /* Properties */
 .property-section {
   background: rgba(100, 100, 100, 0.02);
-  padding: 8px 16px;
+  padding: 10px 16px;
 }
 
 .property-line {
   display: flex;
   justify-content: center;
-  gap: 16px;
+  gap: 20px;
 }
 
 .property-item {

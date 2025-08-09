@@ -47,7 +47,7 @@ export default function poiTypesRouter(app, validateCSRF) {
   app.get('/api/poi-types', async (req, res) => {
     try {
       const result = await pool.query(`
-        SELECT id, name, icon_type, icon_value, display_order, is_default
+        SELECT id, name, icon_type, icon_value, display_order, is_default, multi_mob
         FROM poi_types
         ORDER BY display_order, id
       `);
@@ -64,7 +64,7 @@ export default function poiTypesRouter(app, validateCSRF) {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
-    const { name, icon_type, icon_value, display_order } = req.body;
+    const { name, icon_type, icon_value, display_order, multi_mob } = req.body;
 
     if (!name || !icon_type || !icon_value) {
       return res.status(400).json({ error: 'Name, icon type, and icon value are required' });
@@ -72,10 +72,10 @@ export default function poiTypesRouter(app, validateCSRF) {
 
     try {
       const result = await pool.query(`
-        INSERT INTO poi_types (name, icon_type, icon_value, display_order)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id, name, icon_type, icon_value, display_order, is_default
-      `, [name, icon_type, icon_value, display_order || 0]);
+        INSERT INTO poi_types (name, icon_type, icon_value, display_order, multi_mob)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, name, icon_type, icon_value, display_order, is_default, multi_mob
+      `, [name, icon_type, icon_value, display_order || 0, multi_mob || false]);
 
       res.json(result.rows[0]);
     } catch (error) {
@@ -103,7 +103,7 @@ export default function poiTypesRouter(app, validateCSRF) {
     }
 
     const { id } = req.params;
-    const { name, icon_type, icon_value, display_order } = req.body;
+    const { name, icon_type, icon_value, display_order, multi_mob } = req.body;
 
     try {
       const result = await pool.query(`
@@ -112,10 +112,11 @@ export default function poiTypesRouter(app, validateCSRF) {
             icon_type = COALESCE($2, icon_type),
             icon_value = COALESCE($3, icon_value),
             display_order = COALESCE($4, display_order),
+            multi_mob = COALESCE($5, multi_mob),
             updated_at = CURRENT_TIMESTAMP
-        WHERE id = $5
-        RETURNING id, name, icon_type, icon_value, display_order, is_default
-      `, [name, icon_type, icon_value, display_order, id]);
+        WHERE id = $6
+        RETURNING id, name, icon_type, icon_value, display_order, is_default, multi_mob
+      `, [name, icon_type, icon_value, display_order, multi_mob, id]);
 
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'POI type not found' });
@@ -206,7 +207,7 @@ export default function poiTypesRouter(app, validateCSRF) {
         UPDATE poi_types 
         SET is_default = true, updated_at = CURRENT_TIMESTAMP 
         WHERE id = $1
-        RETURNING id, name, icon_type, icon_value, display_order, is_default
+        RETURNING id, name, icon_type, icon_value, display_order, is_default, multi_mob
       `, [id]);
 
       if (result.rows.length === 0) {
