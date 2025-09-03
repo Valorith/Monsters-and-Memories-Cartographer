@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
-    "cheerio": "^1.1.2",
+    "cheerio": "1.0.0-rc.12",
     "compression": "^1.8.1",
     "connect-pg-simple": "^10.0.0",
     "cookie-parser": "^1.4.7",
