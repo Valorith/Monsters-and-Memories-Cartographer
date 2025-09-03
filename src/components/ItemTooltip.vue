@@ -159,6 +159,18 @@
     <!-- Description -->
     <div v-if="item.description" class="tooltip-description" v-html="formatDescription(item.description)"></div>
     
+    <!-- Monsters & Metadata Link -->
+    <div v-if="item && item.name" class="tooltip-external-link">
+      <a :href="monstersAndMetadataUrl" target="_blank" rel="noopener noreferrer" class="tooltip-metadata-link" @click.stop>
+        <div class="tooltip-metadata-logo">
+          <span class="tooltip-logo-m">M</span>
+          <span class="tooltip-logo-amp">&</span>
+          <span class="tooltip-logo-metadata">Metadata</span>
+        </div>
+        <span class="tooltip-metadata-text">View Details</span>
+      </a>
+    </div>
+    
     <!-- Actions -->
     <div v-if="showActions && isAuthenticated && !isAdmin" class="tooltip-actions">
       <button class="tooltip-edit-btn" @click="$emit('propose-edit')" title="Propose changes to this item">
@@ -238,6 +250,12 @@ export default {
              props.item.resist_poison;
     });
     
+    const monstersAndMetadataUrl = computed(() => {
+      if (!props.item || !props.item.name) return '#';
+      // Replace spaces with hyphens and convert to lowercase for the URL
+      const itemNameForUrl = props.item.name.toLowerCase().replace(/\s+/g, '-');
+      return `https://monstersandmetadata.com/items/${itemNameForUrl}`;
+    });
     
     const tooltipStyle = computed(() => ({
       position: 'fixed',
@@ -307,6 +325,7 @@ export default {
       hasBasicProperties,
       hasCombatStats,
       hasResistances,
+      monstersAndMetadataUrl,
       tooltipStyle,
       formatDescription,
       formatStatValue,
@@ -673,6 +692,76 @@ export default {
 
 .tooltip-description :deep(a:hover) {
   color: #6bb6ff;
+}
+
+/* External Link */
+.tooltip-external-link {
+  padding: 10px 12px;
+  background: rgba(255, 140, 75, 0.05);
+  border-top: 1px solid rgba(255, 140, 75, 0.2);
+  margin-top: 4px;
+}
+
+.tooltip-metadata-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
+  border: 1px solid rgba(255, 140, 75, 0.3);
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.tooltip-metadata-link:hover {
+  background: linear-gradient(135deg, #222 0%, #111 100%);
+  border-color: rgba(255, 140, 75, 0.4);
+  transform: translateY(-1px);
+}
+
+.tooltip-metadata-logo {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.tooltip-logo-m {
+  font-size: 0.95rem;
+  font-weight: 900;
+  font-family: 'Arial Black', sans-serif;
+  background: linear-gradient(180deg, #FF8C4B 0%, #E85A2C 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1;
+}
+
+.tooltip-logo-amp {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #FF8C4B;
+  margin: 0 1px;
+  line-height: 1;
+}
+
+.tooltip-logo-metadata {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #d0d0d0;
+  font-family: Arial, sans-serif;
+  line-height: 1;
+  letter-spacing: 0.3px;
+}
+
+.tooltip-metadata-text {
+  color: #e0e0e0;
+  font-size: 0.85rem;
+  font-weight: 500;
+  letter-spacing: 0.2px;
 }
 
 /* Actions */

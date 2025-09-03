@@ -1,4 +1,6 @@
 import pool from '../db/database.js';
+import fetch from 'node-fetch';
+import * as cheerio from 'cheerio';
 
 export default function npcsRouter(app, validateCSRF) {
   // Middleware to check if user is admin
@@ -11,10 +13,6 @@ export default function npcsRouter(app, validateCSRF) {
 
   // GET /api/npcs - Get all NPCs
   app.get('/api/npcs', async (req, res) => {
-    // For non-authenticated users, return empty array
-    if (!req.isAuthenticated()) {
-      return res.json([]);
-    }
     try {
     const result = await pool.query(`
       SELECT 
@@ -369,5 +367,493 @@ export default function npcsRouter(app, validateCSRF) {
     console.error('Error batch deleting NPCs:', error);
     res.status(500).json({ error: 'Failed to delete NPCs' });
   }
+  });
+
+  // POST /api/npcs/scan-wiki - Scan wiki page for NPC links
+  app.post('/api/npcs/scan-wiki', validateCSRF, requireAdmin, async (req, res) => {
+    const { url } = req.body;
+    
+    if (!url || !url.startsWith('https://monstersandmemories.miraheze.org/')) {
+      return res.status(400).json({ error: 'Invalid wiki URL' });
+    }
+    
+    try {
+      const response = await fetch(url);
+      const html = await response.text();
+      const $ = cheerio.load(html);
+      
+      const npcs = [];
+      
+      // Look for the "Pages in category" section
+      $('#mw-pages .mw-category-group li a').each((index, element) => {
+        const $link = $(element);
+        const name = $link.text().trim();
+        const href = $link.attr('href');
+        
+        if (name && href) {
+          npcs.push({
+            name: name,
+            url: `https://monstersandmemories.miraheze.org${href}`
+          });
+        }
+      });
+      
+      res.json({ npcs });
+    } catch (error) {
+      console.error('Error scanning wiki page:', error);
+      res.status(500).json({ error: 'Failed to scan wiki page' });
+    }
+  });
+
+  // POST /api/npcs/extract-wiki - Extract NPC data from wiki page
+  app.post('/api/npcs/extract-wiki', validateCSRF, requireAdmin, async (req, res) => {
+    const { url } = req.body;
+    
+    if (!url || !url.startsWith('https://monstersandmemories.miraheze.org/')) {
+      return res.status(400).json({ error: 'Invalid wiki URL' });
+    }
+    
+    try {
+      const response = await fetch(url);
+      const html = await response.text();
+      const $ = cheerio.load(html);
+      
+      // Extract NPC data from the infobox - default to 0 for unknowns
+      const npcData = {
+        name: '',
+        description: url, // Store the wiki URL as description
+        npc_type: 'humanoid', // Default type
+        level: 0, // Default to 0 if unknown
+        hp: 0,
+        mp: 0,
+        ac: 0,
+        str: 0,
+        sta: 0,
+        agi: 0,
+        dex: 0,
+        wis: 0,
+        int: 0,
+        cha: 0,
+        attack_speed: '0.0',
+        min_dmg: 0,
+        max_dmg: 0
+      };
+      
+      // Get NPC name from page title
+      npcData.name = $('#firstHeading').text().trim() || 
+                     $('h1').first().text().trim() || 
+                     'Unknown NPC';
+      
+      // Debug: Log what we're finding
+      console.log(`Extracting data for: ${npcData.name} from ${url}`);
+      
+      // First, try to find level in the page content using various formats
+      const pageHtml = $.html();
+      
+      // Look for level in format: <b>Level:</b> value
+      const levelMatch = pageHtml.match(/<b>Level:<\/b>\s*([^<\n]+)/i);
+      if (levelMatch) {
+        const levelText = levelMatch[1].trim();
+        console.log(`  Found level text: ${levelText}`);
+        
+        // Handle various level formats
+        if (levelText.includes('~')) {
+          // Format: ~15 -> 15
+          npcData.level = parseInt(levelText.replace('~', '')) || 0;
+        } else if (levelText.includes('-')) {
+          // Format: 4-5 -> 5 (take highest)
+          const rangeParts = levelText.match(/(\d+)\s*-\s*(\d+)/);
+          if (rangeParts) {
+            npcData.level = parseInt(rangeParts[2]) || 0;
+          } else {
+            npcData.level = parseInt(levelText) || 0;
+          }
+        } else {
+          // Simple number
+          npcData.level = parseInt(levelText) || 0;
+        }
+        console.log(`  Parsed level: ${npcData.level}`);
+      }
+      
+      // Look for HP in format: <b>HP:</b> value or <b>Health:</b> value
+      const hpMatch = pageHtml.match(/<b>(?:HP|Health):<\/b>\s*([^<\n]+)/i);
+      if (hpMatch) {
+        const hpText = hpMatch[1].trim();
+        console.log(`  Found HP text: ${hpText}`);
+        npcData.hp = parseInt(hpText.replace(/[^\d]/g, '')) || 0;
+      }
+      
+      // Look for AC in format: <b>AC:</b> value or <b>Armor Class:</b> value
+      const acMatch = pageHtml.match(/<b>(?:AC|Armor Class):<\/b>\s*([^<\n]+)/i);
+      if (acMatch) {
+        const acText = acMatch[1].trim();
+        console.log(`  Found AC text: ${acText}`);
+        npcData.ac = parseInt(acText.replace(/[^\d-]/g, '')) || 0;
+      }
+      
+      // Look for damage in format: <b>Damage:</b> value
+      const damageMatch = pageHtml.match(/<b>Damage:<\/b>\s*([^<\n]+)/i);
+      if (damageMatch) {
+        const damageText = damageMatch[1].trim();
+        console.log(`  Found damage text: ${damageText}`);
+        const dmgRange = damageText.match(/(\d+)\s*-\s*(\d+)/);
+        if (dmgRange) {
+          npcData.min_dmg = parseInt(dmgRange[1]) || 0;
+          npcData.max_dmg = parseInt(dmgRange[2]) || 0;
+        }
+      }
+      
+      // Look for Race/Type in format: <b>Race:</b> value or <b>Type:</b> value
+      // Race is the primary source for NPC type
+      const typeMatch = pageHtml.match(/<b>(?:Race|Type):<\/b>\s*([^<\n]+)/i);
+      if (typeMatch) {
+        const typeText = typeMatch[1].trim().toLowerCase();
+        console.log(`  Found type text: ${typeText}`);
+        
+        // Map common races/types to NPC types
+        const typeMap = {
+          // Undead
+          'undead': 'undead',
+          'skeleton': 'undead',
+          'zombie': 'undead',
+          'ghoul': 'undead',
+          'wight': 'undead',
+          'lich': 'undead',
+          'vampire': 'undead',
+          
+          // Beasts/Animals
+          'beast': 'beast',
+          'animal': 'beast',
+          'wolf': 'beast',
+          'bear': 'beast',
+          'snake': 'beast',
+          'scarab': 'beast',
+          'beetle': 'beast',
+          'spider': 'beast',
+          'rat': 'beast',
+          'bat': 'beast',
+          
+          // Humanoids
+          'humanoid': 'humanoid',
+          'human': 'humanoid',
+          'elf': 'humanoid',
+          'dwarf': 'humanoid',
+          'orc': 'humanoid',
+          'goblin': 'humanoid',
+          'troll': 'humanoid',
+          'ogre': 'humanoid',
+          'giant': 'humanoid',
+          'gnoll': 'humanoid',
+          'kobold': 'humanoid',
+          
+          // Other types
+          'elemental': 'elemental',
+          'dragon': 'dragon',
+          'demon': 'demon',
+          'construct': 'construct',
+          'golem': 'construct',
+          'aberration': 'aberration',
+          'plant': 'plant',
+          'fey': 'fey'
+        };
+        
+        for (const [key, mappedType] of Object.entries(typeMap)) {
+          if (typeText.includes(key)) {
+            npcData.npc_type = mappedType;
+            break;
+          }
+        }
+      }
+      
+      // Parse the infobox table (if exists - fallback for wikis that use tables)
+      $('.infobox tr').each((index, row) => {
+        const $row = $(row);
+        const label = $row.find('th').text().trim().toLowerCase();
+        const value = $row.find('td').text().trim();
+        
+        // Debug log
+        if (label && value) {
+          console.log(`  Found: ${label} = ${value}`);
+        }
+        
+        switch(label) {
+          case 'level':
+            // Only set if we haven't found it already
+            if (npcData.level === 0) {
+              // Handle level ranges (e.g., "1-5" or "3 - 5")
+              if (value.includes('-')) {
+                const levelMatch = value.match(/(\d+)\s*-\s*(\d+)/);
+                if (levelMatch) {
+                  // Use the highest level in the range
+                  npcData.level = parseInt(levelMatch[2]) || 0;
+                } else {
+                  npcData.level = parseInt(value) || 0;
+                }
+              } else {
+                npcData.level = parseInt(value) || 0;
+              }
+            }
+            break;
+          case 'type':
+          case 'race':
+            // Map common types
+            const typeMap = {
+              'undead': 'undead',
+              'skeleton': 'undead',
+              'zombie': 'undead',
+              'beast': 'beast',
+              'animal': 'beast',
+              'humanoid': 'humanoid',
+              'human': 'humanoid',
+              'elf': 'humanoid',
+              'dwarf': 'humanoid',
+              'orc': 'humanoid',
+              'goblin': 'humanoid',
+              'elemental': 'elemental',
+              'dragon': 'dragon',
+              'demon': 'demon',
+              'construct': 'construct',
+              'golem': 'construct',
+              'aberration': 'aberration',
+              'plant': 'plant',
+              'fey': 'fey'
+            };
+            
+            const valueLower = value.toLowerCase();
+            for (const [key, mappedType] of Object.entries(typeMap)) {
+              if (valueLower.includes(key)) {
+                npcData.npc_type = mappedType;
+                break;
+              }
+            }
+            break;
+          case 'health':
+          case 'hp':
+          case 'hit points':
+            npcData.hp = parseInt(value.replace(/[^\d]/g, '')) || 0;
+            break;
+          case 'mana':
+          case 'mp':
+          case 'mana points':
+            npcData.mp = parseInt(value.replace(/[^\d]/g, '')) || 0;
+            break;
+          case 'armor class':
+          case 'ac':
+          case 'armor':
+            npcData.ac = parseInt(value.replace(/[^\d-]/g, '')) || 0;
+            break;
+          case 'damage':
+            // Try to parse damage range
+            const damageMatch = value.match(/(\d+)\s*-\s*(\d+)/);
+            if (damageMatch) {
+              npcData.min_dmg = parseInt(damageMatch[1]) || 0;
+              npcData.max_dmg = parseInt(damageMatch[2]) || 0;
+            }
+            break;
+          case 'strength':
+          case 'str':
+            npcData.str = parseInt(value) || 0;
+            break;
+          case 'stamina':
+          case 'sta':
+            npcData.sta = parseInt(value) || 0;
+            break;
+          case 'agility':
+          case 'agi':
+            npcData.agi = parseInt(value) || 0;
+            break;
+          case 'dexterity':
+          case 'dex':
+            npcData.dex = parseInt(value) || 0;
+            break;
+          case 'wisdom':
+          case 'wis':
+            npcData.wis = parseInt(value) || 0;
+            break;
+          case 'intelligence':
+          case 'int':
+            npcData.int = parseInt(value) || 0;
+            break;
+          case 'charisma':
+          case 'cha':
+            npcData.cha = parseInt(value) || 0;
+            break;
+          case 'attack speed':
+            npcData.attack_speed = value.replace(/[^\d.]/g, '') || '0.0';
+            break;
+        }
+      });
+      
+      // Alternative: Try to find stats in a stats table
+      $('table').each((index, table) => {
+        const $table = $(table);
+        if ($table.text().toLowerCase().includes('statistics') || 
+            $table.text().toLowerCase().includes('stats')) {
+          $table.find('tr').each((index, row) => {
+            const $row = $(row);
+            const cells = $row.find('td');
+            if (cells.length >= 2) {
+              const label = cells.eq(0).text().trim().toLowerCase();
+              const value = cells.eq(1).text().trim();
+              
+              // Parse stats similar to above
+              switch(label) {
+                case 'level':
+                  // Handle level ranges
+                  if (value.includes('-')) {
+                    const levelMatch = value.match(/(\d+)\s*-\s*(\d+)/);
+                    if (levelMatch) {
+                      npcData.level = parseInt(levelMatch[2]) || npcData.level;
+                    } else {
+                      npcData.level = parseInt(value) || npcData.level;
+                    }
+                  } else {
+                    npcData.level = parseInt(value) || npcData.level;
+                  }
+                  break;
+                case 'health':
+                case 'hp':
+                  npcData.hp = parseInt(value.replace(/[^\d]/g, '')) || npcData.hp;
+                  break;
+                case 'armor class':
+                case 'ac':
+                  npcData.ac = parseInt(value.replace(/[^\d-]/g, '')) || npcData.ac;
+                  break;
+              }
+            }
+          });
+        }
+      });
+      
+      res.json(npcData);
+    } catch (error) {
+      console.error('Error extracting NPC data:', error);
+      res.status(500).json({ error: 'Failed to extract NPC data' });
+    }
+  });
+
+  // POST /api/npcs/batch-import - Batch import NPCs
+  app.post('/api/npcs/batch-import', validateCSRF, requireAdmin, async (req, res) => {
+    const { npcs } = req.body;
+    
+    if (!Array.isArray(npcs) || npcs.length === 0) {
+      return res.status(400).json({ error: 'No NPCs to import' });
+    }
+    
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+      
+      let created = 0;
+      let updated = 0;
+      
+      for (const npc of npcs) {
+        // Check if NPC exists
+        const existing = await client.query(
+          'SELECT id FROM npcs WHERE LOWER(name) = LOWER($1)',
+          [npc.name]
+        );
+        
+        if (existing.rows.length > 0) {
+          // Get existing NPC data to preserve non-conflicting fields
+          const existingData = await client.query(
+            'SELECT * FROM npcs WHERE id = $1',
+            [existing.rows[0].id]
+          );
+          const currentNPC = existingData.rows[0];
+          
+          // Convert values to proper types
+          const level = parseInt(npc.level) || 0;
+          const hp = parseInt(npc.hp) || 0;
+          const mp = parseInt(npc.mp) || 0;
+          const ac = parseInt(npc.ac) || 0;
+          const str = parseInt(npc.str) || 0;
+          const sta = parseInt(npc.sta) || 0;
+          const agi = parseInt(npc.agi) || 0;
+          const dex = parseInt(npc.dex) || 0;
+          const wis = parseInt(npc.wis) || 0;
+          const intStat = parseInt(npc.int) || 0;
+          const cha = parseInt(npc.cha) || 0;
+          const minDmg = parseInt(npc.min_dmg) || 0;
+          const maxDmg = parseInt(npc.max_dmg) || 0;
+          const attackSpeed = parseFloat(npc.attack_speed) || 0.0;
+          
+          // Update existing NPC - only overwrite if new value is not 0/empty
+          await client.query(`
+            UPDATE npcs SET
+              npc_type = COALESCE(NULLIF($2, 'humanoid'), npc_type),
+              description = COALESCE(NULLIF($3, ''), description),
+              level = CASE WHEN $4::int > 0 THEN $4::int ELSE level END,
+              hp = CASE WHEN $5::int > 0 THEN $5::int ELSE hp END,
+              mp = CASE WHEN $6::int > 0 THEN $6::int ELSE mp END,
+              ac = CASE WHEN $7::int != 0 THEN $7::int ELSE ac END,
+              str = CASE WHEN $8::int > 0 THEN $8::int ELSE str END,
+              sta = CASE WHEN $9::int > 0 THEN $9::int ELSE sta END,
+              agi = CASE WHEN $10::int > 0 THEN $10::int ELSE agi END,
+              dex = CASE WHEN $11::int > 0 THEN $11::int ELSE dex END,
+              wis = CASE WHEN $12::int > 0 THEN $12::int ELSE wis END,
+              int = CASE WHEN $13::int > 0 THEN $13::int ELSE int END,
+              cha = CASE WHEN $14::int > 0 THEN $14::int ELSE cha END,
+              attack_speed = CASE WHEN $15::numeric != 0.0 THEN $15::numeric ELSE attack_speed END,
+              min_dmg = CASE WHEN $16::int > 0 THEN $16::int ELSE min_dmg END,
+              max_dmg = CASE WHEN $17::int > 0 THEN $17::int ELSE max_dmg END,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = $1
+          `, [
+            existing.rows[0].id,
+            npc.npc_type, npc.description, level,
+            hp, mp, ac,
+            str, sta, agi, dex,
+            wis, intStat, cha,
+            attackSpeed, minDmg, maxDmg
+          ]);
+          updated++;
+        } else {
+          // Convert values to proper types for new NPC
+          const level = parseInt(npc.level) || 0;
+          const hp = parseInt(npc.hp) || 0;
+          const mp = parseInt(npc.mp) || 0;
+          const ac = parseInt(npc.ac) || 0;
+          const str = parseInt(npc.str) || 0;
+          const sta = parseInt(npc.sta) || 0;
+          const agi = parseInt(npc.agi) || 0;
+          const dex = parseInt(npc.dex) || 0;
+          const wis = parseInt(npc.wis) || 0;
+          const intStat = parseInt(npc.int) || 0;
+          const cha = parseInt(npc.cha) || 0;
+          const minDmg = parseInt(npc.min_dmg) || 0;
+          const maxDmg = parseInt(npc.max_dmg) || 0;
+          const attackSpeed = parseFloat(npc.attack_speed) || 0.0;
+          
+          // Create new NPC
+          await client.query(`
+            INSERT INTO npcs (
+              name, npc_type, description, level,
+              hp, mp, ac,
+              str, sta, agi, dex, wis, int, cha,
+              attack_speed, min_dmg, max_dmg
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+          `, [
+            npc.name, npc.npc_type, npc.description, level,
+            hp, mp, ac,
+            str, sta, agi, dex,
+            wis, intStat, cha,
+            attackSpeed, minDmg, maxDmg
+          ]);
+          created++;
+        }
+      }
+      
+      await client.query('COMMIT');
+      res.json({ success: true, created, updated });
+      
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Error batch importing NPCs:', error);
+      res.status(500).json({ error: 'Failed to import NPCs' });
+    } finally {
+      client.release();
+    }
   });
 }

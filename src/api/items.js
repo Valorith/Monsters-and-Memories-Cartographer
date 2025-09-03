@@ -108,7 +108,10 @@ export default function itemsRouter(app, validateCSRF) {
         attack_speed || 0, health || 0, mana || 0, ac || 0, block || 0,
         resist_cold || 0, resist_corruption || 0, resist_disease || 0, resist_electricity || 0,
         resist_fire || 0, resist_magic || 0, resist_poison || 0,
-        weight || 0.0, size || 'Medium', skill || null, damage || 0, delay || 0,
+        weight || 0.0, 
+        // Validate size against allowed values
+        (['Tiny', 'Small', 'Medium', 'Large', 'Giant'].includes(size) ? size : 'Medium'), 
+        skill || null, damage || 0, delay || 0,
         item_type, slot, slotsArray, description,
         race || null, itemClass || null,
         req.user.id, req.user.id
@@ -310,8 +313,12 @@ export default function itemsRouter(app, validateCSRF) {
       const insertedItems = [];
       
       // Insert each item
-      for (const item of validItems) {
+      for (let i = 0; i < validItems.length; i++) {
+        const item = validItems[i];
         try {
+          // Create a savepoint for this item
+          await client.query(`SAVEPOINT item_${i}`);
+          
           const slotsArray = item.slots || (item.slot ? [item.slot] : []);
           
           const result = await client.query(`
@@ -336,7 +343,10 @@ export default function itemsRouter(app, validateCSRF) {
             item.resist_cold || 0, item.resist_corruption || 0, item.resist_disease || 0, 
             item.resist_electricity || 0, item.resist_fire || 0, item.resist_magic || 0, 
             item.resist_poison || 0,
-            item.weight || 0.0, item.size || 'Medium', item.skill || null, 
+            item.weight || 0.0, 
+            // Validate size against allowed values
+            (['Tiny', 'Small', 'Medium', 'Large', 'Giant'].includes(item.size) ? item.size : 'Medium'), 
+            item.skill || null, 
             item.damage || 0, item.delay || 0,
             item.item_type, item.slot, slotsArray, item.description,
             item.race || null, item.class || null,
@@ -346,7 +356,19 @@ export default function itemsRouter(app, validateCSRF) {
           inserted++;
           insertedItems.push(result.rows[0]);
           
+          // Release the savepoint since insert was successful
+          await client.query(`RELEASE SAVEPOINT item_${i}`);
+          
         } catch (itemError) {
+          // Try to rollback to the savepoint to recover from the error
+          try {
+            await client.query(`ROLLBACK TO SAVEPOINT item_${i}`);
+          } catch (rollbackError) {
+            // If rollback fails, the transaction is likely aborted
+            // Log the error but continue to collect all errors
+            console.error(`Failed to rollback savepoint for item "${item.name}":`, rollbackError.message);
+          }
+          
           // If one item fails, add to errors but continue
           errors.push(`Failed to insert "${item.name}": ${itemError.message}`);
         }

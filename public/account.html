@@ -4961,6 +4961,9 @@
                   <button onclick="showAddNPCForm()" class="primary-btn" title="Add new NPC">
                     <span style="margin-right: 0.5rem;">➕</span>Add NPC
                   </button>
+                  <button onclick="showBatchNPCImport()" class="primary-btn" title="Batch import NPCs from wiki">
+                    <span style="margin-right: 0.5rem;">📥</span>Batch Add
+                  </button>
                   <button onclick="exportNPCsToCSV()" class="export-btn" title="Export NPCs to CSV">
                     <span>📊</span>Export CSV
                   </button>
@@ -8502,7 +8505,7 @@
       
       // Reset step visibility - ensure step1 is visible
       const step1 = document.getElementById('batch-import-step1');
-      const step2 = document.getElementById('batch-import-step2');
+      const step2 = document.getElementById('batch-import-items-step2');
       if (step1) {
         step1.style.display = 'block';
         step1.style.padding = '30px'; // Ensure proper padding
@@ -8624,7 +8627,7 @@
         window.extractionCompleted = false;
       }
       document.getElementById('batch-import-step1').style.padding = '30px'; // Reset padding
-      document.getElementById('batch-import-step2').style.display = 'none';
+      document.getElementById('batch-import-items-step2').style.display = 'none';
       updateBatchImportCount();
       
       // Hide single item controls
@@ -9543,7 +9546,7 @@
           inspectorTreeData[nodeId] = {
             id: nodeId,
             url: url,
-            title: url.split('/').pop().replace(/_/g, ' '),
+            title: decodeURIComponent(url.split('/').pop()).replace(/_/g, ' '),
             type: 'pending',
             icon: '🔗',
             status: 'pending',
@@ -10365,7 +10368,7 @@
       // Update progress text if available
       const progressText = document.getElementById('inspector-progress-text');
       if (progressText) {
-        progressText.textContent = `Analyzing: ${cleanUrl.split('/').pop()}`;
+        progressText.textContent = `Analyzing: ${decodeURIComponent(cleanUrl.split('/').pop()).replace(/_/g, ' ')}`;
       }
       
       if (!cleanUrl.includes('/wiki/')) {
@@ -10485,8 +10488,8 @@
         if (cleanUrl.includes('Wyrmsbane_Lieutenant')) {
         }
         
-        // Update node title
-        node.title = pageTitle || cleanUrl.split('/').pop();
+        // Update node title - decode URL encoding for special characters
+        node.title = pageTitle || decodeURIComponent(cleanUrl.split('/').pop()).replace(/_/g, ' ');
         
         // Check page structure for NPC indicators
         
@@ -10693,7 +10696,7 @@
               inspectorTreeData[childId] = {
                 id: childId,
                 url: lootUrl,
-                title: childMapping.title || lootUrl.split('/').pop().replace(/_/g, ' '),
+                title: childMapping.title || decodeURIComponent(lootUrl.split('/').pop()).replace(/_/g, ' '),
                 type: effectiveType,
                 icon: shouldReanalyze ? '⏳' : (effectiveType === 'item' ? '⚔️' : 
                       effectiveType === 'list' ? '📋' : '❓'),
@@ -10852,7 +10855,7 @@
             inspectorTreeData[childId] = {
               id: childId,
               url: itemUrl,
-              title: itemMapping?.title || itemUrl.split('/').pop().replace(/_/g, ' '),
+              title: itemMapping?.title || decodeURIComponent(itemUrl.split('/').pop()).replace(/_/g, ' '),
               type: itemMapping?.type || 'item',
               icon: itemMapping?.type === 'list' ? '📋' : '⚔️',
               status: itemMapping ? 'cached' : 'success',
@@ -10870,7 +10873,7 @@
               registerUrlMappings([{
                 url: itemUrl,
                 type: 'item',
-                title: itemUrl.split('/').pop().replace(/_/g, ' ')
+                title: decodeURIComponent(itemUrl.split('/').pop()).replace(/_/g, ' ')
               }]);
             }
           }
@@ -10923,7 +10926,7 @@
         
         node.type = 'error';
         node.icon = '❌';
-        node.title = cleanUrl.split('/').pop().replace(/_/g, ' ') + ' (Failed)';
+        node.title = decodeURIComponent(cleanUrl.split('/').pop()).replace(/_/g, ' ') + ' (Failed)';
         node.status = 'error';
         node.errorMessage = error.message;
       } finally {
@@ -12501,7 +12504,7 @@
       // Keep step1 visible with data inspector during extraction
       // Step2 remains hidden until extraction is complete
       const step1 = document.getElementById('batch-import-step1');
-      const step2 = document.getElementById('batch-import-step2');
+      const step2 = document.getElementById('batch-import-items-step2');
       if (step1) step1.style.display = 'block';
       if (step2) step2.style.display = 'none';
       
@@ -14127,25 +14130,61 @@
         const doc = parser.parseFromString(html, 'text/html');
         const items = [];
         
-        // Common selectors for item lists on the wiki
-        const listSelectors = [
-          '#mw-content-text ul li a',  // Bullet lists
-          '#mw-content-text ol li a',  // Numbered lists
-          '#mw-content-text table td a',  // Tables
-          '.item-list a',  // Explicit item list class
-          '.mw-parser-output ul li a',  // MediaWiki output lists
-          '.mw-parser-output table td a'  // MediaWiki output tables
-        ];
-        
-        for (const selector of listSelectors) {
-          const links = doc.querySelectorAll(selector);
-          for (const link of links) {
+        // First check if this is a MediaWiki category page
+        const categoryPages = doc.querySelector('#mw-pages');
+        if (categoryPages) {
+          // This is a category page like Category:Items
+          // Look for links in the mw-category-group sections
+          const categoryLinks = categoryPages.querySelectorAll('.mw-category-group ul li a');
+          for (const link of categoryLinks) {
             const href = link.getAttribute('href');
             if (href && href.includes('/wiki/') && !href.includes(':')) {
               const fullUrl = new URL(href, baseUrl).href;
               // Skip self-references and category pages
-              if (fullUrl !== baseUrl && !fullUrl.includes('Category:')) {
+              if (fullUrl !== baseUrl && !fullUrl.includes('Category:') && !fullUrl.includes('Special:')) {
                 items.push(fullUrl);
+              }
+            }
+          }
+          
+          // Also check for items in the mw-category div (alternative structure)
+          const mwCategory = doc.querySelector('.mw-category');
+          if (mwCategory) {
+            const mwCategoryLinks = mwCategory.querySelectorAll('ul li a');
+            for (const link of mwCategoryLinks) {
+              const href = link.getAttribute('href');
+              if (href && href.includes('/wiki/') && !href.includes(':')) {
+                const fullUrl = new URL(href, baseUrl).href;
+                // Skip self-references and category pages
+                if (fullUrl !== baseUrl && !fullUrl.includes('Category:') && !fullUrl.includes('Special:')) {
+                  items.push(fullUrl);
+                }
+              }
+            }
+          }
+        }
+        
+        // If no items found from category structure, try common list selectors
+        if (items.length === 0) {
+          const listSelectors = [
+            '#mw-content-text ul li a',  // Bullet lists
+            '#mw-content-text ol li a',  // Numbered lists
+            '#mw-content-text table td a',  // Tables
+            '.item-list a',  // Explicit item list class
+            '.mw-parser-output ul li a',  // MediaWiki output lists
+            '.mw-parser-output table td a'  // MediaWiki output tables
+          ];
+          
+          for (const selector of listSelectors) {
+            const links = doc.querySelectorAll(selector);
+            for (const link of links) {
+              const href = link.getAttribute('href');
+              if (href && href.includes('/wiki/') && !href.includes(':')) {
+                const fullUrl = new URL(href, baseUrl).href;
+                // Skip self-references and category pages
+                if (fullUrl !== baseUrl && !fullUrl.includes('Category:') && !fullUrl.includes('Special:')) {
+                  items.push(fullUrl);
+                }
               }
             }
           }
@@ -14405,7 +14444,7 @@
     function showSingleItemMode() {
       // Show both steps
       document.getElementById('batch-import-step1').style.display = 'block';
-      document.getElementById('batch-import-step2').style.display = 'flex';
+      document.getElementById('batch-import-items-step2').style.display = 'flex';
       
       // Adjust step 1 to be more compact
       const step1Div = document.getElementById('batch-import-step1');
@@ -14429,7 +14468,7 @@
     function showBatchMode() {
       // Show both steps
       document.getElementById('batch-import-step1').style.display = 'block';
-      document.getElementById('batch-import-step2').style.display = 'flex';
+      document.getElementById('batch-import-items-step2').style.display = 'flex';
       
       // Adjust step 1 to be more compact
       const step1Div = document.getElementById('batch-import-step1');
@@ -14612,7 +14651,7 @@
       
       // Switch to step 2
       document.getElementById('batch-import-step1').style.display = 'none';
-      document.getElementById('batch-import-step2').style.display = 'flex';
+      document.getElementById('batch-import-items-step2').style.display = 'flex';
       
       // Render the table
       renderBatchImportTable();
@@ -15283,7 +15322,7 @@
     
     function backToBatchStep1() {
       document.getElementById('batch-import-step1').style.display = 'block';
-      document.getElementById('batch-import-step2').style.display = 'none';
+      document.getElementById('batch-import-items-step2').style.display = 'none';
     }
     
     function toggleBatchImportAdvanced() {
@@ -15419,17 +15458,26 @@
         
         // Handle new items
         if (newItems.length > 0) {
-          // Check for duplicate names within the batch
-          const nameCount = {};
+          // Remove duplicate names within the batch - keep only the first occurrence
+          const seenNames = new Set();
+          const deduplicatedItems = [];
+          const removedDuplicates = [];
+          
           newItems.forEach(item => {
-            const name = item.name || '';
-            nameCount[name] = (nameCount[name] || 0) + 1;
+            const name = (item.name || '').toLowerCase().trim();
+            if (!seenNames.has(name)) {
+              seenNames.add(name);
+              deduplicatedItems.push(item);
+            } else {
+              removedDuplicates.push(item.name);
+            }
           });
           
-          const duplicateNames = Object.keys(nameCount).filter(name => nameCount[name] > 1);
-          if (duplicateNames.length > 0) {
-            showMessage(`Error: The following item names appear multiple times in the batch: ${duplicateNames.join(', ')}. Please ensure each item has a unique name.`, 'error');
-            return;
+          // If duplicates were removed, inform the user
+          if (removedDuplicates.length > 0) {
+            showMessage(`Note: Removed ${removedDuplicates.length} duplicate items from the batch. Keeping first occurrence only.`, 'info');
+            newItems.length = 0;
+            newItems.push(...deduplicatedItems);
           }
           
           // Clean up items before sending - remove temporary fields and normalize data
@@ -16390,7 +16438,7 @@
       // Check if batch modal is open and in step 2
       const modal = document.getElementById('batch-import-modal');
       if (!modal || modal.style.display === 'none') return;
-      if (document.getElementById('batch-import-step2').style.display === 'none') return;
+      if (document.getElementById('batch-import-items-step2').style.display === 'none') return;
       
       // Don't handle navigation if number slider is open
       if (isNumberSliderOpen) return;
@@ -19365,10 +19413,31 @@ Size: Medium"></textarea>
     }
 
     // Initialize
-    checkAuth();
+    checkAuth().then(() => {
+      // Check for hash navigation after auth is complete
+      if (window.location.hash) {
+        const tab = window.location.hash.substring(1); // Remove the # symbol
+        if (tab === 'voting') {
+          // Ensure user is authenticated before showing voting tab
+          if (document.getElementById('voting-tab')) {
+            showTab('voting');
+          }
+        }
+      }
+    });
     
     // Load initial proposal count for voting tab
     loadInitialProposalCount();
+    
+    // Handle hash changes for navigation
+    window.addEventListener('hashchange', () => {
+      if (window.location.hash) {
+        const tab = window.location.hash.substring(1);
+        if (tab === 'voting' && document.getElementById('voting-tab')) {
+          showTab('voting');
+        }
+      }
+    });
     
     // Set up periodic ban checks
     setInterval(checkBanStatus, 30000); // Check every 30 seconds
@@ -19527,6 +19596,136 @@ Size: Medium"></textarea>
           <button class="btn secondary-btn" onclick="closeAddSharedPOIModal()">
             Cancel
           </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Batch NPC Import Modal -->
+  <div id="batch-npc-import-modal" class="modal" style="display: none;">
+    <div id="batch-import-modal-content" class="modal-content" style="max-width: 1200px; width: 90%; max-height: 90vh; display: flex; flex-direction: column;">
+      <div class="modal-header" style="padding: 1.5rem;">
+        <h2 style="margin: 0;">Batch Import NPCs from Wiki</h2>
+        <span class="close" onclick="closeBatchNPCImport()" style="font-size: 2rem;">&times;</span>
+      </div>
+      <div class="modal-body" style="padding: 2rem; flex: 1; overflow-y: auto;">
+        <!-- Step 1: URL Input -->
+        <div id="batch-import-step1" style="display: block;">
+          <p style="margin-bottom: 1rem;">Enter the URL of a Monsters & Memories wiki page containing NPCs:</p>
+          <div style="display: flex; gap: 1rem; align-items: center;">
+            <input 
+              type="url" 
+              id="batch-import-url" 
+              placeholder="https://monstersandmemories.miraheze.org/wiki/Category:NPCs"
+              value="https://monstersandmemories.miraheze.org/wiki/Category:NPCs"
+              style="flex: 1; padding: 0.5rem; border: 1px solid #555; border-radius: 4px; background: #2d2d2d; color: #e0e0e0;"
+            />
+            <button onclick="scanWikiPage()" class="primary-btn">
+              <span style="margin-right: 0.5rem;">🔍</span>Scan
+            </button>
+          </div>
+          <div id="scan-status" style="margin-top: 1rem; display: none;">
+            <div class="loading-spinner"></div>
+            <p>Scanning wiki page...</p>
+          </div>
+        </div>
+
+        <!-- Step 2: NPC Selection -->
+        <div id="batch-import-npc-step2" style="display: none; height: 100%; flex-direction: column;">
+          <div id="scan-results-summary" style="padding: 1rem; background: #2d2d2d; border-radius: 4px; flex-shrink: 0;">
+            <h3>Scan Results</h3>
+            <p>Found <span id="total-npcs-found">0</span> NPCs on the page</p>
+            <p style="color: #4ade80;">✅ New NPCs: <span id="new-npcs-count">0</span></p>
+            <p style="color: #fbbf24;">⚠️ Existing NPCs: <span id="existing-npcs-count">0</span></p>
+          </div>
+          
+          <div id="npc-lists" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0; flex: 1; min-height: 0;">
+            <div style="display: flex; flex-direction: column; min-height: 0;">
+              <h4 style="color: #4ade80; margin-bottom: 0.5rem; flex-shrink: 0;">New NPCs</h4>
+              <div id="new-npcs-list" style="flex: 1; overflow-y: auto; background: #2d2d2d; padding: 0.5rem; border-radius: 4px; min-height: 200px;">
+                <!-- Will be populated dynamically -->
+              </div>
+            </div>
+            <div style="display: flex; flex-direction: column; min-height: 0;">
+              <h4 style="color: #fbbf24; margin-bottom: 0.5rem; flex-shrink: 0;">Existing NPCs (will be updated)</h4>
+              <div id="existing-npcs-list" style="flex: 1; overflow-y: auto; background: #2d2d2d; padding: 0.5rem; border-radius: 4px; min-height: 200px;">
+                <!-- Will be populated dynamically -->
+              </div>
+            </div>
+          </div>
+          
+          <div style="display: flex; gap: 1rem; justify-content: center; padding: 1rem 0; flex-shrink: 0;">
+            <button onclick="extractNPCs('all')" class="primary-btn">
+              <span style="margin-right: 0.5rem;">📥</span>Extract All
+            </button>
+            <button onclick="extractNPCs('new')" class="secondary-btn">
+              <span style="margin-right: 0.5rem;">🆕</span>Extract New Only
+            </button>
+            <button onclick="closeBatchNPCImport()" class="secondary-btn">
+              Cancel
+            </button>
+          </div>
+          
+          <div id="extraction-status" style="margin-top: 2rem; display: none;">
+            <div style="margin-bottom: 1rem;">
+              <div style="display: flex; align-items: center; gap: 1rem;">
+                <div class="loading-spinner"></div>
+                <h4 style="margin: 0;">Extracting NPC Data</h4>
+              </div>
+              <p style="margin-top: 0.5rem;">Progress: <span id="extraction-progress">0</span> / <span id="extraction-total">0</span> NPCs</p>
+            </div>
+            <div id="extraction-details" style="background: #1a1a1a; border: 1px solid #333; border-radius: 4px; padding: 1rem; max-height: 350px; overflow-y: auto; font-family: monospace; font-size: 0.9rem;">
+              <!-- Extraction logs will appear here -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 3: Review and Save -->
+        <div id="batch-import-step3" style="display: none; height: 100%; flex-direction: column;">
+          <h3 style="margin-bottom: 1.5rem; flex-shrink: 0;">Review Extracted NPCs</h3>
+          <p style="margin-bottom: 1rem; font-size: 1.1rem; flex-shrink: 0;">Select which NPCs to import:</p>
+          <div style="background: #2d2d2d; border: 1px solid #555; border-radius: 4px; padding: 1rem; margin-bottom: 1rem; flex-shrink: 0;">
+            <p style="margin: 0; color: #60a5fa;">
+              <strong>Note:</strong> For existing NPCs, only non-zero values will be updated. 
+              Existing data like custom loot tables, manually entered stats, or other fields will be preserved if the imported value is 0 or empty.
+            </p>
+          </div>
+          
+          <div style="margin-bottom: 1.5rem; flex-shrink: 0;">
+            <button onclick="selectAllNPCs(true)" class="btn" style="margin-right: 0.5rem; padding: 0.75rem 1.5rem;">Select All</button>
+            <button onclick="selectAllNPCs(false)" class="btn" style="padding: 0.75rem 1.5rem;">Deselect All</button>
+          </div>
+          
+          <div style="overflow-x: auto; overflow-y: auto; border: 1px solid #333; border-radius: 4px; flex: 1; min-height: 0;">
+            <table id="extracted-npcs-table" class="npc-editor-table" style="width: 100%;">
+              <thead style="position: sticky; top: 0; background: #1a1a1a; z-index: 10;">
+                <tr>
+                  <th style="width: 50px; padding: 1rem;">
+                    <input type="checkbox" id="select-all-npcs" onchange="selectAllNPCs(this.checked)">
+                  </th>
+                  <th style="padding: 1rem; min-width: 200px;">Name</th>
+                  <th style="padding: 1rem; min-width: 100px;">Type</th>
+                  <th style="padding: 1rem; min-width: 80px;">Level</th>
+                  <th style="padding: 1rem; min-width: 80px;">HP</th>
+                  <th style="padding: 1rem; min-width: 80px;">AC</th>
+                  <th style="padding: 1rem; min-width: 100px;">Status</th>
+                  <th style="padding: 1rem; min-width: 100px;">Wiki Link</th>
+                </tr>
+              </thead>
+              <tbody id="extracted-npcs-tbody">
+                <!-- Will be populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+          
+          <div style="margin-top: 1rem; display: flex; gap: 1rem; justify-content: center; flex-shrink: 0; padding: 1rem 0;">
+            <button onclick="saveExtractedNPCs()" class="primary-btn">
+              <span style="margin-right: 0.5rem;">💾</span>Save Selected NPCs
+            </button>
+            <button onclick="closeBatchNPCImport()" class="secondary-btn">
+              Cancel
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -19778,6 +19977,319 @@ Size: Medium"></textarea>
     const NPCS_PER_PAGE = 20;
     let npcChanges = new Map(); // Track staged changes for NPCs
     let selectedItemsForLoot = []; // For loot selection modal
+    
+    // Toast notification function
+    function showToast(message, type = 'info') {
+      // Create toast container if it doesn't exist
+      let toastContainer = document.getElementById('toast-container');
+      if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.id = 'toast-container';
+        toastContainer.style.cssText = `
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          z-index: 20000;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        `;
+        document.body.appendChild(toastContainer);
+      }
+      
+      // Create toast element
+      const toast = document.createElement('div');
+      toast.className = 'toast toast-' + type;
+      
+      // Set colors based on type
+      const colors = {
+        success: '#4CAF50',
+        error: '#f44336',
+        warning: '#FF9800',
+        info: '#2196F3'
+      };
+      
+      toast.style.cssText = `
+        background: ${colors[type] || colors.info};
+        color: white;
+        padding: 12px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        font-size: 14px;
+        font-weight: 500;
+        animation: slideIn 0.3s ease-out;
+        cursor: pointer;
+        max-width: 350px;
+        word-wrap: break-word;
+      `;
+      
+      toast.textContent = message;
+      
+      // Add click to dismiss
+      toast.addEventListener('click', () => {
+        toast.style.animation = 'slideOut 0.3s ease-out';
+        setTimeout(() => toast.remove(), 300);
+      });
+      
+      // Add to container
+      toastContainer.appendChild(toast);
+      
+      // Auto remove after 5 seconds
+      setTimeout(() => {
+        if (toast.parentNode) {
+          toast.style.animation = 'slideOut 0.3s ease-out';
+          setTimeout(() => toast.remove(), 300);
+        }
+      }, 5000);
+    }
+    
+    // Add CSS animations for toast
+    if (!document.getElementById('toast-animations')) {
+      const style = document.createElement('style');
+      style.id = 'toast-animations';
+      style.textContent = `
+        @keyframes slideIn {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+        @keyframes slideOut {
+          from {
+            transform: translateX(0);
+            opacity: 1;
+          }
+          to {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    // Batch Import Variables
+    let scannedNPCs = [];
+    let extractedNPCs = [];
+    
+    // Batch Import Functions
+    function showBatchNPCImport() {
+      const modal = document.getElementById('batch-npc-import-modal');
+      const modalContent = document.getElementById('batch-import-modal-content');
+      
+      modal.style.display = 'block';
+      document.getElementById('batch-import-step1').style.display = 'block';
+      document.getElementById('batch-import-npc-step2').style.display = 'none';
+      document.getElementById('batch-import-step3').style.display = 'none';
+      
+      // Start with smaller height for step 1
+      modalContent.style.height = 'auto';
+      
+      // Prevent body scroll when modal is open
+      document.body.style.overflow = 'hidden';
+    }
+    
+    function closeBatchNPCImport() {
+      document.getElementById('batch-npc-import-modal').style.display = 'none';
+      scannedNPCs = [];
+      extractedNPCs = [];
+      
+      // Re-enable body scroll
+      document.body.style.overflow = '';
+    }
+    
+    async function scanWikiPage() {
+      const url = document.getElementById('batch-import-url').value;
+      if (!url) {
+        showToast('Please enter a URL', 'error');
+        return;
+      }
+      
+      document.getElementById('scan-status').style.display = 'block';
+      
+      try {
+        const response = await window.csrfHelper.fetchWithCSRF('/api/npcs/scan-wiki', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+        
+        if (!response.ok) throw new Error('Failed to scan wiki page');
+        
+        const data = await response.json();
+        scannedNPCs = data.npcs || [];
+        
+        // Check which NPCs already exist
+        const existingNames = npcs.map(n => n.name.toLowerCase());
+        const newNPCs = scannedNPCs.filter(n => !existingNames.includes(n.name.toLowerCase()));
+        const existingNPCs = scannedNPCs.filter(n => existingNames.includes(n.name.toLowerCase()));
+        
+        // Update UI
+        document.getElementById('total-npcs-found').textContent = scannedNPCs.length;
+        document.getElementById('new-npcs-count').textContent = newNPCs.length;
+        document.getElementById('existing-npcs-count').textContent = existingNPCs.length;
+        
+        // Populate lists
+        const newList = document.getElementById('new-npcs-list');
+        const existingList = document.getElementById('existing-npcs-list');
+        
+        newList.innerHTML = newNPCs.length > 0 
+          ? newNPCs.map(n => `<div style="padding: 0.25rem;">${n.name}</div>`).join('')
+          : '<div style="color: #666;">No new NPCs found</div>';
+        
+        existingList.innerHTML = existingNPCs.length > 0
+          ? existingNPCs.map(n => `<div style="padding: 0.25rem;">${n.name}</div>`).join('')
+          : '<div style="color: #666;">No existing NPCs found</div>';
+        
+        // Show step 2 and expand modal
+        document.getElementById('scan-status').style.display = 'none';
+        document.getElementById('batch-import-step1').style.display = 'none';
+        const step2 = document.getElementById('batch-import-npc-step2');
+        step2.style.display = 'flex'; // Use flex instead of block
+        
+        // Expand modal to full height for step 2
+        const modalContent = document.getElementById('batch-import-modal-content');
+        modalContent.style.height = '90vh';
+        
+      } catch (error) {
+        console.error('Error scanning wiki:', error);
+        showToast('Failed to scan wiki page: ' + error.message, 'error');
+        document.getElementById('scan-status').style.display = 'none';
+      }
+    }
+    
+    async function extractNPCs(mode) {
+      const npcsToExtract = mode === 'new' 
+        ? scannedNPCs.filter(n => !npcs.some(existing => existing.name.toLowerCase() === n.name.toLowerCase()))
+        : scannedNPCs;
+      
+      if (npcsToExtract.length === 0) {
+        showToast('No NPCs to extract', 'warning');
+        return;
+      }
+      
+      document.getElementById('extraction-status').style.display = 'block';
+      document.getElementById('extraction-progress').textContent = '0';
+      document.getElementById('extraction-total').textContent = npcsToExtract.length;
+      
+      const detailsDiv = document.getElementById('extraction-details');
+      detailsDiv.innerHTML = '';
+      extractedNPCs = [];
+      
+      for (let i = 0; i < npcsToExtract.length; i++) {
+        const npc = npcsToExtract[i];
+        document.getElementById('extraction-progress').textContent = i + 1;
+        
+        // Add status message
+        const statusMsg = document.createElement('div');
+        statusMsg.innerHTML = `<span style="color: #60a5fa;">[${i + 1}/${npcsToExtract.length}]</span> Extracting: ${npc.name}...`;
+        detailsDiv.appendChild(statusMsg);
+        detailsDiv.scrollTop = detailsDiv.scrollHeight;
+        
+        try {
+          const response = await window.csrfHelper.fetchWithCSRF('/api/npcs/extract-wiki', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: npc.url })
+          });
+          
+          if (response.ok) {
+            const extractedData = await response.json();
+            extractedNPCs.push({
+              ...extractedData,
+              selected: true,
+              status: npcs.some(e => e.name.toLowerCase() === extractedData.name.toLowerCase()) ? 'update' : 'new'
+            });
+            
+            // Update status with success
+            statusMsg.innerHTML = `<span style="color: #60a5fa;">[${i + 1}/${npcsToExtract.length}]</span> <span style="color: #4ade80;">✓</span> ${npc.name} - Level ${extractedData.level}, HP: ${extractedData.hp}, AC: ${extractedData.ac}`;
+          } else {
+            // Update status with error
+            statusMsg.innerHTML = `<span style="color: #60a5fa;">[${i + 1}/${npcsToExtract.length}]</span> <span style="color: #ef4444;">✗</span> ${npc.name} - Failed to extract`;
+          }
+        } catch (error) {
+          console.error(`Failed to extract ${npc.name}:`, error);
+          statusMsg.innerHTML = `<span style="color: #60a5fa;">[${i + 1}/${npcsToExtract.length}]</span> <span style="color: #ef4444;">✗</span> ${npc.name} - Error: ${error.message}`;
+        }
+      }
+      
+      // Populate review table
+      populateExtractedNPCsTable();
+      
+      // Show step 3
+      document.getElementById('extraction-status').style.display = 'none';
+      document.getElementById('batch-import-npc-step2').style.display = 'none';
+      const step3 = document.getElementById('batch-import-step3');
+      step3.style.display = 'flex'; // Use flex for proper layout
+      
+      // Keep modal at full height for step 3
+      const modalContent = document.getElementById('batch-import-modal-content');
+      modalContent.style.height = '90vh';
+    }
+    
+    function populateExtractedNPCsTable() {
+      const tbody = document.getElementById('extracted-npcs-tbody');
+      tbody.innerHTML = extractedNPCs.map((npc, index) => `
+        <tr>
+          <td style="padding: 0.75rem;"><input type="checkbox" ${npc.selected ? 'checked' : ''} onchange="toggleNPCSelection(${index})"></td>
+          <td style="padding: 0.75rem; font-weight: bold;">${npc.name}</td>
+          <td style="padding: 0.75rem;">${npc.npc_type || 'unknown'}</td>
+          <td style="padding: 0.75rem; text-align: center;">${npc.level || 0}</td>
+          <td style="padding: 0.75rem; text-align: center;">${npc.hp || 0}</td>
+          <td style="padding: 0.75rem; text-align: center;">${npc.ac || 0}</td>
+          <td style="padding: 0.75rem;">
+            <span style="color: ${npc.status === 'new' ? '#4ade80' : '#fbbf24'}; font-weight: bold;">
+              ${npc.status === 'new' ? '✅ New' : '⚠️ Update'}
+            </span>
+          </td>
+          <td style="padding: 0.75rem;">
+            <a href="${npc.description}" target="_blank" style="color: #60a5fa; text-decoration: none;">📄 View</a>
+          </td>
+        </tr>
+      `).join('');
+    }
+    
+    function toggleNPCSelection(index) {
+      extractedNPCs[index].selected = !extractedNPCs[index].selected;
+    }
+    
+    function selectAllNPCs(selected) {
+      extractedNPCs.forEach(npc => npc.selected = selected);
+      populateExtractedNPCsTable();
+    }
+    
+    async function saveExtractedNPCs() {
+      const selectedNPCs = extractedNPCs.filter(npc => npc.selected);
+      
+      if (selectedNPCs.length === 0) {
+        showToast('No NPCs selected', 'warning');
+        return;
+      }
+      
+      try {
+        const response = await window.csrfHelper.fetchWithCSRF('/api/npcs/batch-import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ npcs: selectedNPCs })
+        });
+        
+        if (!response.ok) throw new Error('Failed to save NPCs');
+        
+        const result = await response.json();
+        showToast(`Successfully imported ${result.created} new and updated ${result.updated} existing NPCs`, 'success');
+        
+        closeBatchNPCImport();
+        await loadNPCEditor(); // Reload the NPC editor
+        
+      } catch (error) {
+        console.error('Error saving NPCs:', error);
+        showToast('Failed to save NPCs: ' + error.message, 'error');
+      }
+    }
     
     async function loadNPCEditor() {
       const loading = document.getElementById('npc-editor-loading');
@@ -27666,7 +28178,7 @@ Size: Medium"></textarea>
         </div>
 
         <!-- Step 2: Edit Items -->
-        <div id="batch-import-step2" style="display: none; height: 100%; flex-direction: column; padding: 30px;">
+        <div id="batch-import-items-step2" style="display: none; height: 100%; flex-direction: column; padding: 30px;">
           <div style="background: #2a2a2a; border-bottom: 1px solid #444; padding: 15px 20px; flex-shrink: 0;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
               <div>

@@ -113,7 +113,7 @@
               <span class="checkbox-label">Shared POIs</span>
               <span class="source-count">{{ getSourceCount('shared') }}</span>
             </label>
-            <label class="checkbox-option" :class="{ selected: selectedSources.includes('proposals') }">
+            <label class="checkbox-option" :class="{ selected: selectedSources.includes('proposals'), 'has-proposals': getSourceCount('proposals') > 0 && !selectedSources.includes('proposals') }">
               <input 
                 type="checkbox" 
                 value="proposals" 
@@ -121,7 +121,7 @@
                 @change="updateFilters"
               />
               <span class="checkbox-label">Proposals</span>
-              <span class="source-count">{{ getSourceCount('proposals') }}</span>
+              <span class="source-count" :class="{ 'pulse-count': getSourceCount('proposals') > 0 && !selectedSources.includes('proposals') }">{{ getSourceCount('proposals') }}</span>
             </label>
           </div>
         </div>
@@ -829,6 +829,39 @@ export default {
 
 .delete-preset-btn:hover {
   transform: scale(1.2);
+}
+
+/* Proposals pulsing effect - only when not selected */
+.checkbox-option.has-proposals {
+  animation: proposalPulse 4s ease-in-out infinite;
+}
+
+@keyframes proposalPulse {
+  0%, 100% {
+    border-color: #333;
+    background: rgba(0, 0, 0, 0.3);
+  }
+  50% {
+    border-color: #FFD700;
+    background: rgba(255, 215, 0, 0.1);
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.2);
+  }
+}
+
+.pulse-count {
+  animation: countPulse 4s ease-in-out infinite;
+  background: rgba(255, 215, 0, 0.2) !important;
+  color: #FFD700 !important;
+  font-weight: 700 !important;
+}
+
+@keyframes countPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
 }
 
 /* Transitions */
