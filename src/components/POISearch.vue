@@ -46,6 +46,11 @@
           </div>
         </div>
       </div>
+      <div v-if="searchQuery.length > 0" class="advanced-search-link" @click="openAdvancedSearch">
+        <span class="advanced-search-icon">🔍</span>
+        <span>Advanced Search for "{{ searchQuery }}"</span>
+        <span class="advanced-search-arrow">→</span>
+      </div>
     </div>
     
     <!-- Item Tooltip -->
@@ -63,6 +68,7 @@
 
 <script>
 import { ref, computed, watch, nextTick } from 'vue';
+import { useRouter } from 'vue-router';
 import ItemTooltip from './ItemTooltip.vue';
 
 export default {
@@ -101,6 +107,7 @@ export default {
   },
   emits: ['select-poi', 'select-item', 'select-npc'],
   setup(props, { emit }) {
+    const router = useRouter();
     const searchQuery = ref('');
     const showResults = ref(false);
     const highlightedIndex = ref(-1);
@@ -395,6 +402,15 @@ export default {
         tooltipTimeout = null;
       }
     };
+    
+    const openAdvancedSearch = () => {
+      if (searchQuery.value) {
+        // Navigate to search route with the current query
+        router.push(`/search/${encodeURIComponent(searchQuery.value)}`);
+        // Clear and close the search dropdown
+        showResults.value = false;
+      }
+    };
 
     return {
       searchQuery,
@@ -420,7 +436,8 @@ export default {
       handleResultHover,
       handleResultLeave,
       cancelTooltipHide,
-      hideTooltip
+      hideTooltip,
+      openAdvancedSearch
     };
   }
 };
@@ -656,5 +673,38 @@ export default {
 
 .poi-search-results::-webkit-scrollbar-thumb:hover {
   background: #5a4636;
+}
+
+.advanced-search-link {
+  padding: 12px 15px;
+  border-top: 1px solid #8B4513;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  color: #D2691E;
+  font-weight: 500;
+}
+
+.advanced-search-link:hover {
+  background: rgba(255, 215, 0, 0.1);
+  color: #FFD700;
+}
+
+.advanced-search-icon {
+  font-size: 18px;
+}
+
+.advanced-search-arrow {
+  margin-left: auto;
+  font-size: 18px;
+  opacity: 0.7;
+  transition: transform 0.2s;
+}
+
+.advanced-search-link:hover .advanced-search-arrow {
+  transform: translateX(3px);
+  opacity: 1;
 }
 </style>

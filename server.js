@@ -4808,6 +4808,54 @@ app.get('/account', async (req, res) => {
   }
 });
 
+// Get statistics endpoint
+app.get('/api/stats', async (req, res) => {
+  try {
+    // Get POI count
+    const poiResult = await pool.query('SELECT COUNT(*) as count FROM pois');
+    const poiCount = parseInt(poiResult.rows[0].count);
+    
+    // Get Map count
+    const mapResult = await pool.query('SELECT COUNT(*) as count FROM maps');
+    const mapCount = parseInt(mapResult.rows[0].count);
+    
+    // Get Item count
+    const itemResult = await pool.query('SELECT COUNT(*) as count FROM items');
+    const itemCount = parseInt(itemResult.rows[0].count);
+    
+    // Get NPC count
+    const npcResult = await pool.query('SELECT COUNT(*) as count FROM npcs');
+    const npcCount = parseInt(npcResult.rows[0].count);
+    
+    // Get pending vote count for current user
+    let pendingVoteCount = 0;
+    if (req.isAuthenticated() && req.user) {
+      const pendingResult = await pool.query(`
+        SELECT COUNT(*) as count 
+        FROM change_proposals cp
+        WHERE cp.status = 'pending'
+        AND cp.proposer_id != $1
+        AND NOT EXISTS (
+          SELECT 1 FROM change_proposal_votes 
+          WHERE proposal_id = cp.id AND user_id = $1
+        )
+      `, [req.user.id]);
+      pendingVoteCount = parseInt(pendingResult.rows[0].count);
+    }
+    
+    res.json({
+      poiCount,
+      mapCount,
+      itemCount,
+      npcCount,
+      pendingVoteCount
+    });
+  } catch (error) {
+    console.error('Error fetching statistics:', error);
+    res.status(500).json({ error: 'Failed to fetch statistics' });
+  }
+});
+
 // Health check endpoint
 app.get('/api/health', async (req, res) => {
   try {

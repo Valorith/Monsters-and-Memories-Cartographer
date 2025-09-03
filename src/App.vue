@@ -42,7 +42,7 @@
       <div class="header-controls">
         <div class="map-selector">
           <label for="mapSelect">Select Map:</label>
-          <select id="mapSelect" v-model="selectedMapIndex" @change="loadSelectedMap">
+          <select id="mapSelect" v-model="selectedMapIndex" @change="handleMapSelectChange">
             <option v-for="(map, index) in maps" :key="index" :value="index">
               {{ map.name }}
             </option>
@@ -65,8 +65,8 @@
           </button>
           <div v-else class="user-dropdown-container">
             <button @click="toggleUserDropdown" class="user-button">
-              <img v-if="user && user.picture" :src="user.picture" :alt="user.displayName || user.name" class="user-avatar" @error="handleAvatarError" />
-              <span v-else class="user-initials">{{ user && user.displayName ? user.displayName[0] : (user && user.name ? user.name[0] : '?') }}</span>
+              <img v-if="user && (user.picture || user.email)" :key="user.picture || user.email" :src="getUserAvatar()" :alt="user.displayName || user.name" class="user-avatar" @error="handleAvatarError" />
+              <span v-else class="user-initials">{{ user?.displayName?.[0] || user?.name?.[0] || '?' }}</span>
             </button>
             <div v-if="showUserDropdown" class="user-dropdown-menu">
               <a href="/account" class="dropdown-item">
@@ -86,14 +86,63 @@
     <XPBar :user="user" v-if="isAuthenticated && !loading" />
     
     <div class="poi-search-section">
-      <POISearch
-        :all-pois="allSearchablePOIs"
-        :current-map-id="currentMapId"
-        :maps="maps"
-        @select-poi="handlePOISelected"
-        @select-item="handleItemSelected"
-        @select-npc="handleNPCSelected"
-      />
+      <!-- Status indicators container -->
+      <div class="status-indicators-container">
+        <!-- Left status indicators -->
+        <div class="status-indicators">
+          <div class="status-item">
+            <span class="status-icon">📍</span>
+            <div class="status-content">
+              <span class="status-count">{{ statsData.poiCount.toLocaleString() }}</span>
+              <span class="status-label">POIs</span>
+            </div>
+          </div>
+          <div class="status-item">
+            <span class="status-icon">🗺️</span>
+            <div class="status-content">
+              <span class="status-count">{{ statsData.mapCount.toLocaleString() }}</span>
+              <span class="status-label">Maps</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Search box in center -->
+        <POISearch
+          :all-pois="allSearchablePOIs"
+          :current-map-id="currentMapId"
+          :maps="maps"
+          @select-poi="handlePOISelected"
+          @select-item="handleItemSelected"
+          @select-npc="handleNPCSelected"
+        />
+        
+        <!-- Right status indicators -->
+        <div class="status-indicators">
+          <div class="status-item">
+            <span class="status-icon">⚔️</span>
+            <div class="status-content">
+              <span class="status-count">{{ statsData.itemCount.toLocaleString() }}</span>
+              <span class="status-label">Items</span>
+            </div>
+          </div>
+          <div class="status-item">
+            <span class="status-icon">👹</span>
+            <div class="status-content">
+              <span class="status-count">{{ statsData.npcCount.toLocaleString() }}</span>
+              <span class="status-label">NPCs</span>
+            </div>
+          </div>
+          <div v-if="!isAuthenticated || statsData.pendingVoteCount > 0" class="status-item pending-votes">
+            <button @click="handleVoteButtonClick" class="pending-vote-button" :class="{ 'has-pending': statsData.pendingVoteCount > 0 }">
+              <span class="vote-icon">🗳️</span>
+              <span v-if="!isAuthenticated">Sign in to Vote</span>
+              <span v-else-if="statsData.pendingVoteCount > 0">
+                <strong>{{ statsData.pendingVoteCount }}</strong> {{ statsData.pendingVoteCount === 1 ? 'Vote' : 'Votes' }} Pending!
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
     
     <div class="map-container" ref="mapContainer" @click="handleMapClick" @contextmenu.prevent="handleContextMenu" @click.capture="hideContextMenu">
@@ -175,7 +224,7 @@
       :isLeftSide="popupIsLeftSide"
       :currentUserId="user?.id"
       :isAuthenticated="isAuthenticated"
-      @close="selectedPOI = null"
+      @close="handlePOIPopupClose"
       @delete="deletePOI"
       @confirmUpdate="handlePOIUpdate"
       @publish="publishCustomPOI"
@@ -218,6 +267,67 @@
     
     <!-- Ban Modal -->
     <BanModal />
+    
+    <!-- Sign In Modal -->
+    <div v-if="showSignInModal" class="modal-overlay" @click.self="showSignInModal = false">
+      <div class="sign-in-modal">
+        <button @click="showSignInModal = false" class="modal-close-btn">✕</button>
+        
+        <div class="modal-icon">
+          <span class="icon-ballot">🗳️</span>
+        </div>
+        
+        <h2 class="modal-title">Join the Community!</h2>
+        
+        <p class="modal-description">
+          Sign in to vote on community proposals and help shape the future of our maps and content.
+        </p>
+        
+        <div class="modal-features">
+          <div class="feature-item">
+            <span class="feature-icon">✓</span>
+            <span>Vote on new POIs and changes</span>
+          </div>
+          <div class="feature-item">
+            <span class="feature-icon">✓</span>
+            <span>Submit your own proposals</span>
+          </div>
+          <div class="feature-item">
+            <span class="feature-icon">✓</span>
+            <span>Earn XP and climb the leaderboard</span>
+          </div>
+        </div>
+        
+        <button @click="handleSignInClick" class="sign-in-btn">
+          <svg class="google-icon" viewBox="0 0 24 24" width="20" height="20">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+          </svg>
+          Sign in with Google
+        </button>
+        
+        <p class="modal-footer">
+          Your data is secure and we'll never spam you.
+        </p>
+      </div>
+    </div>
+    
+    <!-- Search Results Modal -->
+    <SearchResultsModal
+      :visible="searchResultsModal.visible"
+      :searchText="searchResultsModal.searchText"
+      :maps="maps"
+      :pois="allSearchablePOIs"
+      :npcs="allNPCs"
+      :items="allItems"
+      @close="closeSearchResults"
+      @navigate-to-map="handleNavigateToMap"
+      @navigate-to-poi="handlePOISelected"
+      @show-item-info="handleShowItemInfo"
+      @show-npc-info="handleShowNPCInfo"
+    />
     
     <!-- Context Menu -->
     <ContextMenu
@@ -521,6 +631,7 @@
 
 <script>
 import { ref, reactive, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useMapViewer } from './composables/useMapViewer'
 import { useMapInteractions } from './composables/useMapInteractions'
 import { mapsAPI, poisAPI, connectionsAPI, pointConnectorsAPI, zoneConnectorsAPI } from './services/api'
@@ -550,6 +661,7 @@ import WelcomeModal from './components/WelcomeModal.vue'
 import WarningModal from './components/WarningModal.vue'
 import BanModal from './components/BanModal.vue'
 import MapFilters from './components/MapFilters.vue'
+import SearchResultsModal from './components/SearchResultsModal.vue'
 import { useToast } from './composables/useToast'
 import { useAuth } from './composables/useAuth'
 import { useCSRF } from './composables/useCSRF'
@@ -594,11 +706,15 @@ export default {
     NPCListModal,
     WelcomeModal,
     WarningModal,
-    BanModal
+    BanModal,
+    SearchResultsModal
   },
   setup() {
+    const router = useRouter()
+    const route = useRoute()
     const mapCanvas = ref(null)
     const mapContainer = ref(null)
+    // Initialize to 0 for default map
     const selectedMapIndex = ref(0)
     const isLoading = ref(false)
     // Admin mode state - only visual, actual permissions are always checked server-side
@@ -673,6 +789,78 @@ export default {
     
     const promptInput = ref(null)
     
+    // Statistics data
+    const statsData = ref({
+      poiCount: 0,
+      mapCount: 0,
+      itemCount: 0,
+      npcCount: 0,
+      pendingVoteCount: 0
+    })
+    
+    // Sign in modal state
+    const showSignInModal = ref(false)
+    
+    // Immediately fetch stats on component creation
+    // console.log('Component initializing, fetching stats...')
+    fetch('/api/stats')
+      .then(r => r.json())
+      .then(data => {
+        // console.log('Stats loaded:', data)
+        statsData.value = data
+      })
+      .catch(err => console.error('Stats fetch error:', err))
+    
+    // Fetch statistics
+    async function fetchStatistics() {
+      try {
+        // console.log('Fetching statistics...')
+        const response = await fetch('/api/stats')
+        if (response.ok) {
+          const data = await response.json()
+          // console.log('Statistics data:', data)
+          statsData.value = {
+            poiCount: data.poiCount || 0,
+            mapCount: data.mapCount || 0,
+            itemCount: data.itemCount || 0,
+            npcCount: data.npcCount || 0,
+            pendingVoteCount: data.pendingVoteCount || 0
+          }
+        } else {
+          console.error('Stats response not ok:', response.status)
+        }
+      } catch (error) {
+        console.error('Failed to fetch statistics:', error)
+      }
+    }
+    
+    // Handle vote button click
+    function handleVoteButtonClick() {
+      if (!isAuthenticated.value) {
+        // If not logged in, show the sign in modal
+        showSignInModal.value = true
+      } else {
+        // Open voting tab for authenticated users - include hash in the URL directly
+        window.open('/account.html#voting', '_blank')
+      }
+    }
+    
+    // Handle sign in button click in modal
+    function handleSignInClick() {
+      showSignInModal.value = false
+      loginWithGoogle()
+    }
+    
+    // Open voting tab in account page (legacy function kept for compatibility)
+    function openVotingTab() {
+      window.open('/account.html#voting', '_blank')
+    }
+    
+    // Call fetchStatistics immediately
+    fetchStatistics().then(() => {
+      // console.log('Initial statistics loaded:', statsData.value)
+    })
+    
     // Proposal dialogs
     const editProposalDialog = ref({
       visible: false,
@@ -741,6 +929,7 @@ export default {
       }
     }, { immediate: true })
     
+    
     // Custom POI state
     const contextMenuVisible = ref(false)
     const contextMenuPosition = ref({ x: 0, y: 0 })
@@ -787,6 +976,18 @@ export default {
     
     // User dropdown state
     const showUserDropdown = ref(false)
+    
+    // Search Results Modal state
+    const searchResultsModal = ref({
+      visible: false,
+      searchText: ''
+    })
+    
+    // All items for search
+    const allItems = ref([])
+    
+    // All NPCs for search
+    const allNPCs = ref([])
     
     // Proposal NPCs Modal
     const showProposalNPCsModal = ref(false)
@@ -1646,12 +1847,33 @@ export default {
       render()
     }
     
-    const loadSelectedMap = async () => {
+    const loadSelectedMap = async (skipUrlUpdate = false, preservePOI = false) => {
       const map = maps.value[selectedMapIndex.value]
-      if (!map) return
+      if (!map) {
+        console.warn('No map at index:', selectedMapIndex.value)
+        return
+      }
+      
+      // console.log('loadSelectedMap called:', {
+      //   mapId: map.id,
+      //   mapIndex: selectedMapIndex.value,
+      //   skipUrlUpdate,
+      //   preservePOI,
+      //   currentRouteMapId: route.params.mapId
+      // })
+      
+      // Update URL to reflect the selected map (only if not already in the URL and not skipped)
+      // Also don't update URL if we're on a search route
+      if (!skipUrlUpdate && map.id && route.params.mapId !== String(map.id) && route.name !== 'search') {
+        // console.log('Updating URL to:', `/map/${map.id}`)
+        router.replace(`/map/${map.id}`)
+      }
       
       isLoading.value = true
-      selectedPOI.value = null
+      // Only clear selectedPOI if we're not preserving it (for deep linking)
+      if (!preservePOI) {
+        selectedPOI.value = null
+      }
       
       // Clear any active arrows and hover states when switching maps
       activeConnectorArrow.value = null
@@ -2527,7 +2749,7 @@ export default {
         
         // Debug log for first attempt
         if (isCopyMode.value && (!currentGroupedPOIs.value || currentGroupedPOIs.value.length === 0)) {
-          console.log('[Copy Mode] currentGroupedPOIs is empty on first attempt')
+          // console.log('[Copy Mode] currentGroupedPOIs is empty on first attempt')
         }
         
         // Check for POI hit using the grouped POIs
@@ -2910,6 +3132,11 @@ export default {
     const resetViewHandler = () => {
       reset(mapCanvas.value)
       render()
+    }
+    
+    const handleMapSelectChange = () => {
+      // Load the selected map when user changes dropdown
+      loadSelectedMap(false)  // Don't skip URL update for manual selection
     }
     
     const reloadApp = () => {
@@ -5278,13 +5505,46 @@ export default {
       showUserDropdown.value = false
     }
     
+    // Get user avatar with fallback
+    const getUserAvatar = () => {
+      if (!user.value) return ''
+      
+      // Use Google picture if available
+      if (user.value.picture) {
+        return user.value.picture
+      }
+      
+      // Try custom avatar URL
+      if (user.value.avatarUrl) {
+        return user.value.avatarUrl
+      }
+      
+      // Fallback to UI Avatars with the user's initials
+      const name = user.value.displayName || user.value.name || '?'
+      const initials = name.split(' ').map(n => n[0]).join('').substring(0, 2)
+      return `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=4a7c59&color=fff&size=96`
+    }
+    
     // Handle avatar loading error by falling back to Google avatar
     const handleAvatarError = async (event) => {
+      // console.log('Avatar failed to load:', event.target.src)
       
-      // Don't retry if we're already trying the Google picture
-      if (event.target.src.includes('/api/user/google-picture') || 
-          event.target.src.includes('googleusercontent.com')) {
+      // If this is already a retry or a fallback attempt, give up
+      if (event.target.dataset.retried === 'true') {
+        // Already retried, show initials instead
         event.target.style.display = 'none'
+        return
+      }
+      
+      // Don't retry if we're already trying a local avatar
+      if (event.target.src.includes('/avatars/')) {
+        // Mark as retried and try the stored Google picture
+        event.target.dataset.retried = 'true'
+        if (user.value?.picture) {
+          event.target.src = user.value.picture
+        } else {
+          event.target.style.display = 'none'
+        }
         return
       }
       
@@ -5337,6 +5597,40 @@ export default {
     
     // Custom POI methods
     // Load all POIs from all maps for global search
+    const loadAllItems = async () => {
+      try {
+        const response = await fetch('/api/items')
+        if (response.ok) {
+          allItems.value = await response.json()
+        }
+      } catch (err) {
+        console.error('Failed to load items for search:', err)
+      }
+    }
+    
+    // Load all NPCs from database for search
+    const loadAllNPCs = async () => {
+      try {
+        const response = await fetch('/api/npcs')
+        if (response.ok) {
+          allNPCs.value = await response.json()
+          // console.log('Loaded NPCs:', allNPCs.value.length, 'NPCs')
+          // Log a few examples
+          if (allNPCs.value.length > 0) {
+            // console.log('Example NPCs:', allNPCs.value.slice(0, 3).map(n => n.name))
+            // Check for skeletal NPCs specifically
+            const skeletalNPCs = allNPCs.value.filter(npc => 
+              npc.name.toLowerCase().includes('skeletal')
+            )
+            // console.log('Skeletal NPCs found:', skeletalNPCs.length, 
+            //   skeletalNPCs.slice(0, 3).map(n => n.name))
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load NPCs for search:', err)
+      }
+    }
+    
     const loadAllPOIsForSearch = async () => {
       try {
         // Load POIs for all maps that haven't been loaded yet
@@ -5437,7 +5731,7 @@ export default {
         const response = await fetch(`/api/maps/${maps.value[selectedMapIndex.value].id}/custom-pois`)
         if (response.ok) {
           const pois = await response.json()
-          console.log('[loadCustomPOIs] Loaded custom POIs:', pois.map(p => ({ id: p.id, name: p.name, status: p.status })))
+          // console.log('[loadCustomPOIs] Loaded custom POIs:', pois.map(p => ({ id: p.id, name: p.name, status: p.status })))
           // Mark POIs as custom for proper identification and set icon from POI type
           customPOIs.value = pois.map(poi => {
             // Set the icon based on the POI type data
@@ -5686,6 +5980,83 @@ export default {
         tempPendingProposalPOI.value = null
       }
     })
+    
+    // Function to center the map on a POI
+    const centerOnPOI = (poi) => {
+      if (!poi || !mapCanvas.value) return
+      
+      const targetScale = 1.5 // Zoom to 150%
+      
+      // Calculate the position to center the POI
+      const canvasRect = mapCanvas.value.getBoundingClientRect()
+      const centerX = canvasRect.width / 2
+      const centerY = canvasRect.height / 2
+      
+      // Update scale and offset to center on POI
+      scale.value = targetScale
+      offsetX.value = centerX - (poi.x * targetScale)
+      offsetY.value = centerY - (poi.y * targetScale)
+      
+      // Set up the highlight effect
+      highlightedPOI.value = { id: poi.id, x: poi.x, y: poi.y }
+      highlightStartTime.value = Date.now()
+    }
+    
+    // Watch for route changes to handle deep linking
+    watch(() => route, async (newRoute, oldRoute) => {
+      // console.log('Route changed:', newRoute.name, newRoute.params)
+      
+      // Handle search route
+      if (newRoute.name === 'search' && newRoute.params.searchText) {
+        // console.log('Search route detected:', newRoute.params.searchText)
+        searchResultsModal.value.searchText = decodeURIComponent(newRoute.params.searchText)
+        searchResultsModal.value.visible = true
+        return
+      } else if (oldRoute?.name === 'search' && newRoute.name !== 'search') {
+        // Only close search modal when navigating away from search
+        searchResultsModal.value.visible = false
+      }
+      
+      // Handle map change - must complete before POI selection
+      if (newRoute.params.mapId) {
+        const targetMapId = parseInt(newRoute.params.mapId)
+        const mapIndex = maps.value.findIndex(m => m.id === targetMapId)
+        
+        if (mapIndex !== -1) {
+          // Only load map if it's different from current
+          if (mapIndex !== selectedMapIndex.value) {
+            selectedMapIndex.value = mapIndex
+            // Skip URL update in route watcher to avoid loops, preserve POI if in route
+            const shouldPreservePOI = !!newRoute.params.poiId
+            await loadSelectedMap(true, shouldPreservePOI)
+            // Wait for map data to be fully loaded
+            await nextTick()
+          }
+          
+          // Now handle POI selection after map is loaded
+          if (newRoute.params.poiId) {
+            const targetPoiId = parseInt(newRoute.params.poiId)
+            // Wait a bit for POIs to be populated
+            setTimeout(() => {
+              const currentPOIs = allDisplayPOIs.value
+              if (currentPOIs) {
+                const targetPoi = currentPOIs.find(p => p.id === targetPoiId)
+                if (targetPoi) {
+                  selectedPOI.value = targetPoi
+                  centerOnPOI(targetPoi)
+                }
+              }
+            }, 100)
+          }
+        } else {
+          // Invalid map ID, redirect to home
+          router.push('/')
+        }
+      } else if (!newRoute.params.poiId && oldRoute?.params.poiId) {
+        // Clear POI selection if no POI in URL
+        selectedPOI.value = null
+      }
+    }, { deep: true })
     
     // Watch for user changes to ensure non-admins can't have admin mode
     watch(user, (newUser) => {
@@ -6056,8 +6427,24 @@ export default {
     }
     
     onMounted(async () => {
+      // console.log('App.vue onMounted starting...')
+      
       // Check authentication status
-      await checkAuthStatus()
+      try {
+        // console.log('Checking auth status...')
+        await checkAuthStatus()
+        // console.log('Auth check complete')
+      } catch (error) {
+        console.error('Auth check failed:', error)
+      }
+      
+      // Fetch statistics
+      // console.log('About to fetch statistics...')
+      await fetchStatistics()
+      // console.log('Statistics fetched')
+      
+      // Set up periodic refresh for statistics (every 30 seconds)
+      setInterval(fetchStatistics, 30000)
       
       document.addEventListener('visibilitychange', handleVisibilityChange)
       window.addEventListener('focus', handleFocusChange)
@@ -6082,12 +6469,161 @@ export default {
       
       // Load maps from database
       maps.value = await loadMapsFromDatabase()
+      // console.log('Maps loaded:', maps.value.map(m => ({ id: m.id, name: m.name })))
+      
+      // Check if maps loaded successfully
+      if (!maps.value || maps.value.length === 0) {
+        console.error('No maps available - cannot continue')
+        error('Failed to load maps. Please refresh the page or try again later.')
+        return
+      }
+      
+      // Debug current route
+      // console.log('Current route:', {
+      //   path: route.path,
+      //   name: route.name,
+      //   params: route.params,
+      //   fullPath: route.fullPath
+      // })
+      
+      // Check if we're on a search route first
+      if (route.name === 'search') {
+        // console.log('Search route detected, loading default map in background')
+        // Load default map but don't change URL
+        selectedMapIndex.value = 0
+        await loadSelectedMap(true, false) // Skip URL update for search route
+      } else {
+        // Determine which map to load based on route
+        let mapToLoad = 0  // Default to first map
+        let shouldSkipUrlUpdate = false
+        
+        // Handle deep linking - check if we have a map ID in the route
+        if (route.params.mapId && maps.value.length > 0) {
+          const targetMapId = parseInt(route.params.mapId)
+          const mapIndex = maps.value.findIndex(m => m.id === targetMapId)
+          
+          // console.log('Route has mapId:', targetMapId, 'Found at index:', mapIndex)
+          
+          if (mapIndex !== -1) {
+            // console.log('Loading map from route:', targetMapId, 'at index:', mapIndex)
+            mapToLoad = mapIndex
+            shouldSkipUrlUpdate = true  // Don't update URL when loading from URL
+          } else {
+            console.warn('Map not found:', targetMapId, 'falling back to first map')
+          }
+        } else {
+          // console.log('No mapId in route, loading default map')
+        }
+        
+        // Set the selected map index and load it
+        // console.log('Setting selectedMapIndex to:', mapToLoad)
+        selectedMapIndex.value = mapToLoad
+        // Preserve POI if we have one in the route
+        const shouldPreservePOI = !!route.params.poiId
+        await loadSelectedMap(shouldSkipUrlUpdate, shouldPreservePOI)
+      }
+      
+      // If we have a POI ID in the route, handle it after map loads
+      if (route.params.poiId && route.params.mapId) {
+        const targetPoiId = parseInt(route.params.poiId)
+        // console.log('Need to select POI:', targetPoiId, 'after map loads')
+        
+        // Wait for map and POIs to be fully loaded
+        await nextTick()
+        
+        // Create a function to check for POIs and select the target
+        const checkAndSelectPOI = () => {
+          // Check if map data is loaded
+          const map = maps.value[selectedMapIndex.value]
+          if (!map || !map.id || !dbMapData.value[map.id]) {
+            // console.log('Map data not loaded yet for map:', map?.id)
+            return false
+          }
+          
+          const currentPOIs = allDisplayPOIs.value
+          // console.log('Checking for POIs...', currentPOIs?.length || 0, 'POIs loaded')
+          if (currentPOIs && currentPOIs.length > 0) {
+            const targetPoi = currentPOIs.find(p => p.id === targetPoiId)
+            if (targetPoi) {
+              // First, set a temporary popup position immediately
+              const tempCanvasRect = mapCanvas.value?.getBoundingClientRect()
+              if (tempCanvasRect && imageToCanvas) {
+                const tempCanvasPos = imageToCanvas(targetPoi.x, targetPoi.y)
+                popupPosition.value = {
+                  x: tempCanvasRect.left + tempCanvasPos.x,
+                  y: tempCanvasRect.top + tempCanvasPos.y
+                }
+                popupIsLeftSide.value = tempCanvasPos.x > tempCanvasRect.width / 2
+              }
+              
+              // Then select the POI
+              selectedPOI.value = targetPoi
+              console.log('POI selected:', targetPoiId, targetPoi.name)
+              
+              // Center map on the POI with animation
+              centerOnPOI(targetPoi)
+              
+              // Trigger the highlight effect
+              highlightedPOI.value = { id: targetPoi.id, x: targetPoi.x, y: targetPoi.y }
+              highlightStartTime.value = Date.now()
+              
+              // Update popup position after centering animation completes
+              setTimeout(() => {
+                const canvasRect = mapCanvas.value?.getBoundingClientRect()
+                if (canvasRect && imageToCanvas) {
+                  const canvasPos = imageToCanvas(targetPoi.x, targetPoi.y)
+                  popupPosition.value = {
+                    x: canvasRect.left + canvasPos.x,
+                    y: canvasRect.top + canvasPos.y
+                  }
+                  popupIsLeftSide.value = canvasPos.x > canvasRect.width / 2
+                  
+                  console.log('POI popup position updated:', popupPosition.value)
+                }
+              }, 500) // Delay to allow centering animation to complete
+            } else {
+              console.warn('POI not found:', targetPoiId, 'in', currentPOIs.length, 'POIs')
+            }
+            return true
+          }
+          return false
+        }
+        
+        // Try immediately
+        if (!checkAndSelectPOI()) {
+          // If not ready, try again with intervals
+          let attempts = 0
+          const interval = setInterval(() => {
+            attempts++
+            if (checkAndSelectPOI() || attempts > 10) {
+              clearInterval(interval)
+              if (attempts > 10) {
+                console.error('Failed to find POI after 10 attempts')
+              }
+            }
+          }, 500) // Check every 500ms for up to 5 seconds
+        }
+      }
       
       // Load all POIs for global search
       await loadAllPOIsForSearch()
       
+      // Load all items for search
+      await loadAllItems()
+      
+      // Load all NPCs for search
+      await loadAllNPCs()
+      
       // Load POI types for filtering
       await loadPOITypes()
+      
+      // Check if we're on a search route
+      // console.log('Checking for search route:', route.name, route.params)
+      if (route.name === 'search' && route.params.searchText) {
+        console.log('Opening search modal for:', route.params.searchText)
+        searchResultsModal.value.searchText = decodeURIComponent(route.params.searchText)
+        searchResultsModal.value.visible = true
+      }
       
       // Start XP polling if authenticated
       if (isAuthenticated.value) {
@@ -6737,6 +7273,11 @@ export default {
         }
       }
       
+      // Update URL to include POI ID if it's not a custom POI
+      if (poi.id && !poi.is_custom) {
+        router.replace(`/map/${currentMapId.value}/poi/${poi.id}`)
+      }
+      
       // Wait for map to load
       await nextTick()
       
@@ -6797,6 +7338,33 @@ export default {
       acknowledgeWarning(warningId)
     }
     
+    // Search Results Modal handlers
+    const closeSearchResults = () => {
+      searchResultsModal.value.visible = false
+      // Clear search from URL
+      if (route.name === 'search') {
+        router.push('/')
+      }
+    }
+    
+    const handleNavigateToMap = (map) => {
+      const mapIndex = maps.value.findIndex(m => m.id === map.id)
+      if (mapIndex !== -1) {
+        selectedMapIndex.value = mapIndex
+        loadSelectedMap()
+      }
+    }
+    
+    const handleShowItemInfo = async (item) => {
+      await handleItemSelected(item)
+      itemInfoModal.value.visible = true
+    }
+    
+    const handleShowNPCInfo = async (npc) => {
+      await handleNPCSelected(npc)
+      npcListModal.value.visible = true
+    }
+    
     // Handle filter updates
     const handleFilterUpdate = (filters) => {
       mapFilters.value = { ...filters }
@@ -6829,6 +7397,14 @@ export default {
     }
     
     // Proposal popup handlers
+    const handlePOIPopupClose = () => {
+      selectedPOI.value = null
+      // Clear POI from URL when popup is closed
+      if (route.params.poiId) {
+        router.replace(`/map/${currentMapId.value}`)
+      }
+    }
+    
     const handleProposalPopupClose = () => {
       selectedPOI.value = null
       showingProposedLocation.value = false
@@ -7006,6 +7582,7 @@ export default {
       zoomOut,
       resetView: resetViewHandler,
       reloadApp,
+      handleMapSelectChange,
       toggleAdmin,
       savePOI,
       saveConnection,
@@ -7052,8 +7629,24 @@ export default {
       showUserDropdown,
       toggleUserDropdown,
       handleLogout,
+      getUserAvatar,
       handleAvatarError,
       handleWarningAcknowledged,
+      // Search Results Modal
+      searchResultsModal,
+      allItems,
+      allNPCs,
+      closeSearchResults,
+      handleNavigateToMap,
+      handleShowItemInfo,
+      handleShowNPCInfo,
+      // Statistics
+      statsData,
+      fetchStatistics,
+      handleVoteButtonClick,
+      handleSignInClick,
+      showSignInModal,
+      openVotingTab,
       // Custom POI related
       contextMenuVisible,
       contextMenuPosition,
@@ -7075,6 +7668,7 @@ export default {
       allSearchablePOIs,
       currentMapId,
       handlePOISelected,
+      centerOnPOI,
       // Filters
       poiTypes,
       allUnfilteredPOIs,
@@ -7103,6 +7697,7 @@ export default {
       handlePOINavigation,
       isTransitioningMap,
       // Proposal popup handlers
+      handlePOIPopupClose,
       handleProposalPopupClose,
       handleProposalVoteSuccess,
       handleToggleProposedLocation,
@@ -7118,6 +7713,333 @@ export default {
 </script>
 
 <style scoped>
+.poi-search-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1rem;
+  background: transparent;
+  position: relative;
+  z-index: 10;
+}
+
+.status-indicators-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  max-width: 1200px;
+  width: 100%;
+}
+
+.status-indicators {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 1rem;
+  background: linear-gradient(135deg, 
+    rgba(30, 30, 40, 0.95) 0%, 
+    rgba(20, 20, 30, 0.9) 100%);
+  backdrop-filter: blur(12px);
+  border-radius: 16px;
+  box-shadow: 
+    0 4px 24px rgba(0, 0, 0, 0.4),
+    0 1px 2px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid;
+  border-color: rgba(255, 255, 255, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.status-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(255, 255, 255, 0.2), 
+    transparent);
+  opacity: 0.5;
+}
+
+.status-item::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(255, 255, 255, 0.05), 
+    transparent);
+  transition: left 0.6s ease;
+}
+
+.status-item:hover::after {
+  left: 100%;
+}
+
+.status-item:hover {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.5),
+    0 2px 4px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  background: linear-gradient(135deg, 
+    rgba(40, 40, 55, 0.98) 0%, 
+    rgba(25, 25, 40, 0.95) 100%);
+  border-color: rgba(102, 126, 234, 0.4);
+}
+
+.status-icon {
+  font-size: 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  background: radial-gradient(circle, 
+    rgba(255, 255, 255, 0.05) 0%, 
+    transparent 70%);
+  border-radius: 12px;
+  position: relative;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.status-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+.status-count {
+  font-size: 1.25rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #ffffff 0%, #e0e0e0 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1;
+  letter-spacing: -0.5px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+}
+
+.status-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: -2px;
+}
+
+.pending-votes {
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+  border: none;
+}
+
+.pending-votes:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.pending-vote-button {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.625rem 1.25rem;
+  background: linear-gradient(135deg, 
+    rgba(102, 126, 234, 0.9) 0%, 
+    rgba(118, 75, 162, 0.9) 100%);
+  backdrop-filter: blur(12px);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 
+    0 4px 16px rgba(102, 126, 234, 0.4),
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  position: relative;
+  overflow: hidden;
+}
+
+.pending-vote-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(255, 255, 255, 0.2), 
+    transparent);
+  transition: left 0.6s ease;
+}
+
+.pending-vote-button:hover::before {
+  left: 100%;
+}
+
+.pending-vote-button:hover {
+  transform: translateY(-3px) scale(1.05);
+  box-shadow: 
+    0 8px 24px rgba(102, 126, 234, 0.5),
+    0 2px 4px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  background: linear-gradient(135deg, 
+    rgba(124, 143, 245, 0.95) 0%, 
+    rgba(136, 89, 182, 0.95) 100%);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.pending-vote-button.has-pending {
+  animation: voteUrgentPulse 4s ease-in-out infinite;
+}
+
+.pending-vote-button.has-pending:hover {
+  background: linear-gradient(135deg, 
+    rgba(255, 130, 130, 0.98) 0%, 
+    rgba(255, 89, 149, 0.98) 100%);
+  box-shadow: 
+    0 8px 28px rgba(255, 107, 107, 0.6),
+    0 2px 4px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.pending-vote-button strong {
+  font-size: 1rem;
+  margin-right: 0.25rem;
+}
+
+@keyframes pulse-attention {
+  0%, 100% { 
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% { 
+    transform: scale(1.02);
+    filter: brightness(1.1);
+  }
+}
+
+@keyframes subtle-glow {
+  0%, 100% {
+    box-shadow: 
+      0 4px 20px rgba(255, 107, 107, 0.5),
+      0 1px 2px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3),
+      0 0 30px rgba(255, 107, 107, 0);
+  }
+  50% {
+    box-shadow: 
+      0 4px 20px rgba(255, 107, 107, 0.6),
+      0 1px 2px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3),
+      0 0 40px rgba(255, 107, 107, 0.4);
+  }
+}
+
+@keyframes voteUrgentPulse {
+  0%, 100% {
+    background: linear-gradient(135deg, 
+      rgba(255, 107, 107, 0.95) 0%, 
+      rgba(255, 64, 129, 0.95) 100%);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 
+      0 4px 20px rgba(255, 107, 107, 0.5),
+      0 1px 2px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+  50% {
+    background: linear-gradient(135deg, 
+      rgba(255, 130, 130, 0.98) 0%, 
+      rgba(255, 89, 149, 0.98) 100%);
+    border-color: #FFD700;
+    box-shadow: 
+      0 4px 24px rgba(255, 107, 107, 0.6),
+      0 0 20px rgba(255, 215, 0, 0.4),
+      0 1px 2px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+}
+
+.vote-icon {
+  font-size: 1.375rem;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+}
+
+.vote-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 8px;
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 1) 0%, 
+    rgba(255, 255, 255, 0.9) 100%);
+  color: #764ba2;
+  border-radius: 12px;
+  font-weight: 900;
+  font-size: 0.8rem;
+  box-shadow: 
+    0 2px 6px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  animation: pulse-badge 2s infinite;
+}
+
+@keyframes pulse-badge {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .status-indicators-container {
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  
+  .status-indicators {
+    gap: 0.75rem;
+  }
+  
+  .status-item {
+    padding: 0.375rem 0.625rem;
+  }
+  
+  .status-icon {
+    font-size: 1.25rem;
+    width: 28px;
+    height: 28px;
+  }
+  
+  .status-count {
+    font-size: 1rem;
+  }
+}
+
 .header-controls {
   display: flex;
   align-items: center;
@@ -7951,5 +8873,153 @@ export default {
   text-align: center;
   color: #999;
   padding: 2rem;
+}
+
+/* Sign In Modal Styles */
+.sign-in-modal {
+  background: linear-gradient(135deg, rgba(17, 24, 39, 0.98) 0%, rgba(31, 41, 55, 0.98) 100%);
+  backdrop-filter: blur(20px);
+  border-radius: 20px;
+  padding: 3rem;
+  max-width: 450px;
+  width: 90%;
+  position: relative;
+  box-shadow: 
+    0 25px 50px rgba(0, 0, 0, 0.5),
+    0 0 100px rgba(59, 130, 246, 0.1),
+    inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  animation: modalFadeIn 0.3s ease-out;
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.modal-close-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.modal-close-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.1);
+}
+
+.modal-icon {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.icon-ballot {
+  font-size: 4rem;
+  display: inline-block;
+  animation: float 3s ease-in-out infinite;
+  filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.3));
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.modal-title {
+  text-align: center;
+  font-size: 2rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 1rem;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.modal-description {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 1.125rem;
+  line-height: 1.6;
+  margin-bottom: 2rem;
+}
+
+.modal-features {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin-bottom: 2rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.feature-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: rgba(255, 255, 255, 0.9);
+  padding: 0.5rem 0;
+  font-size: 1rem;
+}
+
+.feature-icon {
+  color: #10b981;
+  font-size: 1.25rem;
+  font-weight: bold;
+}
+
+.sign-in-btn {
+  width: 100%;
+  padding: 1rem 1.5rem;
+  background: #fff;
+  color: #333;
+  border: none;
+  border-radius: 10px;
+  font-size: 1.125rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  transition: all 0.3s;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.sign-in-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+  background: #f9f9f9;
+}
+
+.google-icon {
+  flex-shrink: 0;
+}
+
+.modal-footer {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.875rem;
+  margin-top: 1.5rem;
 }
 </style>

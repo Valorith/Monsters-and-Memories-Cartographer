@@ -16,6 +16,16 @@
           <div class="item-title-section">
             <h3 class="item-name">{{ item.name }}</h3>
             <div class="item-type">{{ item.item_type || 'Unknown Type' }} • {{ item.slot || 'N/A' }}</div>
+            <div class="external-link">
+              <a :href="monstersAndMetadataUrl" target="_blank" rel="noopener noreferrer" class="metadata-link">
+                <div class="metadata-logo">
+                  <span class="logo-m">M</span>
+                  <span class="logo-amp">&</span>
+                  <span class="logo-metadata">Metadata</span>
+                </div>
+                <span class="metadata-link-text">View on Monsters & Metadata</span>
+              </a>
+            </div>
           </div>
         </div>
 
@@ -332,6 +342,7 @@ export default {
     const npcs = ref([]);
     const loadingNPCs = ref(false);
     const hoveredNPC = ref(null);
+    const metadataLogoUrl = ref('https://monstersandmetadata.com/images/logo.png');
     
     // Pagination state
     const currentPage = ref(1);
@@ -344,6 +355,35 @@ export default {
       const end = start + itemsPerPage.value;
       return npcs.value.slice(start, end);
     });
+    
+    // Computed property for Monsters & Metadata URL
+    const monstersAndMetadataUrl = computed(() => {
+      if (!props.item || !props.item.name) return '#';
+      // Replace spaces with hyphens and convert to lowercase for the URL
+      const itemNameForUrl = props.item.name.toLowerCase().replace(/\s+/g, '-');
+      return `https://monstersandmetadata.com/items/${itemNameForUrl}`;
+    });
+    
+    // Handle logo load error with multiple fallbacks
+    const handleLogoError = () => {
+      // Try different possible logo URLs
+      const fallbackUrls = [
+        'https://monstersandmetadata.com/favicon.ico',
+        'https://monstersandmetadata.com/logo.png',
+        'https://monstersandmetadata.com/assets/logo.png',
+        'https://monstersandmetadata.com/img/logo.png',
+        // If all fail, use a data URL for a simple "M&M" text icon
+        'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8cmVjdCB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIGZpbGw9IiM0YTllZmYiIHJ4PSIyIi8+CiAgPHRleHQgeD0iOCIgeT0iMTEiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSI5IiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk0mTTwvdGV4dD4KPC9zdmc+'
+      ];
+      
+      const currentUrl = metadataLogoUrl.value;
+      const currentIndex = fallbackUrls.indexOf(currentUrl);
+      
+      if (currentIndex < fallbackUrls.length - 1) {
+        // Try next fallback URL
+        metadataLogoUrl.value = fallbackUrls[currentIndex + 1];
+      }
+    };
     
     // Pagination methods
     const goToPage = (page) => {
@@ -498,6 +538,9 @@ export default {
       selectNPC,
       formatDescription,
       formatStatValue,
+      monstersAndMetadataUrl,
+      metadataLogoUrl,
+      handleLogoError,
       // Pagination
       paginatedNPCs,
       currentPage,
@@ -622,6 +665,101 @@ export default {
 .item-type {
   color: #999;
   font-size: 0.9rem;
+}
+
+.external-link {
+  margin-top: 0.75rem;
+}
+
+.metadata-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-decoration: none;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
+  border: 1px solid rgba(255, 140, 75, 0.25);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.metadata-link::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 140, 75, 0.4), transparent);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.metadata-link:hover {
+  background: linear-gradient(135deg, #333 0%, #222 100%);
+  border-color: rgba(255, 140, 75, 0.5);
+  box-shadow: 0 4px 12px rgba(255, 140, 75, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transform: translateY(-2px);
+}
+
+.metadata-link:hover::before {
+  opacity: 1;
+}
+
+.metadata-link:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.metadata-logo {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  flex-shrink: 0;
+  background: #0a0a0a;
+  border-radius: 4px;
+  padding: 4px 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.logo-m {
+  font-size: 1.25rem;
+  font-weight: 900;
+  font-family: 'Arial Black', sans-serif;
+  background: linear-gradient(180deg, #FF8C4B 0%, #E85A2C 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1;
+}
+
+.logo-amp {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #FF8C4B;
+  margin: 0 2px;
+  line-height: 1;
+}
+
+.logo-metadata {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #e0e0e0;
+  font-family: Arial, sans-serif;
+  line-height: 1;
+  letter-spacing: 0.5px;
+}
+
+.metadata-link-text {
+  color: #f0f0f0;
+  font-size: 0.95rem;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
 }
 
 /* Item Stats */
