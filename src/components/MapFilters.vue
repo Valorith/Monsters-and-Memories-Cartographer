@@ -445,6 +445,36 @@ export default {
       }
     }, { deep: true, immediate: true })
     
+    // Watch for changes to initialFilters prop to sync all filter states
+    watch(() => props.initialFilters, (newFilters) => {
+      if (!newFilters) return
+      
+      // Sync sources
+      if (newFilters.sources && JSON.stringify(newFilters.sources) !== JSON.stringify(selectedSources.value)) {
+        selectedSources.value = [...newFilters.sources]
+      }
+      
+      // Sync types
+      if (newFilters.types && JSON.stringify(newFilters.types) !== JSON.stringify(selectedTypes.value)) {
+        selectedTypes.value = [...newFilters.types]
+      }
+      
+      // Sync search
+      if (newFilters.search !== undefined && newFilters.search !== searchQuery.value) {
+        searchQuery.value = newFilters.search
+      }
+      
+      // Sync show connections
+      if (newFilters.showConnections !== undefined && newFilters.showConnections !== showConnections.value) {
+        showConnections.value = newFilters.showConnections
+      }
+      
+      // Sync show labels
+      if (newFilters.showLabels !== undefined && newFilters.showLabels !== showLabels.value) {
+        showLabels.value = newFilters.showLabels
+      }
+    }, { deep: true })
+    
     return {
       isCollapsed,
       searchQuery,

@@ -106,8 +106,8 @@ export default function poiNpcAssociationsRouter(app, validateCSRF) {
         FROM poi_npc_associations pna
         JOIN npcs n ON pna.npc_id = n.npcid
         LEFT JOIN poi_npc_votes pnv ON pna.id = pnv.association_id AND pnv.user_id = $2
-        LEFT JOIN npc_loot_items nli ON n.npcid = nli.npc_id
-        LEFT JOIN items i ON nli.item_id = i.id
+        LEFT JOIN npc_loot nl ON n.id = nl.npc_id
+        LEFT JOIN items i ON nl.item_id = i.id
         WHERE pna.poi_id = $1
         GROUP BY pna.id, n.npcid, n.name, n.level, n.hp, n.ac, n.min_dmg, n.max_dmg, 
                  n.attack_speed, n.description, pna.upvotes, pna.downvotes, pna.vote_score, pnv.vote

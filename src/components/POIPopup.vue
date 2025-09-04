@@ -130,7 +130,7 @@
                 </div>
                 <div class="npc-votes">
                   <button 
-                    v-if="(!isCustomPOI || localPoi.status === 'pending') && npcAssoc.association_id && !isAdminCreatedAssociation(npcAssoc)"
+                    v-if="shouldShowVoting(npcAssoc)"
                     class="vote-btn" 
                     :class="{ active: npcAssoc.user_vote === 1 }"
                     @click="voteOnNPC(npcAssoc.association_id, npcAssoc.user_vote === 1 ? 0 : 1)"
@@ -140,7 +140,7 @@
                     👍 {{ npcAssoc.upvotes || 0 }}
                   </button>
                   <button 
-                    v-if="(!isCustomPOI || localPoi.status === 'pending') && npcAssoc.association_id && !isAdminCreatedAssociation(npcAssoc)"
+                    v-if="shouldShowVoting(npcAssoc)"
                     class="vote-btn" 
                     :class="{ active: npcAssoc.user_vote === -1 }"
                     @click="voteOnNPC(npcAssoc.association_id, npcAssoc.user_vote === -1 ? 0 : -1)"
@@ -631,7 +631,7 @@ export default {
       default: false
     }
   },
-  emits: ['close', 'delete', 'update', 'confirmUpdate', 'publish', 'propose-edit', 'propose-delete', 'propose-loot', 'propose-npc-edit', 'propose-item-edit', 'add-npc'],
+  emits: ['close', 'delete', 'update', 'confirmUpdate', 'publish', 'propose-edit', 'propose-delete', 'propose-loot', 'propose-npc-edit', 'propose-item-edit', 'add-npc', 'npc-removed'],
   setup(props, { emit }) {
     const { fetchWithCSRF } = useCSRF()
     const localPoi = ref({ ...props.poi })
@@ -896,10 +896,31 @@ export default {
       }
     })
     
+    // Method to force refresh NPCs (clears cache and re-fetches)
+    const refreshNPCs = () => {
+      const cacheKey = `${localPoi.value.id}`
+      if (npcListCache.has(cacheKey)) {
+        npcListCache.delete(cacheKey)
+      }
+      fetchNPCData()
+    }
+    
     // Watch for POI changes to refetch data
-    watch(() => props.poi, async (newPoi) => {
+    watch(() => props.poi, async (newPoi, oldPoi) => {
       if (newPoi) {
+        // Check if this is just a force refresh (same POI ID but different object reference)
+        const isForceRefresh = oldPoi && newPoi.id === oldPoi.id && newPoi._forceRefresh
+        
         localPoi.value = { ...newPoi }
+        
+        // Clear cache if it's a force refresh
+        if (isForceRefresh) {
+          const cacheKey = `${localPoi.value.id}`
+          if (npcListCache.has(cacheKey)) {
+            npcListCache.delete(cacheKey)
+          }
+        }
+        
         // First fetch POI type as NPC fetching might depend on it
         await fetchPOIType()
         
@@ -1382,6 +1403,12 @@ export default {
     
     // Remove NPC from POI
     const removeNPC = async (associationId) => {
+      if (!associationId) {
+        console.error('No association ID provided for NPC removal')
+        alert('Unable to remove NPC: Missing association ID')
+        return
+      }
+      
       const isCustom = localPoi.value.is_custom_poi
       let confirmMsg
       
@@ -1410,10 +1437,50 @@ export default {
           } else {
             // Remove from list immediately (admin or custom POI)
             npcList.value = npcList.value.filter(n => n.association_id !== associationId)
+            
+            // Also update the pre-loaded associations if they exist
+            if (localPoi.value.npc_associations) {
+              localPoi.value.npc_associations = localPoi.value.npc_associations.filter(
+                n => n.association_id !== associationId
+              )
+            }
+            
+            // Clear the cache for this POI so it refreshes next time
+            const cacheKey = `${localPoi.value.id}`
+            if (npcListCache.has(cacheKey)) {
+              npcListCache.delete(cacheKey)
+            }
+            
+            // Notify parent component about the removal
+            emit('npc-removed', associationId)
           }
+        } else if (response.status === 404) {
+          // Association already deleted, just remove from UI and clear cache
+          console.log('NPC association already removed from database')
+          npcList.value = npcList.value.filter(n => n.association_id !== associationId)
+          
+          // Also update the pre-loaded associations if they exist
+          if (localPoi.value.npc_associations) {
+            localPoi.value.npc_associations = localPoi.value.npc_associations.filter(
+              n => n.association_id !== associationId
+            )
+          }
+          
+          // Clear the cache
+          const cacheKey = `${localPoi.value.id}`
+          if (npcListCache.has(cacheKey)) {
+            npcListCache.delete(cacheKey)
+          }
+          
+          // Notify parent component about the removal
+          emit('npc-removed', associationId)
+        } else {
+          console.error('Failed to remove NPC:', response.status, response.statusText)
+          alert('Failed to remove NPC')
         }
       } catch (error) {
         console.error('Error removing NPC:', error)
+        alert('An error occurred while removing the NPC')
       }
     }
     
@@ -1471,10 +1538,34 @@ export default {
       top: `${lootWindowPosition.value.y}px`
     }))
     
-    // Check if an NPC association was created by admin (no votes)
+    // Check if voting should be shown for an NPC association
+    const shouldShowVoting = (npcAssoc) => {
+      // Don't show voting for custom POIs unless they're pending
+      if (isCustomPOI.value && localPoi.value.status !== 'pending') {
+        return false
+      }
+      
+      // Don't show voting if there's no association_id
+      if (!npcAssoc.association_id) {
+        return false
+      }
+      
+      // For regular POIs, only show voting if:
+      // 1. The association has some votes (meaning it was user-proposed)
+      // 2. OR the current user created it (would need created_by field)
+      const hasVotes = npcAssoc.upvotes > 0 || npcAssoc.downvotes > 0 || npcAssoc.vote_score;
+      
+      // If it has no votes at all and wasn't just created, it's likely admin-created
+      if (!hasVotes) {
+        return false;
+      }
+      
+      return true;
+    }
+    
+    // Legacy function for compatibility
     const isAdminCreatedAssociation = (npcAssoc) => {
-      // Admin-created associations have no votes at all
-      return npcAssoc.upvotes === 0 && npcAssoc.downvotes === 0 && !npcAssoc.vote_score
+      return !shouldShowVoting(npcAssoc);
     }
     
     return {
@@ -1539,7 +1630,8 @@ export default {
       toggleNPCLoot,
       closeLootWindow,
       lootWindowStyle,
-      isAdminCreatedAssociation
+      isAdminCreatedAssociation,
+      shouldShowVoting
     }
   }
 }

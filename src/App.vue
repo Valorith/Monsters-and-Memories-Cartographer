@@ -216,7 +216,7 @@
     
     <!-- POI Popup -->
     <POIPopup
-      v-if="selectedPOI && !(proposalsSourceActive && selectedPOIHasProposal)"
+      v-if="selectedPOI && !((proposalsSourceActive || forceShowProposalPopup) && selectedPOIHasProposal)"
       :poi="selectedPOI"
       :visible="!!selectedPOI"
       :position="popupPosition"
@@ -234,11 +234,12 @@
       @propose-npc-edit="showNPCEditProposal"
       @propose-item-edit="showItemEditProposal"
       @add-npc="showAddNPCDialog"
+      @npc-removed="handleNPCRemoved"
     />
     
     <!-- Proposal Popup -->
     <ProposalPopup
-      v-if="selectedPOI && proposalsSourceActive && selectedPOIHasProposal"
+      v-if="selectedPOI && (proposalsSourceActive || forceShowProposalPopup) && selectedPOIHasProposal"
       :visible="true"
       :proposal="(selectedPOI.is_proposal || (selectedPOI.is_custom && selectedPOI.has_pending_proposal)) ? selectedPOI : null"
       :proposalData="!(selectedPOI.is_proposal || (selectedPOI.is_custom && selectedPOI.has_pending_proposal)) ? selectedPOI : null"
@@ -4965,8 +4966,31 @@ export default {
     const handleNPCAdded = async (npc) => {
       // Refresh the POI popup to show the newly added NPC
       if (selectedPOI.value) {
-        // Trigger a re-fetch of NPC data in the popup
-        selectedPOI.value = { ...selectedPOI.value }
+        // Trigger a re-fetch of NPC data in the popup by adding a force refresh flag
+        selectedPOI.value = { ...selectedPOI.value, _forceRefresh: true }
+      }
+    }
+    
+    const handleNPCRemoved = async (associationId) => {
+      // Update the selected POI to remove the NPC association from pre-loaded data
+      if (selectedPOI.value && selectedPOI.value.npc_associations) {
+        selectedPOI.value = {
+          ...selectedPOI.value,
+          npc_associations: selectedPOI.value.npc_associations.filter(
+            n => n.association_id !== associationId
+          )
+        }
+      }
+      
+      // Also update the POI in the dbMapData if it exists there
+      const map = maps.value[selectedMapIndex.value]
+      if (map && map.id && dbMapData.value[map.id]) {
+        const poi = findEntityById(dbMapData.value[map.id].pois, selectedPOI.value.id)
+        if (poi && poi.npc_associations) {
+          poi.npc_associations = poi.npc_associations.filter(
+            n => n.association_id !== associationId
+          )
+        }
       }
     }
     
@@ -6205,6 +6229,31 @@ export default {
           is_deletion: preview.changeType === 'delete_poi',  // Special flag for deletion
           proposer_name: preview.proposerName,
           is_custom: false,
+          // Add proposal type flags
+          has_deletion_proposal: preview.changeType === 'delete_poi',
+          has_loot_proposal: preview.changeType === 'change_loot',
+          deletion_proposal: preview.changeType === 'delete_poi' ? { 
+            proposal_id: preview.proposalId,
+            upvotes: preview.upvotes || 0,
+            downvotes: preview.downvotes || 0,
+            user_vote: preview.user_vote || 0,
+            proposer_id: preview.proposer_id,
+            proposer_name: preview.proposerName,
+            proposer_donation_tier_name: preview.proposer_donation_tier_name,
+            proposer_donation_tier_color: preview.proposer_donation_tier_color,
+            proposer_donation_tier_icon: preview.proposer_donation_tier_icon
+          } : null,
+          loot_proposal: preview.changeType === 'change_loot' ? {
+            proposal_id: preview.proposalId,
+            upvotes: preview.upvotes || 0,
+            downvotes: preview.downvotes || 0,
+            user_vote: preview.user_vote || 0,
+            proposer_id: preview.proposer_id,
+            proposer_name: preview.proposerName,
+            proposer_donation_tier_name: preview.proposer_donation_tier_name,
+            proposer_donation_tier_color: preview.proposer_donation_tier_color,
+            proposer_donation_tier_icon: preview.proposer_donation_tier_icon
+          } : null,
           // Include voting data
           upvotes: preview.upvotes || 0,
           downvotes: preview.downvotes || 0,
@@ -6231,6 +6280,9 @@ export default {
         // Set this as the selected POI to show popup
         setTimeout(() => {
           selectedPOI.value = displayPOI
+          // Force show proposal popup since this is a proposal preview
+          forceShowProposalPopup.value = true
+          
           const canvasCoords = imageToCanvas(displayPOI.x, displayPOI.y)
           
           popupPosition.value = { 
@@ -6265,6 +6317,9 @@ export default {
           // Set this as the selected POI to show popup
           setTimeout(() => {
             selectedPOI.value = originalPOI
+            // Force show proposal popup since this is a proposal preview
+            forceShowProposalPopup.value = true
+            
             const canvasCoords = imageToCanvas(originalPOI.x, originalPOI.y)
             
             popupPosition.value = { 
@@ -6368,6 +6423,9 @@ export default {
         // For move_poi, don't show the popup - focus should be on location change
         if (preview.changeType !== 'move_poi') {
           selectedPOI.value = proposedPOI
+          // Force show proposal popup since this is a proposal preview
+          forceShowProposalPopup.value = true
+          
           const canvasCoords = imageToCanvas(proposed.x, proposed.y)
           popupPosition.value = { 
             x: canvasCoords.x, 
@@ -6858,6 +6916,9 @@ export default {
     // Check if proposals source is active
     const proposalsSourceActive = computed(() => mapFilters.value.sources.includes('proposals'))
     
+    // Force show proposal popup when navigating from voting page
+    const forceShowProposalPopup = ref(false)
+    
     // Check if selected POI has any proposal
     const selectedPOIHasProposal = computed(() => {
       if (!selectedPOI.value) return false
@@ -7264,6 +7325,26 @@ export default {
     
     // Handle POI selection from search
     const handlePOISelected = async (poi) => {
+      // Check if this is a proposal POI  
+      const isProposalPOI = poi.is_proposal || 
+                           poi.has_pending_proposal || 
+                           poi.has_move_proposal || 
+                           poi.has_edit_proposal || 
+                           poi.has_deletion_proposal || 
+                           poi.has_loot_proposal ||
+                           poi.has_npc_proposal ||
+                           poi.is_proposed_location ||
+                           (poi.id && typeof poi.id === 'string' && poi.id.startsWith('proposal_'))
+      
+      console.log('handlePOISelected - isProposalPOI:', isProposalPOI, 'POI:', poi)
+      
+      if (isProposalPOI) {
+        // Force show the proposal popup even if proposals filter is not active
+        // This handles navigation from the voting page
+        forceShowProposalPopup.value = true
+        console.log('Setting forceShowProposalPopup to true')
+      }
+      
       // Switch to the POI's map if different
       if (poi.map_id !== currentMapId.value) {
         const mapIndex = maps.value.findIndex(m => m.id === poi.map_id)
@@ -7327,6 +7408,23 @@ export default {
             y: clickEvent.clientY
           }
           popupIsLeftSide.value = canvasPos.x > canvasRect.width / 2
+          
+          // Debug logging
+          console.log('After setting regular POI:', {
+            selectedPOI: selectedPOI.value,
+            forceShowProposalPopup: forceShowProposalPopup.value,
+            proposalsSourceActive: proposalsSourceActive.value,
+            selectedPOIHasProposal: selectedPOIHasProposal.value,
+            'has flags': {
+              is_proposal: poi.is_proposal,
+              has_pending_proposal: poi.has_pending_proposal,
+              has_move_proposal: poi.has_move_proposal,
+              has_edit_proposal: poi.has_edit_proposal,
+              has_deletion_proposal: poi.has_deletion_proposal,
+              has_loot_proposal: poi.has_loot_proposal,
+              has_npc_proposal: poi.has_npc_proposal
+            }
+          })
         }
         
         render()
@@ -7399,6 +7497,7 @@ export default {
     // Proposal popup handlers
     const handlePOIPopupClose = () => {
       selectedPOI.value = null
+      forceShowProposalPopup.value = false // Reset the force show flag
       // Clear POI from URL when popup is closed
       if (route.params.poiId) {
         router.replace(`/map/${currentMapId.value}`)
@@ -7409,22 +7508,63 @@ export default {
       selectedPOI.value = null
       showingProposedLocation.value = false
       activeProposedLocation.value = null
+      forceShowProposalPopup.value = false // Reset the force show flag
       render() // Re-render to clear any proposed location visuals
     }
     
-    const handleProposalVoteSuccess = ({ proposalId, vote }) => {
+    const handleProposalVoteSuccess = ({ proposalId, vote, updatedCounts }) => {
+      console.log('handleProposalVoteSuccess:', { proposalId, vote, updatedCounts })
+      console.log('Current selectedPOI:', selectedPOI.value)
+      
       // Update the proposal data with new vote
       const updateProposalVote = (proposal) => {
-        if (proposal.id === proposalId || proposal.proposal_id === proposalId) {
-          // Update vote counts based on previous vote
-          const prevVote = proposal.user_vote || 0
-          if (prevVote === 1) proposal.upvotes--
-          if (prevVote === -1) proposal.downvotes--
-          if (vote === 1) proposal.upvotes++
-          if (vote === -1) proposal.downvotes++
-          proposal.user_vote = vote
-          proposal.vote_score = proposal.upvotes - proposal.downvotes
+        // Check various ID formats
+        const idMatch = proposal.id === proposalId || 
+                       proposal.proposal_id === proposalId ||
+                       proposal.id === `proposal_new_${proposalId}` ||
+                       proposal.id === `proposal_delete_${proposalId}` ||
+                       proposal.id === `proposal_loot_${proposalId}`
+        
+        if (idMatch) {
+          console.log('Updating proposal:', proposal)
+          
+          // If we have accurate counts from the API, use those
+          if (updatedCounts) {
+            proposal.upvotes = updatedCounts.upvotes
+            proposal.downvotes = updatedCounts.downvotes
+            proposal.user_vote = updatedCounts.user_vote
+            proposal.vote_score = updatedCounts.upvotes - updatedCounts.downvotes
+            console.log('Using API counts - Upvotes:', proposal.upvotes, 'Downvotes:', proposal.downvotes)
+          } else {
+            // Fallback to local calculation (less accurate)
+            const prevVote = proposal.user_vote || 0
+            console.log('Previous vote:', prevVote, 'New vote:', vote)
+            
+            // Only update if the vote actually changed
+            if (prevVote !== vote) {
+              // Remove the effect of the previous vote
+              if (prevVote === 1) {
+                proposal.upvotes = Math.max(0, (proposal.upvotes || 0) - 1)
+              } else if (prevVote === -1) {
+                proposal.downvotes = Math.max(0, (proposal.downvotes || 0) - 1)
+              }
+              
+              // Add the effect of the new vote
+              if (vote === 1) {
+                proposal.upvotes = (proposal.upvotes || 0) + 1
+              } else if (vote === -1) {
+                proposal.downvotes = (proposal.downvotes || 0) + 1
+              }
+              
+              // Update the user's vote
+              proposal.user_vote = vote
+              proposal.vote_score = (proposal.upvotes || 0) - (proposal.downvotes || 0)
+              console.log('Calculated counts - Upvotes:', proposal.upvotes, 'Downvotes:', proposal.downvotes)
+            }
+          }
+          return true // Indicate update was made
         }
+        return false
       }
       
       // Update in pendingProposals
@@ -7432,13 +7572,51 @@ export default {
       
       // Update in selectedPOI if it's a proposal
       if (selectedPOI.value?.is_proposal) {
-        updateProposalVote(selectedPOI.value)
+        const updated = updateProposalVote(selectedPOI.value)
+        
+        // Also update nested proposal objects if they exist
+        if (selectedPOI.value.deletion_proposal) {
+          updateProposalVote(selectedPOI.value.deletion_proposal)
+        }
+        if (selectedPOI.value.loot_proposal) {
+          updateProposalVote(selectedPOI.value.loot_proposal)
+        }
+        
+        // Force reactivity by reassigning
+        if (updated) {
+          selectedPOI.value = { ...selectedPOI.value }
+        }
       } else if (selectedPOI.value) {
         // Update in POI proposal data
-        if (selectedPOI.value.move_proposal) updateProposalVote(selectedPOI.value.move_proposal)
-        if (selectedPOI.value.edit_proposal) updateProposalVote(selectedPOI.value.edit_proposal)
-        if (selectedPOI.value.deletion_proposal) updateProposalVote(selectedPOI.value.deletion_proposal)
+        let updated = false
+        if (selectedPOI.value.move_proposal) {
+          updated = updateProposalVote(selectedPOI.value.move_proposal) || updated
+        }
+        if (selectedPOI.value.edit_proposal) {
+          updated = updateProposalVote(selectedPOI.value.edit_proposal) || updated
+        }
+        if (selectedPOI.value.deletion_proposal) {
+          updated = updateProposalVote(selectedPOI.value.deletion_proposal) || updated
+        }
+        if (selectedPOI.value.loot_proposal) {
+          updated = updateProposalVote(selectedPOI.value.loot_proposal) || updated
+        }
+        
+        // Force reactivity if any updates were made
+        if (updated) {
+          selectedPOI.value = { ...selectedPOI.value }
+        }
       }
+      
+      // Update in proposalPreviewPOIs if any
+      proposalPreviewPOIs.value.forEach(poi => {
+        const updated = updateProposalVote(poi)
+        if (updated) {
+          // Force reactivity
+          const index = proposalPreviewPOIs.value.indexOf(poi)
+          proposalPreviewPOIs.value[index] = { ...poi }
+        }
+      })
       
       render() // Re-render to update visual indicators
     }
@@ -7611,6 +7789,7 @@ export default {
       proposalNPCsList,
       handleProposalSubmitted,
       handleNPCAdded,
+      handleNPCRemoved,
       handleAdminPopupUpdate,
       handleAdminPopupActivate,
       handleAdminPopupDelete,
@@ -7704,6 +7883,7 @@ export default {
       handleProposalWithdrawn,
       // Computed properties for proposals
       proposalsSourceActive,
+      forceShowProposalPopup,
       selectedPOIHasProposal,
       // Ko-fi widget
       openKofiWidget

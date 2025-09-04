@@ -15,9 +15,9 @@
               <span class="icon">{{ poi.icon || poi.icon_value || '📍' }}</span>
               {{ poi.type_name || 'Point of Interest' }}
             </span>
-            <span v-if="poi.npc_name" class="detail-item">
+            <span v-if="poi.npc_name || poi._selected_npc" class="detail-item">
               <span class="icon">⚔️</span>
-              {{ poi.npc_name }} (Level {{ poi.npc_level || '?' }})
+              {{ poi._selected_npc ? poi._selected_npc.name : poi.npc_name }} (Level {{ poi._selected_npc ? poi._selected_npc.level : (poi.npc_level || '?') }})
             </span>
           </div>
         </div>
@@ -169,34 +169,47 @@ export default {
     
     // Check if POI has a valid Combat NPC
     const isValidCombatNPC = computed(() => {
+      // For multi-mob POIs (like minion spawns), check if we have a selected NPC
+      if (props.poi?._selected_npc) {
+        // If we have a selected NPC from a multi-mob POI, it's valid
+        return true
+      }
+      
       if (!props.poi?.type_name) return false
       const typeName = props.poi.type_name.toLowerCase()
       return props.poi?.npc_id && (
         typeName.includes('combat') || 
         typeName.includes('npc') || 
         typeName.includes('mob') ||
-        typeName.includes('boss')
+        typeName.includes('boss') ||
+        typeName.includes('minion') ||
+        typeName.includes('spawn')
       )
     })
     
     // Load current loot items for the NPC
     const loadCurrentLoot = async () => {
-      if (!props.poi?.npc_id) {
+      // Get NPC ID from either regular POI or selected NPC in multi-mob POI
+      const npcId = props.poi?._selected_npc?.npcid || props.poi?.npc_id
+      
+      if (!npcId) {
         currentLootItems.value = []
         return
       }
       
       isLoadingCurrentLoot.value = true
       try {
-        const response = await fetch(`/api/npcs/${props.poi.npc_id}/loot`)
+        const response = await fetch(`/api/npcs/${npcId}/loot`)
         if (response.ok) {
-          const lootData = await response.json()
+          const data = await response.json()
+          // The API returns { items: [...] }
+          const lootData = data.items || []
           currentLootItems.value = lootData
           // Initialize selectedItems with current loot
           selectedItems.value = lootData.map(item => ({
             item: {
-              id: item.item_id,
-              name: item.item_name,
+              id: item.id,  // API returns 'id', not 'item_id'
+              name: item.name,  // API returns 'name', not 'item_name'
               icon_value: item.icon_value
             }
           }))
@@ -279,7 +292,7 @@ export default {
       }
       
       // Check if there are actually changes
-      const currentIds = new Set(currentLootItems.value.map(item => item.item_id))
+      const currentIds = new Set(currentLootItems.value.map(item => item.id))
       const selectedIds = new Set(selectedItems.value.map(si => si.item.id))
       
       const hasChanges = currentIds.size !== selectedIds.size || 
@@ -298,18 +311,22 @@ export default {
           item_name: si.item.name
         }))
         
+        // Get NPC data from either regular POI or selected NPC in multi-mob POI
+        const npcId = props.poi?._selected_npc?.npcid || props.poi?.npc_id
+        const npcName = props.poi?._selected_npc?.name || props.poi?.npc_name
+        
         const proposalData = {
           change_type: 'change_loot',
           target_type: 'poi',
           target_id: props.poi?.id,
           current_data: {
             poi_name: props.poi?.name,
-            npc_id: props.poi?.npc_id,
-            npc_name: props.poi?.npc_name,
+            npc_id: npcId,
+            npc_name: npcName,
             map_name: props.poi?.map_name
           },
           proposed_data: {
-            npc_id: props.poi?.npc_id,
+            npc_id: npcId,
             loot_items: lootItems  // This will be the complete proposed loot list
           },
           notes: proposalNotes.value

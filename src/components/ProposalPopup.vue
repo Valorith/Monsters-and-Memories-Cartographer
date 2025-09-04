@@ -353,7 +353,14 @@ export default {
     
     const getProposalId = () => {
       const data = getProposalData()
-      return data?.proposal_id || data?.id
+      let proposalId = data?.proposal_id || data?.id
+      
+      // Handle preview POI IDs like "proposal_new_100"
+      if (proposalId && typeof proposalId === 'string' && proposalId.startsWith('proposal_new_')) {
+        proposalId = proposalId.replace('proposal_new_', '')
+      }
+      
+      return proposalId
     }
     
     const getProposerId = () => {
@@ -608,8 +615,35 @@ export default {
           if (success) {
             success(voteValue === 1 ? 'Upvoted!' : 'Downvoted!')
           }
-          if (emit) {
-            emit('vote-success', { proposalId, vote: voteValue })
+          
+          // Fetch updated proposal data to get accurate counts
+          try {
+            const updatedResponse = await fetch(`/api/change-proposals/${proposalId}`)
+            if (updatedResponse.ok) {
+              const updatedData = await updatedResponse.json()
+              if (emit) {
+                emit('vote-success', { 
+                  proposalId, 
+                  vote: voteValue,
+                  updatedCounts: {
+                    upvotes: updatedData.upvotes,
+                    downvotes: updatedData.downvotes,
+                    user_vote: voteValue
+                  }
+                })
+              }
+            } else {
+              // Fallback to original behavior if fetch fails
+              if (emit) {
+                emit('vote-success', { proposalId, vote: voteValue })
+              }
+            }
+          } catch (err) {
+            console.error('Failed to fetch updated proposal data:', err)
+            // Fallback to original behavior
+            if (emit) {
+              emit('vote-success', { proposalId, vote: voteValue })
+            }
           }
         }
       } catch (err) {

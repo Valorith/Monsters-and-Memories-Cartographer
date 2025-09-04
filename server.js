@@ -665,6 +665,7 @@ app.get('/api/maps/:id',
         const poiIds = multiMobPois.map(poi => poi.id);
         const npcAssociationsResult = await pool.query(`
           SELECT 
+            pna.id as association_id,
             pna.poi_id,
             n.npcid,
             n.name,
@@ -695,7 +696,7 @@ app.get('/api/maps/:id',
           LEFT JOIN npc_loot nl ON n.id = nl.npc_id
           LEFT JOIN items i ON nl.item_id = i.id
           WHERE pna.poi_id = ANY($1)
-          GROUP BY pna.poi_id, n.npcid, n.name, n.level, n.hp, n.ac, n.min_dmg, n.max_dmg, n.description, n.attack_speed
+          GROUP BY pna.id, pna.poi_id, n.npcid, n.name, n.level, n.hp, n.ac, n.min_dmg, n.max_dmg, n.description, n.attack_speed
           ORDER BY pna.poi_id, n.name
         `, [poiIds]);
         
@@ -3588,6 +3589,7 @@ app.get('/api/maps/:mapId/custom-pois', async (req, res) => {
       const poiIds = multiMobPois.map(poi => poi.id);
       const npcAssociationsResult = await pool.query(`
         SELECT 
+          cpna.id as association_id,
           cpna.custom_poi_id as poi_id,
           n.npcid,
           n.name,
