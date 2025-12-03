@@ -7529,36 +7529,38 @@ export default {
           console.log('Updating proposal:', proposal)
           
           // If we have accurate counts from the API, use those
+          // Note: Use Number() to ensure numeric operations (PostgreSQL COUNT returns strings)
           if (updatedCounts) {
-            proposal.upvotes = updatedCounts.upvotes
-            proposal.downvotes = updatedCounts.downvotes
+            proposal.upvotes = Number(updatedCounts.upvotes)
+            proposal.downvotes = Number(updatedCounts.downvotes)
             proposal.user_vote = updatedCounts.user_vote
-            proposal.vote_score = updatedCounts.upvotes - updatedCounts.downvotes
+            proposal.vote_score = Number(updatedCounts.upvotes) - Number(updatedCounts.downvotes)
             console.log('Using API counts - Upvotes:', proposal.upvotes, 'Downvotes:', proposal.downvotes)
           } else {
             // Fallback to local calculation (less accurate)
             const prevVote = proposal.user_vote || 0
             console.log('Previous vote:', prevVote, 'New vote:', vote)
-            
+
             // Only update if the vote actually changed
             if (prevVote !== vote) {
               // Remove the effect of the previous vote
+              // Note: Use Number() to ensure numeric operations (PostgreSQL COUNT returns strings)
               if (prevVote === 1) {
-                proposal.upvotes = Math.max(0, (proposal.upvotes || 0) - 1)
+                proposal.upvotes = Math.max(0, Number(proposal.upvotes || 0) - 1)
               } else if (prevVote === -1) {
-                proposal.downvotes = Math.max(0, (proposal.downvotes || 0) - 1)
+                proposal.downvotes = Math.max(0, Number(proposal.downvotes || 0) - 1)
               }
-              
+
               // Add the effect of the new vote
               if (vote === 1) {
-                proposal.upvotes = (proposal.upvotes || 0) + 1
+                proposal.upvotes = Number(proposal.upvotes || 0) + 1
               } else if (vote === -1) {
-                proposal.downvotes = (proposal.downvotes || 0) + 1
+                proposal.downvotes = Number(proposal.downvotes || 0) + 1
               }
-              
+
               // Update the user's vote
               proposal.user_vote = vote
-              proposal.vote_score = (proposal.upvotes || 0) - (proposal.downvotes || 0)
+              proposal.vote_score = Number(proposal.upvotes || 0) - Number(proposal.downvotes || 0)
               console.log('Calculated counts - Upvotes:', proposal.upvotes, 'Downvotes:', proposal.downvotes)
             }
           }

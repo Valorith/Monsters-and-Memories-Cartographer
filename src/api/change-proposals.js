@@ -236,6 +236,37 @@ export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {
     }
   });
 
+  // Get single change proposal by ID (for fetching updated vote counts)
+  app.get('/api/change-proposals/:id', async (req, res) => {
+    try {
+      const proposalId = req.params.id;
+
+      const result = await pool.query(`
+        SELECT
+          cp.id,
+          cp.status,
+          (SELECT COUNT(*)::int FROM change_proposal_votes WHERE proposal_id = cp.id AND vote = 1) as upvotes,
+          (SELECT COUNT(*)::int FROM change_proposal_votes WHERE proposal_id = cp.id AND vote = -1) as downvotes,
+          CASE
+            WHEN $2::integer IS NOT NULL THEN
+              (SELECT vote FROM change_proposal_votes WHERE proposal_id = cp.id AND user_id = $2)
+            ELSE NULL
+          END as user_vote
+        FROM change_proposals cp
+        WHERE cp.id = $1
+      `, [proposalId, req.user?.id]);
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Proposal not found' });
+      }
+
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error('Error fetching change proposal:', error);
+      res.status(500).json({ error: 'Failed to fetch change proposal' });
+    }
+  });
+
   // Create new change proposal
   app.post('/api/change-proposals', validateCSRF, async (req, res) => {
     if (!req.isAuthenticated()) {
