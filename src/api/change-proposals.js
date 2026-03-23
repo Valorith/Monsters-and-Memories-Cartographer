@@ -566,7 +566,7 @@ export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {
       const newScore = scoreResult.rows[0].vote_score;
 
       // Check if proposal should be auto-approved
-      if (newScore >= 10) {
+      if (newScore >= 5) {
         // Get full proposal details for processing
         const fullProposal = await client.query(
           'SELECT * FROM change_proposals WHERE id = $1',
@@ -916,6 +916,24 @@ export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {
         // Clear caches when XP changes
         leaderboardCache.delete('top10');
         userStatsCache.delete(`user-stats-${proposal.proposer_id}`);
+      } else if (newScore <= -5) {
+        const fullProposal = await client.query(
+          'SELECT * FROM change_proposals WHERE id = $1',
+          [proposalId]
+        );
+        const proposalData = fullProposal.rows[0];
+
+        await client.query(
+          'UPDATE change_proposals SET status = $1, resolved_at = CURRENT_TIMESTAMP WHERE id = $2',
+          ['rejected', proposalId]
+        );
+
+        if (proposalData.change_type === 'add_poi' && proposalData.proposed_data?.custom_poi_id) {
+          await client.query(
+            'UPDATE custom_pois SET status = $1 WHERE id = $2',
+            ['private', proposalData.proposed_data.custom_poi_id]
+          );
+        }
       }
 
       // Award XP for first vote on other people's proposals

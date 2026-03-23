@@ -4350,7 +4350,7 @@ app.post('/api/pending-pois/:id/vote', validateCSRF, async (req, res) => {
 
     const updatedPendingPoi = updatedPoi.rows[0];
 
-    if (updatedPendingPoi.vote_score >= 10) {
+    if (updatedPendingPoi.vote_score >= 5) {
       // Approve POI
       // Insert into main POIs table with all custom settings including type_id
       await pool.query(
@@ -4383,7 +4383,7 @@ app.post('/api/pending-pois/:id/vote', validateCSRF, async (req, res) => {
       await updateUserXP(updatedPendingPoi.user_id, approvedXP, 'getting POI approved');
       
       res.json({ success: true, message: 'POI approved and published!', approved: true });
-    } else if (updatedPendingPoi.vote_score <= -10) {
+    } else if (updatedPendingPoi.vote_score <= -5) {
       // Reject POI
       // Update custom POI status back to private
       await pool.query(

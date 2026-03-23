@@ -2465,7 +2465,31 @@
       font-size: 0.875rem;
       color: #999;
     }
-    
+
+    .proposal-bulk-admin-bar {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 1.5rem;
+      padding: 0.9rem 1rem;
+      border: 1px solid rgba(255, 215, 0, 0.25);
+      border-radius: 8px;
+      background: rgba(20, 20, 20, 0.9);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+    }
+
+    .proposal-bulk-admin-bar .bulk-selection-summary {
+      color: #FFD700;
+      font-weight: bold;
+      min-width: 90px;
+    }
+
+    .proposal-bulk-admin-bar .bulk-notes-input {
+      flex: 1;
+      min-width: 240px;
+    }
+
     .proposals-list {
       display: flex;
       flex-direction: column;
@@ -2497,12 +2521,45 @@
       border-color: #4a7c59;
       box-shadow: 0 4px 12px rgba(74, 124, 89, 0.3);
     }
-    
+
+    .proposal-card.admin-selected {
+      border-color: rgba(255, 215, 0, 0.7);
+      box-shadow: 0 0 0 1px rgba(255, 215, 0, 0.35), 0 6px 18px rgba(0, 0, 0, 0.35);
+    }
+
     .proposal-header {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
       margin-bottom: 1rem;
+    }
+
+    .proposal-header-main {
+      display: flex;
+      gap: 0.85rem;
+      align-items: flex-start;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .proposal-select-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.4rem 0.55rem;
+      border-radius: 6px;
+      background: rgba(255, 215, 0, 0.08);
+      border: 1px solid rgba(255, 215, 0, 0.2);
+      color: #d8c27a;
+      font-size: 0.82rem;
+      white-space: nowrap;
+      user-select: none;
+    }
+
+    .proposal-select-toggle input[type="checkbox"] {
+      margin: 0;
+      width: auto;
+      accent-color: #4a7c59;
     }
     
     .proposal-title {
@@ -4315,7 +4372,7 @@
         <!-- Voting Tab -->
         <div id="voting-tab" class="tab-content">
           <h2 style="color: #FFD700;">Community Voting</h2>
-          <p style="color: #999; margin-bottom: 2rem;">Vote on proposed changes to POIs, NPCs, and Items. Changes with +10 votes are automatically approved!</p>
+          <p style="color: #999; margin-bottom: 2rem;">Vote on proposed changes to POIs, NPCs, and Items. Changes with +5 votes are automatically approved!</p>
           
           <!-- Voting Stats -->
           <div class="voting-stats-container">
@@ -4469,6 +4526,29 @@
                 <span style="margin-right: 0.5rem;">↺</span>Reset
               </button>
             </div>
+          </div>
+
+          <div id="proposal-bulk-admin-bar" class="proposal-bulk-admin-bar" style="display: none;">
+            <label class="proposal-select-toggle">
+              <input type="checkbox" id="select-all-visible-proposals" onchange="toggleAllVisibleProposals(this.checked)">
+              <span>Select Visible</span>
+            </label>
+            <span id="selected-proposals-count" class="bulk-selection-summary">0 selected</span>
+            <input
+              type="text"
+              id="bulk-admin-proposal-notes"
+              class="form-control bulk-notes-input"
+              placeholder="Admin notes for bulk actions (required for reject)"
+            >
+            <button id="bulk-approve-proposals-btn" class="btn success-btn" onclick="bulkApproveSelectedProposals()" disabled>
+              Approve Selected
+            </button>
+            <button id="bulk-reject-proposals-btn" class="btn danger-btn" onclick="bulkRejectSelectedProposals()" disabled>
+              Reject Selected
+            </button>
+            <button id="bulk-clear-proposals-btn" class="btn secondary-btn" onclick="clearSelectedProposals()" disabled>
+              Clear
+            </button>
           </div>
 
           <!-- Proposals List -->
@@ -7242,12 +7322,12 @@
             <td colspan="7" style="padding: 0;">
               <div class="vote-status-bar">
                 <div class="vote-bar-track">
-                  <span class="vote-label reject">Rejected (-10)</span>
+                  <span class="vote-label reject">Rejected (-5)</span>
                   <div class="vote-bar-container">
-                    <div class="vote-bar-fill" style="left: ${poi.vote_score < 0 ? 50 + (poi.vote_score * 5) : 50}%; width: ${Math.abs(poi.vote_score * 5)}%; background-color: ${poi.vote_score >= 0 ? '#28a745' : '#dc3545'};"></div>
+                    <div class="vote-bar-fill" style="left: ${poi.vote_score < 0 ? 50 + (poi.vote_score * 10) : 50}%; width: ${Math.abs(poi.vote_score * 10)}%; background-color: ${poi.vote_score >= 0 ? '#28a745' : '#dc3545'};"></div>
                     <div class="vote-bar-center"></div>
                   </div>
-                  <span class="vote-label approve">Approved (+10)</span>
+                  <span class="vote-label approve">Approved (+5)</span>
                 </div>
               </div>
             </td>
@@ -21604,6 +21684,7 @@ Size: Medium"></textarea>
       show: 'not-voted',  // Default to showing only proposals not voted on
       sort: 'newest'      // Default sort by newest first
     };
+    let selectedProposalIds = new Set();
     let proposalsPage = 1;
     const proposalsPerPage = 10;
     let expandedProposalId = null;
@@ -21741,6 +21822,7 @@ Size: Medium"></textarea>
         if (response.ok) {
           const proposals = await response.json();
           currentProposals = proposals;
+          syncSelectedProposalIds();
           
           // Apply filters
           const filtered = getFilteredProposals();
@@ -21763,6 +21845,202 @@ Size: Medium"></textarea>
         console.error('Error loading proposals:', error);
         loading.innerHTML = '<p style="color: #f44336;">Failed to load proposals</p>';
       }
+    }
+
+    function syncSelectedProposalIds() {
+      const pendingIds = new Set(
+        currentProposals
+          .filter(proposal => proposal.status === 'pending')
+          .map(proposal => proposal.id)
+      );
+
+      selectedProposalIds = new Set(
+        Array.from(selectedProposalIds).filter(proposalId => pendingIds.has(proposalId))
+      );
+    }
+
+    function getVisiblePendingProposals() {
+      const filtered = getFilteredProposals();
+      const start = (proposalsPage - 1) * proposalsPerPage;
+      return filtered.slice(start, start + proposalsPerPage).filter(proposal => proposal.status === 'pending');
+    }
+
+    async function rerenderProposalPage() {
+      const filtered = getFilteredProposals();
+      const totalPages = Math.ceil(filtered.length / proposalsPerPage);
+      const start = (proposalsPage - 1) * proposalsPerPage;
+      const paginated = filtered.slice(start, start + proposalsPerPage);
+
+      await displayProposals(paginated);
+      updateProposalsPagination(totalPages);
+    }
+
+    function updateProposalBulkControls() {
+      const bulkBar = document.getElementById('proposal-bulk-admin-bar');
+      if (!bulkBar) return;
+
+      if (!currentUser || !currentUser.is_admin) {
+        bulkBar.style.display = 'none';
+        return;
+      }
+
+      bulkBar.style.display = 'flex';
+
+      const visiblePendingProposals = getVisiblePendingProposals();
+      const visibleIds = visiblePendingProposals.map(proposal => proposal.id);
+      const selectedCount = selectedProposalIds.size;
+      const selectedVisibleCount = visibleIds.filter(id => selectedProposalIds.has(id)).length;
+
+      const selectAllCheckbox = document.getElementById('select-all-visible-proposals');
+      if (selectAllCheckbox) {
+        selectAllCheckbox.disabled = visibleIds.length === 0;
+        selectAllCheckbox.checked = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
+        selectAllCheckbox.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < visibleIds.length;
+      }
+
+      const countElement = document.getElementById('selected-proposals-count');
+      if (countElement) {
+        countElement.textContent = selectedCount === 1 ? '1 selected' : `${selectedCount} selected`;
+      }
+
+      const hasSelection = selectedCount > 0;
+      document.getElementById('bulk-approve-proposals-btn').disabled = !hasSelection;
+      document.getElementById('bulk-reject-proposals-btn').disabled = !hasSelection;
+      document.getElementById('bulk-clear-proposals-btn').disabled = !hasSelection;
+    }
+
+    async function toggleAllVisibleProposals(selected) {
+      const visiblePendingProposals = getVisiblePendingProposals();
+
+      visiblePendingProposals.forEach(proposal => {
+        if (selected) {
+          selectedProposalIds.add(proposal.id);
+        } else {
+          selectedProposalIds.delete(proposal.id);
+        }
+      });
+
+      await rerenderProposalPage();
+    }
+
+    function toggleProposalSelection(proposalId, event) {
+      if (event) {
+        event.stopPropagation();
+      }
+
+      if (selectedProposalIds.has(proposalId)) {
+        selectedProposalIds.delete(proposalId);
+      } else {
+        selectedProposalIds.add(proposalId);
+      }
+
+      const checkbox = event?.target;
+      const proposalCard = checkbox?.closest('.proposal-card');
+      if (proposalCard) {
+        proposalCard.classList.toggle('admin-selected', selectedProposalIds.has(proposalId));
+      }
+
+      updateProposalBulkControls();
+    }
+
+    async function clearSelectedProposals() {
+      selectedProposalIds.clear();
+      const notesInput = document.getElementById('bulk-admin-proposal-notes');
+      if (notesInput) {
+        notesInput.value = '';
+      }
+      await rerenderProposalPage();
+    }
+
+    async function performBulkProposalAdminAction(action) {
+      if (!currentUser || !currentUser.is_admin) {
+        return;
+      }
+
+      const selectedIds = Array.from(selectedProposalIds);
+      if (selectedIds.length === 0) {
+        showMessage('No proposals selected', 'warning');
+        return;
+      }
+
+      const notesInput = document.getElementById('bulk-admin-proposal-notes');
+      const notes = notesInput ? notesInput.value.trim() : '';
+
+      if (action === 'rejected' && !notes) {
+        showMessage('Please provide a reason for rejection', 'error');
+        return;
+      }
+
+      const actionLabel = action === 'approved' ? 'approve' : 'reject';
+      if (!confirm(`Are you sure you want to ${actionLabel} ${selectedIds.length} selected proposal${selectedIds.length === 1 ? '' : 's'}?`)) {
+        return;
+      }
+
+      const failedIds = [];
+      let successCount = 0;
+
+      const approveButton = document.getElementById('bulk-approve-proposals-btn');
+      const rejectButton = document.getElementById('bulk-reject-proposals-btn');
+      const clearButton = document.getElementById('bulk-clear-proposals-btn');
+
+      approveButton.disabled = true;
+      rejectButton.disabled = true;
+      clearButton.disabled = true;
+
+      try {
+        for (const proposalId of selectedIds) {
+          try {
+            const response = await window.csrfHelper.fetchWithCSRF(`/api/admin/change-proposals/${proposalId}/action`, {
+              method: 'POST',
+              body: {
+                action,
+                notes
+              }
+            });
+
+            if (response.ok) {
+              successCount++;
+            } else {
+              failedIds.push(proposalId);
+            }
+          } catch (error) {
+            console.error(`Bulk ${actionLabel} failed for proposal ${proposalId}:`, error);
+            failedIds.push(proposalId);
+          }
+        }
+      } finally {
+        selectedProposalIds = new Set(failedIds);
+      }
+
+      if (successCount > 0) {
+        showMessage(
+          `${successCount} proposal${successCount === 1 ? '' : 's'} ${action === 'approved' ? 'approved' : 'rejected'}.`,
+          action === 'approved' ? 'success' : 'info'
+        );
+      }
+
+      if (failedIds.length > 0) {
+        showMessage(
+          `${failedIds.length} proposal${failedIds.length === 1 ? '' : 's'} could not be processed and remained selected.`,
+          'warning'
+        );
+      }
+
+      if (notesInput && failedIds.length === 0) {
+        notesInput.value = '';
+      }
+
+      await loadProposals();
+      loadInitialProposalCount();
+      loadVotingStats();
+    }
+
+    async function bulkApproveSelectedProposals() {
+      await performBulkProposalAdminAction('approved');
+    }
+
+    async function bulkRejectSelectedProposals() {
+      await performBulkProposalAdminAction('rejected');
     }
 
     async function toggleProposalExpansion(proposalId, event) {
@@ -21892,6 +22170,7 @@ Size: Medium"></textarea>
         }
         
         list.innerHTML = `<div style="text-align: center; padding: 3rem; color: #999;">${message}</div>`;
+        updateProposalBulkControls();
         return;
       }
       
@@ -21899,24 +22178,33 @@ Size: Medium"></textarea>
       const proposalHtmlPromises = proposals.map(async proposal => {
         const isOwner = proposal.proposer_id === currentUser.id;
         const isExpanded = expandedProposalId === proposal.id;
+        const isSelected = selectedProposalIds.has(proposal.id);
         const voteClass = proposal.user_vote === 1 ? 'upvote active' : 
                          proposal.user_vote === -1 ? 'downvote active' : '';
         
         return `
-          <div class="proposal-card ${isExpanded ? 'expanded' : 'collapsed'}" 
+          <div class="proposal-card ${isExpanded ? 'expanded' : 'collapsed'} ${isSelected ? 'admin-selected' : ''}" 
                onclick="toggleProposalExpansion(${proposal.id}, event)"
-               style="cursor: pointer; transition: all 0.3s ease;">
+                style="cursor: pointer; transition: all 0.3s ease;">
             <div class="proposal-header">
-              <div>
-                <div class="proposal-title">${getProposalTitle(proposal)}</div>
-                <div class="proposal-meta">
-                  <span>by ${proposal.proposer_name}</span>
-                  <span>•</span>
-                  <span>${formatDate(proposal.created_at)}</span>
-                  <span>•</span>
-                  <span style="color: #888;">ID: ${proposal.id}</span>
-                  <span>•</span>
-                  <span class="proposal-type">${formatChangeType(proposal.change_type)}</span>
+              <div class="proposal-header-main">
+                ${currentUser.is_admin && proposal.status === 'pending' ? `
+                  <label class="proposal-select-toggle" onclick="event.stopPropagation();">
+                    <input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleProposalSelection(${proposal.id}, event)">
+                    <span>Select</span>
+                  </label>
+                ` : ''}
+                <div>
+                  <div class="proposal-title">${getProposalTitle(proposal)}</div>
+                  <div class="proposal-meta">
+                    <span>by ${proposal.proposer_name}</span>
+                    <span>•</span>
+                    <span>${formatDate(proposal.created_at)}</span>
+                    <span>•</span>
+                    <span style="color: #888;">ID: ${proposal.id}</span>
+                    <span>•</span>
+                    <span class="proposal-type">${formatChangeType(proposal.change_type)}</span>
+                  </div>
                 </div>
               </div>
               <div style="display: flex; align-items: center; gap: 1rem;">
@@ -21959,7 +22247,7 @@ Size: Medium"></textarea>
                   Score: ${proposal.vote_score >= 0 ? '+' : ''}${proposal.vote_score}
                 </div>
                 
-                ${proposal.vote_score >= 10 ? '<span class="proposal-status approved">Auto-Approval Pending</span>' : ''}
+                ${proposal.vote_score >= 5 ? '<span class="proposal-status approved">Auto-Approval Pending</span>' : ''}
                 
                 <div class="proposal-actions">
                   ${['add_poi', 'edit_poi', 'move_poi', 'delete_poi', 'change_loot', 'add_npc', 'edit_npc'].includes(proposal.change_type) ? 
@@ -21984,19 +22272,19 @@ Size: Medium"></textarea>
       const totalVotes = upvotes + downvotes;
       
       // Calculate percentage (0-100) for bar width
-      // Score ranges from -10 to 10, so we map it to 0-100%
-      const percentage = Math.min(100, Math.abs(voteScore) * 10);
+      // Score ranges from -5 to 5, so we map it to 0-100%
+      const percentage = Math.min(100, Math.abs(voteScore) * 20);
       
       // Check if near threshold
-      const nearThreshold = Math.abs(voteScore) >= 8;
+      const nearThreshold = Math.abs(voteScore) >= 4;
       
       // Determine status
       let status = 'pending';
       let statusText = 'Pending';
-      if (voteScore >= 10) {
+      if (voteScore >= 5) {
         status = 'pass';
         statusText = 'Auto-Approval';
-      } else if (voteScore <= -10) {
+      } else if (voteScore <= -5) {
         status = 'fail';
         statusText = 'Auto-Rejection';
       }
@@ -22018,9 +22306,9 @@ Size: Medium"></textarea>
                    style="${voteScore > 0 ? 'left: 50%' : 'right: 50%'}; width: ${percentage / 2}%"></div>
             ` : ''}
             <div class="vote-bar-markers">
-              <span class="vote-bar-marker left">-10</span>
+              <span class="vote-bar-marker left">-5</span>
               <span class="vote-bar-marker center">0</span>
-              <span class="vote-bar-marker right">+10</span>
+              <span class="vote-bar-marker right">+5</span>
             </div>
           </div>
           <div class="vote-status-text">
@@ -22037,6 +22325,7 @@ Size: Medium"></textarea>
       
       // Set the innerHTML with all the generated HTML
       list.innerHTML = proposalHtmlArray.join('');
+      updateProposalBulkControls();
     }
     
     // Caches for NPC and Item names
@@ -23295,6 +23584,11 @@ Size: Medium"></textarea>
     window.adminApproveProposal = adminApproveProposal;
     window.adminRejectProposal = adminRejectProposal;
     window.viewProposalPOI = viewProposalPOI;
+    window.toggleProposalSelection = toggleProposalSelection;
+    window.toggleAllVisibleProposals = toggleAllVisibleProposals;
+    window.clearSelectedProposals = clearSelectedProposals;
+    window.bulkApproveSelectedProposals = bulkApproveSelectedProposals;
+    window.bulkRejectSelectedProposals = bulkRejectSelectedProposals;
     window.filterByCard = filterByCard;
     window.loadAdminData = loadAdminData;
 
