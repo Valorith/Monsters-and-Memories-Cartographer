@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Test Proposal Generator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #222;
+      color: #fff;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .card {
+      background: #333;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    button {
+      background: #8e44ad;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background 0.3s;
+      margin-top: 10px;
+    }
+    button:hover {
+      background: #9b59b6;
+    }
+    button:disabled {
+      background: #666;
+      cursor: not-allowed;
+    }
+    .result {
+      background: #2c3e50;
+      padding: 15px;
+      border-radius: 4px;
+      margin-top: 20px;
+    }
+    .result p {
+      margin: 5px 0;
+    }
+    .view-btn {
+      background: #2980b9;
+      margin-top: 15px;
+    }
+    .view-btn:hover {
+      background: #3498db;
+    }
+    .hidden {
+      display: none;
+    }
+    .back-link {
+      display: block;
+      text-align: center;
+      margin-top: 20px;
+      color: #ccc;
+      text-decoration: none;
+    }
+    .back-link:hover {
+      color: #fff;
+      text-decoration: underline;
+    }
+    .error {
+      background: #c0392b;
+      padding: 10px;
+      border-radius: 4px;
+      margin-top: 15px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Admin Test Proposal Generator</h1>
+  
+  <div class="card">
+    <h2>Create Test Proposal</h2>
+    <p>Generate a random test proposal for voting functionality testing.</p>
+    <button id="createBtn">Create Test Proposal</button>
+    
+    <div id="result" class="result hidden">
+      <h3>Test Proposal Created</h3>
+      <p>Proposal: <strong id="poiName"></strong></p>
+      <p>Map: <span id="mapName"></span></p>
+      <p>ID: <span id="proposalId"></span></p>
+      <p>Location: X:<span id="xCoord"></span>, Y:<span id="yCoord"></span></p>
+      <button id="viewBtn" class="view-btn">View on Map</button>
+    </div>
+    
+    <div id="error" class="error hidden">
+      <p id="errorText"></p>
+    </div>
+  </div>
+  
+  <a href="/" class="back-link">← Back to Map</a>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const createBtn = document.getElementById('createBtn');
+      const resultDiv = document.getElementById('result');
+      const errorDiv = document.getElementById('error');
+      const errorText = document.getElementById('errorText');
+      const viewBtn = document.getElementById('viewBtn');
+      
+      // DOM elements for result data
+      const poiName = document.getElementById('poiName');
+      const mapName = document.getElementById('mapName');
+      const proposalId = document.getElementById('proposalId');
+      const xCoord = document.getElementById('xCoord');
+      const yCoord = document.getElementById('yCoord');
+      
+      async function getCSRFToken() {
+        try {
+          const response = await fetch('/api/csrf-token', {
+            credentials: 'same-origin'
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            return data.csrfToken;
+          }
+        } catch (error) {
+          console.error('Failed to fetch CSRF token:', error);
+        }
+        return null;
+      }
+      
+      async function createTestProposal() {
+        createBtn.disabled = true;
+        createBtn.textContent = 'Creating...';
+        resultDiv.classList.add('hidden');
+        errorDiv.classList.add('hidden');
+        
+        try {
+          // Get CSRF token
+          const token = await getCSRFToken();
+          
+          // Call API
+          const response = await fetch('/api/admin/create-test-proposal', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-Token': token
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({})
+          });
+          
+          if (!response.ok) {
+            const errorData = await response.text();
+            throw new Error(`API error (${response.status}): ${errorData}`);
+          }
+          
+          const data = await response.json();
+          
+          // Update result UI
+          poiName.textContent = data.proposal.poiName;
+          mapName.textContent = data.proposal.mapName;
+          proposalId.textContent = data.proposal.id;
+          xCoord.textContent = data.proposal.x;
+          yCoord.textContent = data.proposal.y;
+          
+          // Store data for view action
+          viewBtn.dataset.proposalId = data.proposal.id;
+          viewBtn.dataset.mapId = data.proposal.mapId;
+          viewBtn.dataset.poiName = data.proposal.poiName;
+          viewBtn.dataset.x = data.proposal.x;
+          viewBtn.dataset.y = data.proposal.y;
+          viewBtn.dataset.mapName = data.proposal.mapName;
+          
+          // Show result
+          resultDiv.classList.remove('hidden');
+        } catch (error) {
+          console.error('Error creating test proposal:', error);
+          errorText.textContent = error.message;
+          errorDiv.classList.remove('hidden');
+        } finally {
+          createBtn.disabled = false;
+          createBtn.textContent = 'Create Test Proposal';
+        }
+      }
+      
+      function viewProposal() {
+        if (!viewBtn.dataset.proposalId) return;
+        
+        // Store in sessionStorage for the voting page to access
+        sessionStorage.setItem('poi_proposal_preview', JSON.stringify({
+          proposalId: viewBtn.dataset.proposalId,
+          changeType: 'add_poi',
+          mapId: parseInt(viewBtn.dataset.mapId), // Make sure mapId is a number
+          proposed: {
+            name: viewBtn.dataset.poiName,
+            x: parseInt(viewBtn.dataset.x), // Make sure x is a number
+            y: parseInt(viewBtn.dataset.y), // Make sure y is a number
+            map_id: parseInt(viewBtn.dataset.mapId), // Make sure map_id is a number
+            map_name: viewBtn.dataset.mapName
+          }
+        }));
+        
+        // Navigate directly to the specific map
+        window.location.href = `/${viewBtn.dataset.mapId}`;
+      }
+      
+      // Event listeners
+      createBtn.addEventListener('click', createTestProposal);
+      viewBtn.addEventListener('click', viewProposal);
+    });
+  </script>
+</body>
+</html>

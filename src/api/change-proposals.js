@@ -3,6 +3,106 @@ import { leaderboardCache, userStatsCache } from '../utils/cache.js';
 
 export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {}) {
   const { updateUserXP, getXPConfig } = xpFunctions;
+  
+  // Admin-only endpoint to create a test proposal for voting
+  app.post('/api/admin/create-test-proposal', validateCSRF, async (req, res) => {
+    // Check authentication
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    // Check admin status
+    if (!req.user.is_admin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    
+    try {
+      // Get a random map to place the test proposal on
+      const mapsResult = await pool.query('SELECT id, name FROM maps ORDER BY RANDOM() LIMIT 1');
+      if (mapsResult.rows.length === 0) {
+        return res.status(500).json({ error: 'No maps found in database' });
+      }
+      
+      const map = mapsResult.rows[0];
+      const mapId = map.id;
+      const mapName = map.name;
+      
+      // Get a random POI type
+      const typeResult = await pool.query('SELECT id, name FROM poi_types ORDER BY RANDOM() LIMIT 1');
+      if (typeResult.rows.length === 0) {
+        return res.status(500).json({ error: 'No POI types found in database' });
+      }
+      
+      const poiType = typeResult.rows[0];
+      
+      // Create random coordinates
+      const x = Math.floor(Math.random() * 1000);
+      const y = Math.floor(Math.random() * 1000);
+      const timestamp = Date.now().toString().slice(-6);
+      
+      // Create test data
+      const testProposalData = {
+        name: `Test Proposal ${timestamp}`,
+        description: 'This is a test proposal for voting functionality',
+        x: x,
+        y: y,
+        type_id: poiType.id,
+        type_name: poiType.name,
+        map_id: mapId,
+        map_name: mapName,
+        is_test_proposal: true  // Flag indicating this is a test proposal for admin use only
+      };
+      
+      // Insert the proposal into the database
+      const client = await pool.connect();
+      
+      try {
+        await client.query('BEGIN');
+        
+        // Insert the proposal
+        const result = await client.query(`
+          INSERT INTO change_proposals (
+            proposer_id, change_type, target_type, target_id,
+            status, proposed_data, current_data, 
+            notes, vote_score
+          ) VALUES (
+            $1, 'add_poi', 'poi', NULL,
+            'pending', $2, NULL, 
+            'Test proposal created for admin testing', 0
+          ) RETURNING id
+        `, [req.user.id, JSON.stringify(testProposalData)]);
+        
+        const proposalId = result.rows[0].id;
+        await client.query('COMMIT');
+        
+        // Set content type explicitly
+        res.setHeader('Content-Type', 'application/json');
+        res.status(200).json({ 
+          success: true, 
+          message: 'Test proposal created successfully', 
+          proposal: {
+            id: proposalId,
+            mapId,
+            mapName,
+            poiName: testProposalData.name,
+            x: testProposalData.x,
+            y: testProposalData.y
+          }
+        });
+      } catch (err) {
+        console.error('[create-test-proposal] Database error:', err);
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      console.error('[create-test-proposal] Error:', error);
+      // Set content type explicitly
+      res.setHeader('Content-Type', 'application/json');
+      res.status(500).json({ error: error.message || 'Failed to create test proposal' });
+    }
+  });
   // Debug endpoint to check vote counts
   app.get('/api/debug/proposal-votes/:id', async (req, res) => {
     try {
@@ -33,6 +133,9 @@ export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {
   // Get all pending change proposals
   app.get('/api/change-proposals', async (req, res) => {
     try {
+      // Get admin status and admin mode status from the request
+      const isAdmin = req.user?.is_admin || false;
+      const adminModeEnabled = req.query.adminMode === 'true' || false;
       const result = await pool.query(`
         SELECT 
           cp.*,
@@ -170,8 +273,22 @@ export default function changeProposalsRouter(app, validateCSRF, xpFunctions = {
         ORDER BY cp.created_at DESC
       `, [req.user?.id]);
       
+      // Filter out test proposals for non-admin users or when admin mode is not enabled
+      const filteredProposals = result.rows.filter(proposal => {
+        // Check if this is a test proposal (created by the admin test proposal generator)
+        const isTestProposal = proposal.proposed_data?.is_test_proposal === true || 
+                               proposal.notes?.includes('Test proposal created for admin testing');
+        
+        // Only show test proposals to admins with admin mode enabled
+        if (isTestProposal && (!isAdmin || !adminModeEnabled)) {
+          return false;
+        }
+        
+        return true;
+      });
+      
       // Fetch existing loot for change_loot proposals and NPC associations for multi-mob proposals
-      const proposalsWithExtraData = await Promise.all(result.rows.map(async (proposal) => {
+      const proposalsWithExtraData = await Promise.all(filteredProposals.map(async (proposal) => {
         // Handle change_loot proposals
         if (proposal.change_type === 'change_loot' && proposal.current_data?.npc_id) {
           try {

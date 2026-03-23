@@ -927,6 +927,11 @@ export default {
     watch(adminModeEnabled, (newValue) => {
       if (isUserAdmin.value) {
         isAdmin.value = newValue
+        
+        // Reload proposals when admin mode is toggled to show/hide test proposals
+        if (currentMapData.value) {
+          loadPendingProposals()
+        }
       }
     }, { immediate: true })
     
@@ -5851,7 +5856,10 @@ export default {
       if (!maps.value[selectedMapIndex.value]?.id) return
       
       try {
-        const response = await fetch('/api/change-proposals')
+        // Pass admin mode status as a query parameter
+        const queryParams = new URLSearchParams();
+        queryParams.append('adminMode', adminModeEnabled.value.toString());
+        const response = await fetch(`/api/change-proposals?${queryParams}`)
         if (response.ok) {
           const allProposals = await response.json()
           
@@ -6140,9 +6148,10 @@ export default {
       const centerX = mapCanvas.value.width / 2
       const centerY = mapCanvas.value.height / 2
       
-      let focusX = proposed.x
-      let focusY = proposed.y
-      let targetScale = 1.5
+      // Make sure coordinates are numbers
+      let focusX = parseInt(proposed.x) || 0
+      let focusY = parseInt(proposed.y) || 0
+      let targetScale = 2.0 // Use a higher zoom level for better visibility
       
       // For move proposals, center between current and proposed locations
       if (preview.changeType === 'move_poi' && current) {
@@ -6786,18 +6795,19 @@ export default {
       
       // Now handle the POI proposal preview if we have one
       if (proposalPreviewData) {
-        const preview = JSON.parse(proposalPreviewData)
-        sessionStorage.removeItem('poi_proposal_preview')
-        
-        // Find and select the map - check top-level mapId first, then fall back to nested values
-        const mapId = preview.mapId || preview.proposed.map_id || preview.current?.map_id
-        
-        if (mapId) {
-          const mapIndex = maps.value.findIndex(m => m.id === mapId)
-          
-          if (mapIndex !== -1) {
-            selectedMapIndex.value = mapIndex
-            await loadSelectedMap()
+        try {
+          const preview = JSON.parse(proposalPreviewData)
+          sessionStorage.removeItem('poi_proposal_preview')
+
+          // Find and select the map - check top-level mapId first, then fall back to nested values
+          const mapId = parseInt(preview.mapId) || parseInt(preview.proposed.map_id) || parseInt(preview.current?.map_id)
+
+          if (mapId) {
+            const mapIndex = maps.value.findIndex(m => m.id === mapId)
+
+            if (mapIndex !== -1) {
+              selectedMapIndex.value = mapIndex
+              await loadSelectedMap()
             
             // Wait for map to be ready then show the preview
             nextTick(() => {
@@ -6822,14 +6832,32 @@ export default {
             // Map not found, hide loading state
             isLoadingProposalPreview.value = false
             console.error('Map not found:', mapId)
+            error(`Map ID ${mapId} not found. Please try again.`)
+            
+            // Load first map as fallback
+            selectedMapIndex.value = 0
+            await loadSelectedMap()
           }
         } else {
           // This should not happen anymore since we're passing mapId from account.html
           console.error('No map_id in proposal preview data')
           isLoadingProposalPreview.value = false
+          error('Map information missing. Please try again.')
           
           // Load first map as fallback
           if (maps.value.length > 0) {
+            selectedMapIndex.value = 0
+            await loadSelectedMap()
+          }
+        }
+        } catch (err) {
+          console.error('Error processing proposal preview:', err)
+          isLoadingProposalPreview.value = false
+          error('Error loading proposal preview. Please try again.')
+          
+          // Load first map as fallback
+          if (maps.value.length > 0) {
+            selectedMapIndex.value = 0
             await loadSelectedMap()
           }
         }
@@ -7528,14 +7556,15 @@ export default {
         if (idMatch) {
           console.log('Updating proposal:', proposal)
           
-          // If we have accurate counts from the API, use those
+          // If we have accurate counts from the API/event payload, use those
           // Note: Use Number() to ensure numeric operations (PostgreSQL COUNT returns strings)
           if (updatedCounts) {
             proposal.upvotes = Number(updatedCounts.upvotes)
             proposal.downvotes = Number(updatedCounts.downvotes)
             proposal.user_vote = updatedCounts.user_vote
-            proposal.vote_score = Number(updatedCounts.upvotes) - Number(updatedCounts.downvotes)
-            console.log('Using API counts - Upvotes:', proposal.upvotes, 'Downvotes:', proposal.downvotes)
+            proposal.vote_score = updatedCounts.vote_score !== undefined && updatedCounts.vote_score !== null
+              ? Number(updatedCounts.vote_score)
+              : Number(updatedCounts.upvotes) - Number(updatedCounts.downvotes)
           } else {
             // Fallback to local calculation (less accurate)
             const prevVote = proposal.user_vote || 0
@@ -7574,14 +7603,16 @@ export default {
       
       // Update in selectedPOI if it's a proposal
       if (selectedPOI.value?.is_proposal) {
-        const updated = updateProposalVote(selectedPOI.value)
+        let updated = updateProposalVote(selectedPOI.value)
         
         // Also update nested proposal objects if they exist
         if (selectedPOI.value.deletion_proposal) {
-          updateProposalVote(selectedPOI.value.deletion_proposal)
+          const nestedUpdated = updateProposalVote(selectedPOI.value.deletion_proposal)
+          if (nestedUpdated) updated = true
         }
         if (selectedPOI.value.loot_proposal) {
-          updateProposalVote(selectedPOI.value.loot_proposal)
+          const nestedUpdated = updateProposalVote(selectedPOI.value.loot_proposal)
+          if (nestedUpdated) updated = true
         }
         
         // Force reactivity by reassigning

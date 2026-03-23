@@ -281,7 +281,7 @@ export default {
     })
     
     const scoreClass = computed(() => {
-      const score = getVoteScore()
+      const score = voteScoreComputed.value
       if (score > 0) return 'positive'
       if (score < 0) return 'negative'
       return 'neutral'
@@ -307,36 +307,82 @@ export default {
       return ''
     }
     
-    const getProposalData = () => {
-      if (props.proposal?.is_proposed_location) return props.proposal.move_proposal
-      if (props.proposal) return props.proposal
-      if (props.proposalData?.move_proposal) return props.proposalData.move_proposal
-      if (props.proposalData?.edit_proposal) return props.proposalData.edit_proposal
-      if (props.proposalData?.deletion_proposal) return props.proposalData.deletion_proposal
-      if (props.proposalData?.loot_proposal) return props.proposalData.loot_proposal
-      if (props.proposalData?.npc_proposal) return props.proposalData.npc_proposal
+    // Convert to computed property to prevent infinite loops
+    const proposalDataComputed = computed(() => {
+      // First check the most specific nested proposal objects
+      if (props.proposal?.is_proposed_location && props.proposal.move_proposal) 
+        return props.proposal.move_proposal
+      
+      if (props.proposal?.is_deletion && props.proposal.deletion_proposal) 
+        return props.proposal.deletion_proposal
+      
+      if (props.proposal?.has_loot_proposal && props.proposal.loot_proposal) 
+        return props.proposal.loot_proposal
+        
+      // Then check the primary proposal object
+      if (props.proposal) 
+        return props.proposal
+        
+      // Then check in proposalData
+      if (props.proposalData?.move_proposal) 
+        return props.proposalData.move_proposal
+      
+      if (props.proposalData?.edit_proposal) 
+        return props.proposalData.edit_proposal
+      
+      if (props.proposalData?.deletion_proposal) 
+        return props.proposalData.deletion_proposal
+      
+      if (props.proposalData?.loot_proposal) 
+        return props.proposalData.loot_proposal
+      
+      if (props.proposalData?.npc_proposal) 
+        return props.proposalData.npc_proposal
+      
       return null
-    }
+    })
     
-    const getUpvotes = () => {
+    // Helper function that returns the computed value - keeps backward compatibility
+    const getProposalData = () => proposalDataComputed.value
+    
+    // Convert to computed property 
+    const upvotesComputed = computed(() => {
       const data = getProposalData()
       if (data?.upvotes !== undefined) return data.upvotes
       // For add proposals, check the proposal object directly
       if (props.proposal?.upvotes !== undefined) return props.proposal.upvotes
       return 0
-    }
+    })
     
-    const getDownvotes = () => {
+    // Helper function for backward compatibility
+    const getUpvotes = () => upvotesComputed.value
+    
+    // Convert to computed property
+    const downvotesComputed = computed(() => {
       const data = getProposalData()
       if (data?.downvotes !== undefined) return data.downvotes
       // For add proposals, check the proposal object directly
       if (props.proposal?.downvotes !== undefined) return props.proposal.downvotes
       return 0
-    }
+    })
     
-    const getVoteScore = () => {
-      return getUpvotes() - getDownvotes()
-    }
+    // Helper function for backward compatibility
+    const getDownvotes = () => downvotesComputed.value
+    
+    // Convert to computed property to prevent console spam
+    const voteScoreComputed = computed(() => {
+      // Check if we have a vote_score property directly
+      const data = getProposalData()
+      if (data?.vote_score !== undefined) {
+        return data.vote_score
+      }
+      
+      // Otherwise calculate from up/downvotes
+      return upvotesComputed.value - downvotesComputed.value
+    })
+    
+    // Helper function for backward compatibility
+    const getVoteScore = () => voteScoreComputed.value
     
     const getUserVote = () => {
       const data = getProposalData()
@@ -616,35 +662,54 @@ export default {
             success(voteValue === 1 ? 'Upvoted!' : 'Downvoted!')
           }
           
-          // Fetch updated proposal data to get accurate counts
-          try {
-            const updatedResponse = await fetch(`/api/change-proposals/${proposalId}`)
-            if (updatedResponse.ok) {
-              const updatedData = await updatedResponse.json()
-              if (emit) {
-                emit('vote-success', { 
-                  proposalId, 
-                  vote: voteValue,
-                  updatedCounts: {
-                    upvotes: updatedData.upvotes,
-                    downvotes: updatedData.downvotes,
-                    user_vote: voteValue
-                  }
-                })
-              }
-            } else {
-              // Fallback to original behavior if fetch fails
-              if (emit) {
-                emit('vote-success', { proposalId, vote: voteValue })
-              }
-            }
-          } catch (err) {
-            console.error('Failed to fetch updated proposal data:', err)
-            // Fallback to original behavior
-            if (emit) {
-              emit('vote-success', { proposalId, vote: voteValue })
-            }
+          // Use the vote result directly which should have updated score
+          // The API doesn't have a single proposal endpoint, and we don't want to re-fetch all proposals
+          
+          // Get score from result
+          const newScore = result.score || 0
+          
+          // Use the current proposal object's counts as a base
+          const currentUpvotes = getUpvotes() || 0
+          const currentDownvotes = getDownvotes() || 0
+          
+          // Calculate actual new counts based on the user's action
+          const prevVote = getUserVote() || 0
+          
+          let updatedUpvotes = currentUpvotes
+          let updatedDownvotes = currentDownvotes
+          
+          // Calculate the true delta that should be applied
+          if (prevVote === 1 && voteValue !== 1) {
+            // User had upvoted but is now removing or downvoting
+            updatedUpvotes = Math.max(0, updatedUpvotes - 1)
           }
+          
+          if (prevVote === -1 && voteValue !== -1) {
+            // User had downvoted but is now removing or upvoting
+            updatedDownvotes = Math.max(0, updatedDownvotes - 1)
+          }
+          
+          if (voteValue === 1 && prevVote !== 1) {
+            // User is newly upvoting
+            updatedUpvotes++
+          }
+          
+          if (voteValue === -1 && prevVote !== -1) {
+            // User is newly downvoting
+            updatedDownvotes++
+          }
+          
+          // Emit event with calculated counts
+          emit('vote-success', {
+            proposalId,
+            vote: voteValue,
+            updatedCounts: {
+              upvotes: updatedUpvotes,
+              downvotes: updatedDownvotes,
+              user_vote: voteValue,
+              vote_score: newScore
+            }
+          })
         }
       } catch (err) {
         console.error('Error in vote function:', err)

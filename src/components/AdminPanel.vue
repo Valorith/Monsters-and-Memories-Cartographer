@@ -153,6 +153,12 @@
           <li>Left-click and drag to pan the map</li>
         </ul>
       </div>
+      
+      <div class="admin-tools">
+        <h4>Admin Tools</h4>
+        <a href="/admin-test-proposal.html" target="_blank" class="test-action-btn">Test Proposal Generator</a>
+      </div>
+      
     </div>
   </div>
 </template>
@@ -388,7 +394,6 @@ export default {
     onMounted(() => {
       loadPoiTypes()
     })
-    
     
     return {
       editMode,
@@ -707,4 +712,54 @@ textarea {
   width: 100%;
 }
 
+.test-action-btn {
+  background: linear-gradient(to bottom, #8e44ad, #6c3483);
+  border: none;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.2s;
+  margin-bottom: 1rem;
+}
+
+.test-action-btn:hover {
+  background: linear-gradient(to bottom, #9b59b6, #8e44ad);
+  transform: translateY(-1px);
+}
+
+.admin-tools {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.75rem;
+  border-radius: 4px;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
+.admin-tools h4 {
+  margin: 0 0 0.5rem 0;
+  color: #fff;
+  font-size: 0.9rem;
+}
+
+.admin-tools a.test-action-btn {
+  display: inline-block;
+  text-decoration: none;
+  background: linear-gradient(to bottom, #8e44ad, #6c3483);
+  border: none;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.2s;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.admin-tools a.test-action-btn:hover {
+  background: linear-gradient(to bottom, #9b59b6, #8e44ad);
+  transform: translateY(-1px);
+}
 </style>
